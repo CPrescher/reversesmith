@@ -1,3 +1,4 @@
+pub mod analyze;
 pub mod atoms;
 pub mod cells;
 pub mod config;

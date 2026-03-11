@@ -15,6 +15,7 @@ pub struct Config {
     pub rmc: RmcConfig,
     pub sq: Option<SqConfig>,
     pub constraints: Option<ConstraintsConfig>,
+    pub analysis: Option<AnalysisConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,6 +83,13 @@ pub struct CoordinationConfig {
     pub min: usize,
     pub max: usize,
     pub cutoff: f64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AnalysisConfig {
+    pub cutoffs: Option<HashMap<String, f64>>,
+    pub angle_triplets: Option<Vec<String>>,
+    pub angle_bins: Option<usize>,
 }
 
 impl Config {
@@ -166,6 +174,32 @@ impl Config {
         }
 
         p
+    }
+
+    /// Build analysis pair cutoffs by merging explicit [analysis.cutoffs] with
+    /// fallback from [[constraints.coordination]] cutoffs.
+    pub fn analysis_pairs(&self) -> HashMap<String, f64> {
+        let mut pairs = HashMap::new();
+
+        // Fallback: coordination constraint cutoffs
+        if let Some(ref cc) = self.constraints {
+            if let Some(ref coords) = cc.coordination {
+                for coord in coords {
+                    pairs.entry(coord.pair.clone()).or_insert(coord.cutoff);
+                }
+            }
+        }
+
+        // Explicit analysis cutoffs override
+        if let Some(ref ac) = self.analysis {
+            if let Some(ref cutoffs) = ac.cutoffs {
+                for (pair, &cutoff) in cutoffs {
+                    pairs.insert(pair.clone(), cutoff);
+                }
+            }
+        }
+
+        pairs
     }
 
     /// Build constraints from config.

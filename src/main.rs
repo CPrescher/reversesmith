@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process;
 
+use reversesmith::analyze;
 use reversesmith::config::Config;
 use reversesmith::io;
 use reversesmith::rdf;
@@ -11,12 +12,20 @@ use reversesmith::xray;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        eprintln!("Usage: reversesmith <config.toml> [--compute-sq-only]");
+        eprintln!("Usage: reversesmith <config.toml> [--compute-sq-only] [--analyze [structure.xyz]]");
         process::exit(1);
     }
 
     let config_path = Path::new(&args[1]);
     let compute_sq_only = args.iter().any(|a| a == "--compute-sq-only");
+    let analyze_mode = args.iter().any(|a| a == "--analyze");
+    // Optional structure path override after --analyze
+    let analyze_structure: Option<String> = args
+        .iter()
+        .position(|a| a == "--analyze")
+        .and_then(|pos| args.get(pos + 1))
+        .filter(|a| !a.starts_with("--"))
+        .cloned();
 
     // Resolve paths relative to config file location
     let config_dir = config_path
@@ -29,11 +38,26 @@ fn main() {
         process::exit(1);
     });
 
-    // Load structure
-    let structure_path = resolve_path(&config_dir, &cfg.system.structure);
+    // Load structure (with optional override for --analyze <path>)
+    let structure_path = if let Some(ref override_path) = analyze_structure {
+        resolve_path(&config_dir, override_path)
+    } else {
+        resolve_path(&config_dir, &cfg.system.structure)
+    };
     println!("Loading structure from {:?} ...", structure_path);
 
-    let mut config = match cfg.system.format.as_str() {
+    // Auto-detect format from extension when path was overridden
+    let format = if analyze_structure.is_some() {
+        match structure_path.extension().and_then(|e| e.to_str()) {
+            Some("xyz") => "xyz",
+            Some("data") | Some("lmp") => "lammps",
+            _ => cfg.system.format.as_str(),
+        }
+    } else {
+        cfg.system.format.as_str()
+    };
+
+    let mut config = match format {
         "lammps" => {
             let type_map = cfg.type_map();
             io::read_lammps_data(&structure_path, &type_map).unwrap_or_else(|e| {
@@ -46,7 +70,7 @@ fn main() {
             process::exit(1);
         }),
         _ => {
-            eprintln!("Unknown format: {}", cfg.system.format);
+            eprintln!("Unknown format: {}", format);
             process::exit(1);
         }
     };
@@ -69,6 +93,34 @@ fn main() {
 
     let params = cfg.rmc_params();
     let rho0 = config.number_density();
+
+    // --- Analyze mode ---
+    if analyze_mode {
+        if analyze_structure.is_some() {
+            // Explicit path: analyze just that one structure
+            run_analysis(&config, &cfg, &config_dir, "analysis");
+        } else {
+            // No explicit path: analyze starting structure, then refined if it exists
+            run_analysis(&config, &cfg, &config_dir, "starting");
+            let refined_path = config_dir.join("refined.xyz");
+            if refined_path.exists() {
+                println!("\n{}", "=".repeat(60));
+                let refined = io::read_xyz(&refined_path).unwrap_or_else(|e| {
+                    eprintln!("Error reading refined.xyz: {}", e);
+                    process::exit(1);
+                });
+                println!("Loading refined structure from {:?} ...", refined_path);
+                println!(
+                    "  {} atoms, {} species: {:?}",
+                    refined.atoms.len(),
+                    refined.species.len(),
+                    refined.species
+                );
+                run_analysis(&refined, &cfg, &config_dir, "refined");
+            }
+        }
+        return;
+    }
 
     // --- Compute S(Q) mode ---
     if compute_sq_only {
@@ -399,6 +451,63 @@ fn compute_sq_and_exit(
             }
             println!("\nChi2 vs experimental X-ray S(Q): {:.2} ({} points, per-point: {:.6})", chi2, count, chi2 / count.max(1) as f64);
         }
+    }
+}
+
+fn run_analysis(
+    config: &reversesmith::atoms::Configuration,
+    cfg: &Config,
+    config_dir: &Path,
+    label: &str,
+) {
+    let pair_cutoffs = cfg.analysis_pairs();
+    if pair_cutoffs.is_empty() {
+        eprintln!("No pair cutoffs found for analysis. Add [analysis.cutoffs] or [[constraints.coordination]] to config.");
+        process::exit(1);
+    }
+
+    let pairs = analyze::build_analysis_pairs(&pair_cutoffs);
+    println!("\n--- {} structure ---", label);
+    println!("Analysis pairs:");
+    for p in &pairs {
+        println!("  {}-{}: cutoff = {:.2} A", p.species_a, p.species_b, p.cutoff);
+    }
+
+    println!("\nComputing coordination numbers...");
+    let cn_results = analyze::compute_coordination_numbers(config, &pairs);
+
+    let nbins = cfg
+        .analysis
+        .as_ref()
+        .and_then(|a| a.angle_bins)
+        .unwrap_or(180);
+    let triplet_filter: Option<Vec<String>> = cfg
+        .analysis
+        .as_ref()
+        .and_then(|a| a.angle_triplets.clone());
+
+    println!("Computing bond angle distributions ({} bins)...", nbins);
+    let angle_results = analyze::compute_bond_angles(
+        config,
+        &pairs,
+        nbins,
+        triplet_filter.as_deref(),
+    );
+
+    analyze::print_analysis_summary(&cn_results, &angle_results);
+
+    let cn_path = config_dir.join(format!("analysis_{}_cn.dat", label));
+    analyze::write_cn_histograms(&cn_path, &cn_results).unwrap_or_else(|e| {
+        eprintln!("Error writing CN histograms: {}", e);
+    });
+    println!("\nWrote CN histograms to {:?}", cn_path);
+
+    if !angle_results.is_empty() {
+        let angle_path = config_dir.join(format!("analysis_{}_angles.dat", label));
+        analyze::write_angle_histograms(&angle_path, &angle_results).unwrap_or_else(|e| {
+            eprintln!("Error writing angle histograms: {}", e);
+        });
+        println!("Wrote angle histograms to {:?}", angle_path);
     }
 }
 

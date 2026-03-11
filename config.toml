@@ -53,3 +53,7 @@ pair = "Si-O"
 min = 3
 max = 6
 cutoff = 2.2
+
+[analysis.cutoffs]
+"Si-O" = 2.2
+"Ca-O" = 3.0
