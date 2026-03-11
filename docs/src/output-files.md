@@ -1,13 +1,27 @@
 # Output Files
 
+By default, all output is written to the config file's directory. Use `--output-dir DIR` to redirect output to a different directory.
+
 ## RMC refinement
+
+Starting structure (computed before refinement begins):
+
+| File | Description |
+|------|-------------|
+| `start_sq.dat` | Total X-ray S(Q) of the starting structure |
+| `start_gr.dat` | All partial g(r) functions of the starting structure |
+| `start_total_gr.dat` | Total X-ray g(r) via inverse FT (when g(r) data is configured) |
+
+Refined structure (after refinement completes):
 
 | File | Description |
 |------|-------------|
 | `refined.xyz` | Refined atomic structure (extended XYZ with lattice) |
 | `refined_sq.dat` | Final computed total X-ray S(Q) |
+| `refined_gr.dat` | All partial g(r) functions of the refined structure |
 | `refined_total_gr.dat` | Final computed total X-ray g(r) via inverse FT |
 | `checkpoint.dat` | Checkpoint for resuming (text format) |
+| `reversesmith.log` | Full log of the run |
 
 ## `--compute-sq-only`
 
@@ -34,5 +48,3 @@ With explicit path:
 |------|-------------|
 | `analysis_analysis_cn.dat` | CN histograms |
 | `analysis_analysis_angles.dat` | Angle distributions |
-
-All output files are written to the same directory as the config file.

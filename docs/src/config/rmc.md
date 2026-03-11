@@ -5,7 +5,7 @@
 max_moves = 1_000_000       # Total MC moves to attempt
 max_step = 0.1              # Initial maximum atomic displacement (A)
 checkpoint_every = 50_000   # Save checkpoint every N moves
-seed = 42                   # Random number generator seed
+seed = 42                   # RNG seed (optional; random if omitted)
 print_every = 1000          # Print status every N moves
 target_acceptance = 0.3     # Target acceptance rate for step adaptation
 adjust_step_every = 5000    # Adjust step size every N moves
@@ -27,7 +27,7 @@ convergence_window = 50_000   # ...over this many moves (0 = disabled)
 | `max_moves` | Integer | 1,000,000 | Total MC moves to attempt |
 | `max_step` | Float | 0.1 | Initial maximum displacement per dimension (A) |
 | `checkpoint_every` | Integer | 50,000 | Checkpoint interval (moves) |
-| `seed` | Integer | 42 | RNG seed for reproducibility |
+| `seed` | Integer | random | RNG seed for reproducibility. When omitted, a random seed is generated from system entropy and logged. Can also be overridden via `--seed N` on the command line. |
 | `print_every` | Integer | 1,000 | Status output interval (moves) |
 | `target_acceptance` | Float | 0.3 | Target acceptance ratio for step adaptation |
 | `adjust_step_every` | Integer | 5,000 | Step size adjustment interval (moves) |

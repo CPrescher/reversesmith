@@ -25,6 +25,34 @@ reversesmith config.toml --analyze
 
 # Analyze a specific structure
 reversesmith config.toml --analyze structure.xyz
+
+# Write output to a specific directory
+reversesmith config.toml --output-dir run01
+
+# Suppress terminal output (log file only)
+reversesmith config.toml --quiet
+
+# Override the RNG seed
+reversesmith config.toml --seed 123
+```
+
+### Parallel ensemble runs
+
+Run multiple independent fits with different random seeds:
+
+```bash
+for i in $(seq 1 8); do
+    reversesmith config.toml --output-dir run$(printf '%02d' $i) --quiet &
+done
+wait
+```
+
+Each run gets a random seed (logged in its `reversesmith.log`) and writes all output to its own directory. Analyze the results afterwards:
+
+```bash
+for i in $(seq 1 8); do
+    reversesmith config.toml --analyze run$(printf '%02d' $i)/refined.xyz
+done
 ```
 
 ## Minimal Example
@@ -69,8 +97,9 @@ reversesmith config.toml
 ```
 
 This refines `glass.data` against `experimental.sq` and writes:
+- `start_sq.dat` / `start_gr.dat` -- S(Q) and partial g(r) of the starting structure
 - `refined.xyz` -- refined structure
-- `refined_sq.dat` -- computed S(Q) of the refined structure
+- `refined_sq.dat` / `refined_gr.dat` -- S(Q) and partial g(r) of the refined structure
 
 ## Input File Formats
 
