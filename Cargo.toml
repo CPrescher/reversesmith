@@ -4,6 +4,11 @@ version = "1.0.0"
 edition = "2021"
 description = "Reverse Monte Carlo structure refinement against scattering data"
 license = "MIT"
+repository = "https://github.com/CPrescher/rsmith"
+homepage = "https://github.com/CPrescher/rsmith"
+readme = "README.md"
+keywords = ["rmc", "scattering", "structure", "xray", "neutron"]
+categories = ["science", "simulation"]
 
 [dependencies]
 rand = "0.8"
