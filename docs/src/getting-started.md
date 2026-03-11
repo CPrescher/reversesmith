@@ -77,7 +77,8 @@ format = "lammps"
 
 [data.xray_sq]
 file = "experimental.sq"
-sigma = 0.02
+# sigma = 0.02              # Omit to auto-estimate from data noise
+# sigma_alpha = 0.05     # Relax fit at high Q (optional)
 
 [rmc]
 max_moves = 500_000

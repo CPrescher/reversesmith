@@ -11,6 +11,51 @@ use crate::potential::PotentialSet;
 use crate::rdf::compute_histograms;
 use crate::xray::form_factor;
 
+/// Estimate per-point sigma from data using windowed second finite differences.
+///
+/// The second difference `d2[i] = y[i+1] - 2*y[i] + y[i-1]` removes smooth
+/// signal, leaving noise.  For white noise with std σ, `Var(d2) = 6σ²`.
+/// A sliding window of half-width `half_w` gives a local noise estimate.
+/// A minimum floor is applied so sigma never drops to zero.
+pub fn estimate_sigma(y: &[f64], half_w: usize) -> Vec<f64> {
+    let n = y.len();
+    if n < 3 {
+        let fallback = y.iter().map(|v| v.abs()).sum::<f64>() / n.max(1) as f64 * 0.01;
+        return vec![fallback.max(1e-6); n];
+    }
+
+    // Second finite differences
+    let mut d2 = vec![0.0; n];
+    for i in 1..n - 1 {
+        d2[i] = y[i + 1] - 2.0 * y[i] + y[i - 1];
+    }
+    // Pad edges
+    d2[0] = d2[1];
+    d2[n - 1] = d2[n - 2];
+
+    // Windowed RMS of d2, scaled by 1/sqrt(6)
+    let inv_sqrt6 = 1.0 / 6.0_f64.sqrt();
+    let mut sigma = vec![0.0; n];
+    for i in 0..n {
+        let lo = i.saturating_sub(half_w);
+        let hi = if i + half_w < n { i + half_w } else { n - 1 };
+        let count = (hi - lo + 1) as f64;
+        let rms = (d2[lo..=hi].iter().map(|v| v * v).sum::<f64>() / count).sqrt();
+        sigma[i] = rms * inv_sqrt6;
+    }
+
+    // Floor: at least 1% of the global RMS of d2
+    let global_rms = (d2.iter().map(|v| v * v).sum::<f64>() / n as f64).sqrt() * inv_sqrt6;
+    let floor = (global_rms * 0.01).max(1e-6);
+    for s in &mut sigma {
+        if *s < floor {
+            *s = floor;
+        }
+    }
+
+    sigma
+}
+
 /// Serialisable RMC state (for checkpointing).
 #[derive(Debug, Clone)]
 pub struct RmcState {

@@ -267,8 +267,33 @@ fn main() {
             log_eprintln!("Error reading X-ray S(Q): {}", e);
             process::exit(1);
         });
-        let sigma_val = xray_cfg.sigma.unwrap_or(0.01);
-        let sigma = vec![sigma_val; sq.len()];
+        let mut sigma = match xray_cfg.sigma {
+            Some(val) => {
+                log_println!("  Using constant sigma = {:.4}", val);
+                vec![val; sq.len()]
+            }
+            None => {
+                let s = rmc::estimate_sigma(&sq, 10);
+                log_println!(
+                    "  Estimated sigma from data: min={:.4}, max={:.4}",
+                    s.iter().cloned().fold(f64::INFINITY, f64::min),
+                    s.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                );
+                s
+            }
+        };
+        let alpha = xray_cfg.sigma_alpha.unwrap_or(0.0);
+        if alpha > 0.0 {
+            for (i, s) in sigma.iter_mut().enumerate() {
+                *s *= 1.0 + alpha * q[i];
+            }
+            log_println!(
+                "  Applied Q-scaling (alpha={:.4}): sigma range {:.4} - {:.4}",
+                alpha,
+                sigma.iter().cloned().fold(f64::INFINITY, f64::min),
+                sigma.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            );
+        }
         let weight = xray_cfg.weight.unwrap_or(1.0);
         let fit_min = xray_cfg.fit_min.unwrap_or(0.0);
         let fit_max = xray_cfg.fit_max.unwrap_or(f64::INFINITY);
@@ -298,8 +323,33 @@ fn main() {
             log_eprintln!("Error reading neutron S(Q): {}", e);
             process::exit(1);
         });
-        let sigma_val = neutron_cfg.sigma.unwrap_or(0.01);
-        let sigma = vec![sigma_val; sq.len()];
+        let mut sigma = match neutron_cfg.sigma {
+            Some(val) => {
+                log_println!("  Using constant sigma = {:.4}", val);
+                vec![val; sq.len()]
+            }
+            None => {
+                let s = rmc::estimate_sigma(&sq, 10);
+                log_println!(
+                    "  Estimated sigma from data: min={:.4}, max={:.4}",
+                    s.iter().cloned().fold(f64::INFINITY, f64::min),
+                    s.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                );
+                s
+            }
+        };
+        let alpha = neutron_cfg.sigma_alpha.unwrap_or(0.0);
+        if alpha > 0.0 {
+            for (i, s) in sigma.iter_mut().enumerate() {
+                *s *= 1.0 + alpha * q[i];
+            }
+            log_println!(
+                "  Applied Q-scaling (alpha={:.4}): sigma range {:.4} - {:.4}",
+                alpha,
+                sigma.iter().cloned().fold(f64::INFINITY, f64::min),
+                sigma.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            );
+        }
         let weight = neutron_cfg.weight.unwrap_or(1.0);
         let fit_min = neutron_cfg.fit_min.unwrap_or(0.0);
         let fit_max = neutron_cfg.fit_max.unwrap_or(f64::INFINITY);
@@ -324,8 +374,21 @@ fn main() {
             log_eprintln!("Error reading X-ray g(r): {}", e);
             process::exit(1);
         });
-        let sigma_val = gr_cfg.sigma.unwrap_or(0.01);
-        let sigma = vec![sigma_val; gr.len()];
+        let sigma = match gr_cfg.sigma {
+            Some(val) => {
+                log_println!("  Using constant sigma = {:.4}", val);
+                vec![val; gr.len()]
+            }
+            None => {
+                let s = rmc::estimate_sigma(&gr, 10);
+                log_println!(
+                    "  Estimated sigma from data: min={:.4}, max={:.4}",
+                    s.iter().cloned().fold(f64::INFINITY, f64::min),
+                    s.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                );
+                s
+            }
+        };
         let weight = gr_cfg.weight.unwrap_or(1.0);
         let fit_min = gr_cfg.fit_min.unwrap_or(0.0);
         let fit_max = gr_cfg.fit_max.unwrap_or(f64::INFINITY);
@@ -769,14 +832,23 @@ fn compute_sq_and_exit(
         let path = resolve_path(config_dir, &xray_cfg.file);
         if path.exists() {
             let (q_exp, sq_exp) = io::read_sq_data(&path).unwrap();
+            let mut sigma_vec = match xray_cfg.sigma {
+                Some(val) => vec![val; sq_exp.len()],
+                None => rmc::estimate_sigma(&sq_exp, 10),
+            };
+            let alpha = xray_cfg.sigma_alpha.unwrap_or(0.0);
+            if alpha > 0.0 {
+                for (i, s) in sigma_vec.iter_mut().enumerate() {
+                    *s *= 1.0 + alpha * q_exp[i];
+                }
+            }
             let mut chi2 = 0.0;
             let mut count = 0;
-            let sigma = xray_cfg.sigma.unwrap_or(0.01);
             for (i, &qe) in q_exp.iter().enumerate() {
                 if qe >= params.q_grid[0] && qe <= *params.q_grid.last().unwrap() {
                     let sq_calc = interp(&params.q_grid, &sx, qe);
                     let diff = sq_calc - sq_exp[i];
-                    chi2 += diff * diff / (sigma * sigma);
+                    chi2 += diff * diff / (sigma_vec[i] * sigma_vec[i]);
                     count += 1;
                 }
             }

@@ -21,6 +21,11 @@ where chi2 is the total weighted chi-squared across all datasets:
 chi2 = sum_datasets [ w_d * sum_i ((y_calc(x_i) - y_exp(x_i))^2 / sigma_i^2) ]
 ```
 
+The per-point sigma_i controls how tightly each data point is fitted. Sigma can be:
+- **Auto-estimated** (default): derived from the local noise level using windowed second finite differences
+- **Constant**: set via the `sigma` config parameter
+- **Q-scaled**: multiplied by `(1 + alpha * Q)` via the `sigma_q_weight` parameter, relaxing the fit at high Q where data is noisier
+
 The sum runs only over data points within the specified fit range. When no potentials are active, cost = chi2.
 
 ## Incremental S(Q) updates

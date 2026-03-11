@@ -23,14 +23,15 @@ format = "lammps"
 [data.xray_sq]
 file = "CaSiO3_ambient_sample.sq"
 weight = 1.0
-sigma = 0.02
+# sigma is auto-estimated from data noise when omitted
+sigma_alpha = 0.05       # Relax fit at high Q where noise is larger
 fit_min = 0.5
 fit_max = 18.0
 
 [data.xray_gr]
 file = "CaSiO3_ambient_sample.gr"
 weight = 0.3
-sigma = 0.02
+# sigma is auto-estimated from data noise when omitted
 fit_min = 1.0
 fit_max = 7.0
 qmax = 17.97

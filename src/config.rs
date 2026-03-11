@@ -41,6 +41,10 @@ pub struct DatasetConfig {
     pub file: String,
     pub weight: Option<f64>,
     pub sigma: Option<f64>,
+    /// Linear Q-dependent scaling for sigma: sigma(Q) *= 1 + sigma_alpha * Q.
+    /// At Q=0 sigma is unchanged; at Q=20 with sigma_alpha=0.05 sigma doubles.
+    /// Default: 0.0 (no Q-scaling). Only applies to S(Q) datasets, ignored for g(r).
+    pub sigma_alpha: Option<f64>,
     pub fit_min: Option<f64>,
     pub fit_max: Option<f64>,
     /// Q_max used when deriving g(r) from S(Q). Controls Q cutoff in inverse FT.
