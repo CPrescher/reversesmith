@@ -353,16 +353,39 @@ fn main() {
         io::write_sq(&sq_path, &params.q_grid, &sx).unwrap();
         log_println!("  Saved starting S(Q) to {:?}", sq_path);
 
+        // Save starting partial g(r)
+        let gr_path = output_dir.join("start_gr.dat");
+        {
+            let n_types = config.species.len();
+            let mut file = std::fs::File::create(&gr_path).unwrap();
+            use std::io::Write;
+            write!(file, "# r").unwrap();
+            for a in 0..n_types {
+                for b in a..n_types {
+                    write!(file, " g_{}{}", config.species[a], config.species[b]).unwrap();
+                }
+            }
+            writeln!(file).unwrap();
+            for bin in 0..params.rdf_nbins {
+                write!(file, "{:.6}", r_grid[bin]).unwrap();
+                for a in 0..n_types {
+                    for b in a..n_types {
+                        let pair_idx = config.pair_index(a, b);
+                        write!(file, " {:.6}", partials_gr[&pair_idx][bin]).unwrap();
+                    }
+                }
+                writeln!(file).unwrap();
+            }
+        }
+        log_println!("  Saved starting partial g(r) to {:?}", gr_path);
+
         // Save starting total X-ray g(r) via inverse FT
         if !gr_datasets.is_empty() {
             let gd0 = &gr_datasets[0];
             let qmax_gr = gd0.qmax;
             let use_lorch = gd0.lorch;
             let dq = if params.q_grid.len() > 1 { params.q_grid[1] - params.q_grid[0] } else { 1.0 };
-            let r_out: Vec<f64> = (0..params.rdf_nbins)
-                .map(|i| (i as f64 + 0.5) * rdf_dr)
-                .collect();
-            let total_gr: Vec<f64> = r_out.iter().map(|&ri| {
+            let total_gr: Vec<f64> = r_grid.iter().map(|&ri| {
                 if ri < 1e-10 { return 1.0; }
                 let pref = dq / (2.0 * std::f64::consts::PI * std::f64::consts::PI * rho0 * ri);
                 let mut val = 1.0;
@@ -378,9 +401,9 @@ fn main() {
                 }
                 val
             }).collect();
-            let gr_path = output_dir.join("start_gr.dat");
-            io::write_gr(&gr_path, &r_out, &total_gr).unwrap();
-            log_println!("  Saved starting g(r) to {:?}", gr_path);
+            let total_gr_path = output_dir.join("start_total_gr.dat");
+            io::write_gr(&total_gr_path, &r_grid, &total_gr).unwrap();
+            log_println!("  Saved starting total g(r) to {:?}", total_gr_path);
         }
     }
 
@@ -439,6 +462,32 @@ fn main() {
     let output_sq = output_dir.join("refined_sq.dat");
     log_println!("Saving refined S(Q) to {:?}", output_sq);
     io::write_sq(&output_sq, &params.q_grid, &sx).unwrap();
+
+    // Save refined partial g(r)
+    let refined_gr_path = output_dir.join("refined_gr.dat");
+    {
+        let n_types = config.species.len();
+        let mut file = std::fs::File::create(&refined_gr_path).unwrap();
+        use std::io::Write;
+        write!(file, "# r").unwrap();
+        for a in 0..n_types {
+            for b in a..n_types {
+                write!(file, " g_{}{}", config.species[a], config.species[b]).unwrap();
+            }
+        }
+        writeln!(file).unwrap();
+        for bin in 0..params.rdf_nbins {
+            write!(file, "{:.6}", r_grid[bin]).unwrap();
+            for a in 0..n_types {
+                for b in a..n_types {
+                    let pair_idx = config.pair_index(a, b);
+                    write!(file, " {:.6}", partials_gr[&pair_idx][bin]).unwrap();
+                }
+            }
+            writeln!(file).unwrap();
+        }
+    }
+    log_println!("Saving refined partial g(r) to {:?}", refined_gr_path);
 
     // Save refined total X-ray g(r) via inverse FT of S_X(Q), using same Lorch+Qmax as RMC
     if !gr_datasets.is_empty() {
