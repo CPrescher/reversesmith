@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use rayon::prelude::*;
 
 use crate::atoms::Configuration;
 
@@ -168,7 +167,7 @@ pub fn compute_xray_sq(
     }
 
     (0..q.len())
-        .into_par_iter()
+        .into_iter()
         .map(|iq| {
             let f_avg: f64 = (0..n_types)
                 .map(|a| conc[a] * form_factors[a][iq])
@@ -314,7 +313,7 @@ pub fn compute_neutron_sq(
     }
 
     (0..q.len())
-        .into_par_iter()
+        .into_iter()
         .map(|iq| {
             let mut total = 0.0;
             for &(pair_idx, _, _, weight) in &pairs {

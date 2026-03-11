@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use rayon::prelude::*;
 
 use crate::atoms::Configuration;
 
@@ -55,63 +54,45 @@ pub fn atom_histogram_flat(
     let inv_dr = 1.0 / dr;
     let box_lengths = &config.box_lengths;
 
-    // Parallel: split atoms into chunks, each produces a local histogram, then reduce
     let n = config.atoms.len();
-    let chunk_size = (n / rayon::current_num_threads()).max(256);
+    let mut hist = vec![0.0f64; n_pairs * nbins];
 
-    let hist = (0..n)
-        .into_par_iter()
-        .with_min_len(chunk_size)
-        .fold(
-            || vec![0.0f64; n_pairs * nbins],
-            |mut local_hist, j| {
-                if j == atom_idx {
-                    return local_hist;
-                }
-                let tj = config.atoms[j].type_id;
-                let pj = &config.atoms[j].position;
+    for j in 0..n {
+        if j == atom_idx {
+            continue;
+        }
+        let tj = config.atoms[j].type_id;
+        let pj = &config.atoms[j].position;
 
-                let mut r2 = 0.0f64;
-                for d in 0..3 {
-                    let mut delta = pj[d] - pos[d];
-                    let l = box_lengths[d];
-                    delta -= l * (delta / l).round();
-                    r2 += delta * delta;
-                }
+        let mut r2 = 0.0f64;
+        for d in 0..3 {
+            let mut delta = pj[d] - pos[d];
+            let l = box_lengths[d];
+            delta -= l * (delta / l).round();
+            r2 += delta * delta;
+        }
 
-                if r2 < cutoff2 {
-                    let r = r2.sqrt();
-                    let bin = (r * inv_dr) as usize;
-                    if bin < nbins {
-                        let pair_idx = if ti <= tj {
-                            let n_sp = config.species.len();
-                            ti * n_sp - ti * (ti + 1) / 2 + tj
-                        } else {
-                            let n_sp = config.species.len();
-                            tj * n_sp - tj * (tj + 1) / 2 + ti
-                        };
-                        local_hist[pair_idx * nbins + bin] += 1.0;
-                    }
-                }
-                local_hist
-            },
-        )
-        .reduce(
-            || vec![0.0f64; n_pairs * nbins],
-            |mut a, b| {
-                for i in 0..a.len() {
-                    a[i] += b[i];
-                }
-                a
-            },
-        );
+        if r2 < cutoff2 {
+            let r = r2.sqrt();
+            let bin = (r * inv_dr) as usize;
+            if bin < nbins {
+                let pair_idx = if ti <= tj {
+                    let n_sp = config.species.len();
+                    ti * n_sp - ti * (ti + 1) / 2 + tj
+                } else {
+                    let n_sp = config.species.len();
+                    tj * n_sp - tj * (tj + 1) / 2 + ti
+                };
+                hist[pair_idx * nbins + bin] += 1.0;
+            }
+        }
+    }
 
     hist
 }
 
 /// Rebuild full histograms from scratch (used for initial setup).
 /// Returns raw histograms (not normalised) keyed by pair_index.
-/// Parallelized over atom pairs using per-thread accumulators.
 pub fn compute_histograms(
     config: &Configuration,
     nbins: usize,
@@ -124,47 +105,32 @@ pub fn compute_histograms(
     let cutoff2 = cutoff * cutoff;
     let box_lengths = config.box_lengths;
 
-    // Parallel over outer index i, each thread accumulates into a local flat histogram
-    let flat_hist: Vec<f64> = (0..n)
-        .into_par_iter()
-        .fold(
-            || vec![0.0f64; n_pairs * nbins],
-            |mut local_hist, i| {
-                let ti = config.atoms[i].type_id;
-                let pi = &config.atoms[i].position;
-                for j in (i + 1)..n {
-                    let tj = config.atoms[j].type_id;
-                    let pj = &config.atoms[j].position;
+    let mut flat_hist = vec![0.0f64; n_pairs * nbins];
+    for i in 0..n {
+        let ti = config.atoms[i].type_id;
+        let pi = &config.atoms[i].position;
+        for j in (i + 1)..n {
+            let tj = config.atoms[j].type_id;
+            let pj = &config.atoms[j].position;
 
-                    let mut r2 = 0.0f64;
-                    for d in 0..3 {
-                        let mut delta = pj[d] - pi[d];
-                        let l = box_lengths[d];
-                        delta -= l * (delta / l).round();
-                        r2 += delta * delta;
-                    }
+            let mut r2 = 0.0f64;
+            for d in 0..3 {
+                let mut delta = pj[d] - pi[d];
+                let l = box_lengths[d];
+                delta -= l * (delta / l).round();
+                r2 += delta * delta;
+            }
 
-                    if r2 < cutoff2 {
-                        let r = r2.sqrt();
-                        let bin = (r * inv_dr) as usize;
-                        if bin < nbins {
-                            let pair_idx = config.pair_index(ti, tj);
-                            local_hist[pair_idx * nbins + bin] += 1.0;
-                        }
-                    }
+            if r2 < cutoff2 {
+                let r = r2.sqrt();
+                let bin = (r * inv_dr) as usize;
+                if bin < nbins {
+                    let pair_idx = config.pair_index(ti, tj);
+                    flat_hist[pair_idx * nbins + bin] += 1.0;
                 }
-                local_hist
-            },
-        )
-        .reduce(
-            || vec![0.0f64; n_pairs * nbins],
-            |mut a, b| {
-                for i in 0..a.len() {
-                    a[i] += b[i];
-                }
-                a
-            },
-        );
+            }
+        }
+    }
 
     // Convert flat histogram to HashMap
     let mut histograms: HashMap<usize, Vec<f64>> = HashMap::new();
@@ -199,9 +165,8 @@ pub fn normalise_histograms(
         }
     }
 
-    // Parallel over pairs
     let results: Vec<(usize, Vec<f64>)> = pair_info
-        .par_iter()
+        .iter()
         .map(|&(pair_idx, is_like, n_a, rho_b)| {
             let hist = &histograms[&pair_idx];
             let gr: Vec<f64> = (0..nbins)

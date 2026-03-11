@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
-use rayon::prelude::*;
 use rustfft::num_complex::Complex;
 use rustfft::FftPlanner;
 
@@ -93,7 +92,7 @@ pub fn compute_partial_sq(
     }
 
     // Interpolate onto requested Q-grid (parallel)
-    q.par_iter()
+    q.iter()
         .map(|&qi| {
             if qi < 0.05 {
                 return 1.0;
@@ -142,7 +141,7 @@ pub fn compute_all_partial_sq(
     let pairs: Vec<(usize, &Vec<f64>)> = partials_gr.iter().map(|(&k, v)| (k, v)).collect();
 
     let results: Vec<(usize, Vec<f64>)> = pairs
-        .par_iter()
+        .iter()
         .map(|&(pair_idx, gr)| (pair_idx, compute_partial_sq(r, gr, rho0, q, lorch)))
         .collect();
 
