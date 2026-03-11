@@ -16,6 +16,7 @@ pub struct Config {
     pub sq: Option<SqConfig>,
     pub constraints: Option<ConstraintsConfig>,
     pub analysis: Option<AnalysisConfig>,
+    pub potential: Option<PotentialConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -90,6 +91,65 @@ pub struct AnalysisConfig {
     pub cutoffs: Option<HashMap<String, f64>>,
     pub angle_triplets: Option<Vec<String>>,
     pub angle_bins: Option<usize>,
+}
+
+/// Configuration for pair potentials (hybrid RMC).
+///
+/// Parsed from the `[potential]` TOML section. Multiple potential types
+/// can be combined: analytical forms are summed, tabulated replaces all.
+#[derive(Debug, Deserialize)]
+pub struct PotentialConfig {
+    pub weight: Option<f64>,
+    pub cutoff: Option<f64>,
+    pub buckingham: Option<Vec<BuckinghamConfig>>,
+    pub pedone: Option<Vec<PedoneConfig>>,
+    pub coulomb: Option<CoulombConfig>,
+    pub tabulated: Option<Vec<TabulatedConfig>>,
+}
+
+/// Buckingham potential: V(r) = A exp(-r/rho) - C/r^6.
+#[derive(Debug, Clone, Deserialize)]
+pub struct BuckinghamConfig {
+    pub pair: String,
+    #[serde(rename = "A")]
+    pub a_param: f64,
+    pub rho: f64,
+    #[serde(rename = "C")]
+    pub c_param: f64,
+}
+
+/// Pedone potential: V(r) = D0 [1 - exp(-alpha (r-r0))]^2 - D0 + C0/r^12.
+///
+/// Pedone et al. (2006), J. Phys. Chem. B, 110, 11780.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PedoneConfig {
+    pub pair: String,
+    #[serde(rename = "D0")]
+    pub d0: f64,
+    pub alpha: f64,
+    pub r0: f64,
+    #[serde(rename = "C0")]
+    pub c0: f64,
+}
+
+/// Coulomb DSF electrostatics, matching LAMMPS `pair_style coul/dsf`.
+///
+/// V(r) = K qi qj [erfc(alpha r)/r - erfc(alpha rc)/rc + correction(r - rc)]
+///
+/// Automatically generates pair potentials for all species combinations
+/// with nonzero charge products.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CoulombConfig {
+    /// DSF damping parameter (1/A), matching LAMMPS coul/dsf alpha
+    pub alpha: f64,
+    /// Per-species charges, e.g. { "Ca" = 1.2, "Si" = 2.4, "O" = -1.2 }
+    pub charges: HashMap<String, f64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TabulatedConfig {
+    pub pair: String,
+    pub file: String,
 }
 
 impl Config {

@@ -7,11 +7,11 @@ pub struct CellList {
     pub cell_size: [f64; 3],
     /// Box lengths.
     pub box_lengths: [f64; 3],
-    /// head[cell_idx] = first atom in cell, or usize::MAX if empty.
+    /// `head[cell_idx]` = first atom in cell, or usize::MAX if empty.
     pub head: Vec<usize>,
-    /// next[atom_idx] = next atom in same cell, or usize::MAX if end.
+    /// `next[atom_idx]` = next atom in same cell, or usize::MAX if end.
     pub next: Vec<usize>,
-    /// cell_of[atom_idx] = cell index for this atom.
+    /// `cell_of[atom_idx]` = cell index for this atom.
     pub cell_of: Vec<usize>,
     /// Precomputed neighbor cell offsets (including self).
     pub neighbor_offsets: Vec<usize>,

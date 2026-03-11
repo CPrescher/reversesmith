@@ -68,7 +68,7 @@ pub fn form_factor(element: &str, q: &[f64]) -> Vec<f64> {
 
 /// Compute total X-ray structure factor S_X(Q) from partial S_ab(Q).
 ///
-/// S_X(Q) = sum_{a<=b} (2-delta_ab) * c_a*c_b*f_a*f_b / <f>^2 * S_ab(Q)
+/// `S_X(Q) = sum_{a<=b} (2-delta_ab) * c_a*c_b*f_a*f_b / <f>^2 * S_ab(Q)`
 ///
 /// Uses Faber-Ziman convention. Parallel over Q points.
 pub fn compute_xray_sq(

@@ -6,6 +6,7 @@ use rand::{Rng, SeedableRng};
 use crate::atoms::Configuration;
 use crate::cells::CellList;
 use crate::constraints::{Constraints, PrecomputedConstraints};
+use crate::potential::PotentialSet;
 use crate::rdf::compute_histograms;
 use crate::xray::form_factor;
 
@@ -295,6 +296,7 @@ pub fn run_rmc(
     gr_data: &[ExperimentalGrData],
     constraints: &Constraints,
     params: &RmcParams,
+    potential: Option<&PotentialSet>,
     checkpoint_fn: Option<Box<dyn Fn(&RmcState, &Configuration)>>,
 ) -> RmcState {
     let mut rng = StdRng::seed_from_u64(params.seed);
@@ -579,6 +581,16 @@ pub fn run_rmc(
         cell_list.nc[0], cell_list.nc[1], cell_list.nc[2], cell_list.n_cells,
         cell_list.cell_size[0]);
 
+    // Potential energy initialization
+    let energy_weight = potential.map_or(0.0, |p| p.weight);
+    let mut current_energy = if let Some(pot) = potential {
+        let e = pot.total_energy(config, &cell_list);
+        println!("Initial potential energy = {:.6} eV (weight = {:.6})", e, energy_weight);
+        e
+    } else {
+        0.0
+    };
+
     // Annealing setup
     let annealing = (params.anneal_start - params.anneal_end).abs() > 1e-10;
     let anneal_n = if params.anneal_steps > 0 { params.anneal_steps } else { params.max_moves };
@@ -603,6 +615,12 @@ pub fn run_rmc(
     let conv_active = params.convergence_threshold > 0.0;
     let mut conv_chi2 = current_chi2;
     let mut conv_next_check = params.convergence_window;
+
+    // Calibration: accumulate |delta_chi2| and |delta_E| to suggest weight
+    let calibration_moves: u64 = if potential.is_some() { 1000 } else { 0 };
+    let mut calib_sum_dchi2 = 0.0f64;
+    let mut calib_sum_de = 0.0f64;
+    let mut calib_count = 0u64;
 
     // === Main RMC loop ===
     for move_num in 0..params.max_moves {
@@ -741,6 +759,32 @@ pub fn run_rmc(
 
         let new_chi2 = new_sq_chi2 + new_gr_chi2;
 
+        // Compute potential energy delta if potential is active
+        let delta_energy = if let Some(pot) = potential {
+            let old_e = pot.energy_of_atom(config, atom_idx, &old_pos, &cell_list, old_pos_cell);
+            let new_e = pot.energy_of_atom(config, atom_idx, &new_pos, &cell_list, new_pos_cell);
+            new_e - old_e
+        } else {
+            0.0
+        };
+
+        // Calibration accumulation
+        if calib_count < calibration_moves {
+            calib_sum_dchi2 += (new_chi2 - current_chi2).abs();
+            calib_sum_de += delta_energy.abs();
+            calib_count += 1;
+            if calib_count == calibration_moves {
+                let avg_dchi2 = calib_sum_dchi2 / calib_count as f64;
+                let avg_de = calib_sum_de / calib_count as f64;
+                let suggested = if avg_de > 1e-15 { avg_dchi2 / avg_de } else { 0.0 };
+                println!("Calibration ({} moves): avg |delta_chi2| = {:.6}, avg |delta_E| = {:.6} eV",
+                    calib_count, avg_dchi2, avg_de);
+                println!("  Current weight = {:.6}, suggested weight for equal balance = {:.6}",
+                    energy_weight, suggested);
+                println!("  Ratio current/suggested = {:.4}", energy_weight / suggested.max(1e-30));
+            }
+        }
+
         // Metropolis acceptance (with optional annealing temperature)
         // Exponential schedule: T(n) = T_start * (T_end/T_start)^(n/anneal_n)
         // After anneal_n moves, T stays at anneal_end
@@ -750,10 +794,12 @@ pub fn run_rmc(
         } else {
             1.0
         };
-        let accept = if new_chi2 < current_chi2 {
+        let delta_chi2 = new_chi2 - current_chi2;
+        let delta_cost = delta_chi2 + energy_weight * delta_energy;
+        let accept = if delta_cost < 0.0 {
             true
         } else {
-            let prob = (-(new_chi2 - current_chi2) / (2.0 * temperature)).exp();
+            let prob = (-delta_cost / (2.0 * temperature)).exp();
             rng.gen::<f64>() < prob
         };
 
@@ -761,6 +807,7 @@ pub fn run_rmc(
             current_chi2 = new_chi2;
             sq_chi2_current = new_sq_chi2;
             gr_chi2_current = new_gr_chi2;
+            current_energy += delta_energy;
             // Commit: update histograms, partial S(Q), total S(Q)
             for i in 0..n_pairs * nbins {
                 flat_hist[i] += new_hist_buf[i] - old_hist_buf[i];
@@ -801,7 +848,16 @@ pub fn run_rmc(
                 recent_accepted as f64 / recent_total as f64
             } else { 0.0 };
             let overall_ratio = state.accepted as f64 / state.move_count as f64;
-            let chi2_str = if has_gr {
+            let chi2_str = if potential.is_some() && has_gr {
+                let cost = current_chi2 + energy_weight * current_energy;
+                format!("cost = {:.4} (chi2: {:.4} [sq: {:.4}, gr: {:.4}], w*E: {:.4} [E: {:.2}])",
+                    cost, current_chi2, sq_chi2_current, gr_chi2_current,
+                    energy_weight * current_energy, current_energy)
+            } else if potential.is_some() {
+                let cost = current_chi2 + energy_weight * current_energy;
+                format!("cost = {:.4} (chi2: {:.4}, w*E: {:.4} [E: {:.2}])",
+                    cost, current_chi2, energy_weight * current_energy, current_energy)
+            } else if has_gr {
                 format!("chi2 = {:.6} (sq: {:.6}, gr: {:.6})", current_chi2, sq_chi2_current, gr_chi2_current)
             } else {
                 format!("chi2 = {:.6}", current_chi2)

@@ -4,6 +4,7 @@ use std::process;
 use reversesmith::analyze;
 use reversesmith::config::Config;
 use reversesmith::io;
+use reversesmith::potential::PotentialSet;
 use reversesmith::rdf;
 use reversesmith::rmc::{self, DataKind, ExperimentalData, ExperimentalGrData, RmcParams};
 use reversesmith::sq;
@@ -240,6 +241,25 @@ fn main() {
         }
     }
 
+    // --- Build pair potentials ---
+    let potential_set = if let Some(ref pot_cfg) = cfg.potential {
+        match PotentialSet::from_config(pot_cfg, &config.species, params.rdf_cutoff, &config_dir) {
+            Ok(ps) => {
+                println!("\nPair potentials (weight = {:.6}, cutoff = {:.1} A):", ps.weight, ps.cutoff);
+                for pot in &ps.potentials {
+                    println!("  {}: {} bins, dr = {:.4} A", pot.pair_label, pot.n_bins, pot.dr);
+                }
+                Some(ps)
+            }
+            Err(e) => {
+                eprintln!("Error building potentials: {}", e);
+                process::exit(1);
+            }
+        }
+    } else {
+        None
+    };
+
     // --- RMC refinement ---
     println!("\nStarting RMC refinement:");
     println!("  max_moves = {}", params.max_moves);
@@ -271,6 +291,7 @@ fn main() {
         &gr_datasets,
         &constraints,
         &params,
+        potential_set.as_ref(),
         checkpoint_fn,
     );
 
