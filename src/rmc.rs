@@ -4,7 +4,8 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
 use crate::atoms::Configuration;
-use crate::constraints::{check_coordination, check_min_distances, Constraints};
+use crate::cells::CellList;
+use crate::constraints::{Constraints, PrecomputedConstraints};
 use crate::rdf::compute_histograms;
 use crate::xray::form_factor;
 
@@ -96,47 +97,195 @@ impl Default for RmcParams {
 
 pub type StatusCallback = Box<dyn Fn(u64, u64, f64, f64, f64)>;
 
-/// Single-threaded atom histogram for the per-move hot path.
-/// Returns flat vec [n_pairs * nbins] of bin counts.
+/// Single-threaded atom histogram using cell list for O(N_neighbors) scaling.
+/// Writes into pre-allocated buffer `hist` (must be zeroed by caller).
+#[inline]
 fn atom_histogram_st(
     config: &Configuration,
     atom_idx: usize,
     pos: &[f64; 3],
     nbins: usize,
-    cutoff: f64,
+    cutoff2: f64,
     inv_dr: f64,
-    n_pairs: usize,
     n_species: usize,
-) -> Vec<f64> {
+    hist: &mut [f64],
+    cell_list: &CellList,
+    pos_cell: usize,
+) {
     let ti = config.atoms[atom_idx].type_id;
-    let cutoff2 = cutoff * cutoff;
     let box_lengths = &config.box_lengths;
-    let mut hist = vec![0.0f64; n_pairs * nbins];
 
-    for (j, atom_j) in config.atoms.iter().enumerate() {
-        if j == atom_idx { continue; }
+    let neighbor_cells = cell_list.neighbor_cells(pos_cell);
+    for &nc in &neighbor_cells {
+        for j in cell_list.atoms_in_cell(nc) {
+            if j == atom_idx { continue; }
 
-        let mut r2 = 0.0f64;
-        for d in 0..3 {
-            let mut delta = atom_j.position[d] - pos[d];
-            let l = box_lengths[d];
-            delta -= l * (delta / l).round();
-            r2 += delta * delta;
-        }
+            let pj = &config.atoms[j].position;
+            let mut r2 = 0.0f64;
+            for d in 0..3 {
+                let mut delta = pj[d] - pos[d];
+                let l = box_lengths[d];
+                delta -= l * (delta / l).round();
+                r2 += delta * delta;
+            }
 
-        if r2 < cutoff2 {
-            let r = r2.sqrt();
-            let bin = (r * inv_dr) as usize;
-            if bin < nbins {
-                let tj = atom_j.type_id;
-                let (a, b) = if ti <= tj { (ti, tj) } else { (tj, ti) };
-                let pair_idx = a * n_species - a * (a + 1) / 2 + b;
-                hist[pair_idx * nbins + bin] += 1.0;
+            if r2 < cutoff2 {
+                let r = r2.sqrt();
+                let bin = (r * inv_dr) as usize;
+                if bin < nbins {
+                    let tj = config.atoms[j].type_id;
+                    let (a, b) = if ti <= tj { (ti, tj) } else { (tj, ti) };
+                    let pair_idx = a * n_species - a * (a + 1) / 2 + b;
+                    hist[pair_idx * nbins + bin] += 1.0;
+                }
             }
         }
     }
+}
 
-    hist
+/// Check min distance constraints using cell list (O(N_neighbors) instead of O(N)).
+#[inline]
+fn check_min_distances_cell(
+    config: &Configuration,
+    atom_idx: usize,
+    new_pos: &[f64; 3],
+    pc: &PrecomputedConstraints,
+    cell_list: &CellList,
+    pos_cell: usize,
+) -> bool {
+    let ti = config.atoms[atom_idx].type_id;
+    let box_lengths = &config.box_lengths;
+
+    let neighbor_cells = cell_list.neighbor_cells(pos_cell);
+    for &nc in &neighbor_cells {
+        for j in cell_list.atoms_in_cell(nc) {
+            if j == atom_idx { continue; }
+
+            let min_d2 = pc.min_dist_sq_for(ti, config.atoms[j].type_id);
+            if min_d2 <= 0.0 { continue; }
+
+            let pj = &config.atoms[j].position;
+            let mut r2 = 0.0f64;
+            for d in 0..3 {
+                let mut delta = pj[d] - new_pos[d];
+                let l = box_lengths[d];
+                delta -= l * (delta / l).round();
+                r2 += delta * delta;
+            }
+
+            if r2 < min_d2 { return false; }
+        }
+    }
+    true
+}
+
+/// Check coordination constraints using cell list.
+#[inline]
+fn check_coordination_cell(
+    config: &Configuration,
+    atom_idx: usize,
+    new_pos: &[f64; 3],
+    pc: &PrecomputedConstraints,
+    cell_list: &CellList,
+) -> bool {
+    let moved_type = config.atoms[atom_idx].type_id;
+    let box_lengths = &config.box_lengths;
+
+    for cc in &pc.coordination {
+        if moved_type != cc.type_a && moved_type != cc.type_b { continue; }
+
+        // We need to check atoms of type_a near the moved atom.
+        // Use cell list centered on new_pos to find affected atoms.
+        let new_cell = cell_list.cell_of[atom_idx]; // atom already has old cell; use new_pos cell
+        let new_pos_cell = {
+            let cx = ((new_pos[0] / box_lengths[0]).fract() * cell_list.nc[0] as f64).floor() as usize;
+            let cy = ((new_pos[1] / box_lengths[1]).fract() * cell_list.nc[1] as f64).floor() as usize;
+            let cz = ((new_pos[2] / box_lengths[2]).fract() * cell_list.nc[2] as f64).floor() as usize;
+            let cx = cx.min(cell_list.nc[0] - 1);
+            let cy = cy.min(cell_list.nc[1] - 1);
+            let cz = cz.min(cell_list.nc[2] - 1);
+            cz * cell_list.nc[0] * cell_list.nc[1] + cy * cell_list.nc[0] + cx
+        };
+
+        // Collect atoms of type sp_a that could be affected (within 2*cutoff of moved atom)
+        // We need to check all type_a atoms, but only those near old or new position
+        let check_cutoff2 = cc.cutoff2 * 4.0; // 2*cutoff squared
+
+        // Check all type_a atoms near old or new position
+        let old_cell = new_cell; // cell_list still has old assignment
+        let old_neighbors = cell_list.neighbor_cells(old_cell);
+        let new_neighbors = cell_list.neighbor_cells(new_pos_cell);
+
+        // Merge neighbor cells (may have duplicates, that's fine)
+        let mut atoms_to_check: Vec<usize> = Vec::new();
+        // Always check the moved atom itself if it's type_a
+        if moved_type == cc.type_a {
+            atoms_to_check.push(atom_idx);
+        }
+
+        for &nc in old_neighbors.iter().chain(new_neighbors.iter()) {
+            for j in cell_list.atoms_in_cell(nc) {
+                if j == atom_idx { continue; }
+                if config.atoms[j].type_id != cc.type_a { continue; }
+
+                let pj = &config.atoms[j].position;
+                let old_pos = &config.atoms[atom_idx].position;
+                let old_r2 = min_image_r2_inline(old_pos, pj, box_lengths);
+                let new_r2 = min_image_r2_inline(new_pos, pj, box_lengths);
+                if old_r2 < check_cutoff2 || new_r2 < check_cutoff2 {
+                    atoms_to_check.push(j);
+                }
+            }
+        }
+
+        // Deduplicate
+        atoms_to_check.sort_unstable();
+        atoms_to_check.dedup();
+
+        // For each atom of type_a to check, count type_b neighbors
+        for &i in &atoms_to_check {
+            let pos_i = if i == atom_idx { *new_pos } else { config.atoms[i].position };
+
+            // Find cell for pos_i
+            let ci = {
+                let cx = ((pos_i[0] / box_lengths[0]).fract() * cell_list.nc[0] as f64).floor() as usize;
+                let cy = ((pos_i[1] / box_lengths[1]).fract() * cell_list.nc[1] as f64).floor() as usize;
+                let cz = ((pos_i[2] / box_lengths[2]).fract() * cell_list.nc[2] as f64).floor() as usize;
+                let cx = cx.min(cell_list.nc[0] - 1);
+                let cy = cy.min(cell_list.nc[1] - 1);
+                let cz = cz.min(cell_list.nc[2] - 1);
+                cz * cell_list.nc[0] * cell_list.nc[1] + cy * cell_list.nc[0] + cx
+            };
+
+            let mut count = 0usize;
+            let nbr_cells = cell_list.neighbor_cells(ci);
+            for &nc in &nbr_cells {
+                for j in cell_list.atoms_in_cell(nc) {
+                    if j == i { continue; }
+                    if config.atoms[j].type_id != cc.type_b { continue; }
+
+                    let pos_j = if j == atom_idx { *new_pos } else { config.atoms[j].position };
+                    let r2 = min_image_r2_inline(&pos_i, &pos_j, box_lengths);
+                    if r2 < cc.cutoff2 { count += 1; }
+                }
+            }
+
+            if count < cc.min || count > cc.max { return false; }
+        }
+    }
+    true
+}
+
+#[inline]
+fn min_image_r2_inline(a: &[f64; 3], b: &[f64; 3], box_lengths: &[f64; 3]) -> f64 {
+    let mut r2 = 0.0f64;
+    for d in 0..3 {
+        let mut delta = b[d] - a[d];
+        let l = box_lengths[d];
+        delta -= l * (delta / l).round();
+        r2 += delta * delta;
+    }
+    r2
 }
 
 /// Run the RMC refinement loop with incremental S(Q) updates.
@@ -415,10 +564,30 @@ pub fn run_rmc(
     // Scratch buffers for incremental updates
     let mut delta_partial_sq = vec![0.0f64; n_pairs * nq];
     let mut new_total_sq = vec![0.0f64; nq];
+    let mut old_hist_buf = vec![0.0f64; n_pairs * nbins];
+    let mut new_hist_buf = vec![0.0f64; n_pairs * nbins];
+    let mut delta_sq_buf = vec![0.0f64; nq];
+
+    // Precompute constraint lookup table (eliminates string allocs in hot loop)
+    let pc = PrecomputedConstraints::from_constraints(constraints, config);
+    let cutoff2 = params.rdf_cutoff * params.rdf_cutoff;
+
+    // Build cell list for O(1)-per-neighbor spatial lookups
+    let positions: Vec<[f64; 3]> = config.atoms.iter().map(|a| a.position).collect();
+    let mut cell_list = CellList::new(&positions, &config.box_lengths, params.rdf_cutoff);
+    println!("Cell list: {}x{}x{} = {} cells (cell size: {:.2} A)",
+        cell_list.nc[0], cell_list.nc[1], cell_list.nc[2], cell_list.n_cells,
+        cell_list.cell_size[0]);
 
     // Annealing setup
     let annealing = (params.anneal_start - params.anneal_end).abs() > 1e-10;
     let anneal_n = if params.anneal_steps > 0 { params.anneal_steps } else { params.max_moves };
+    // Precompute log ratio to replace powf with exp (faster per-move)
+    let anneal_log_ratio = if annealing {
+        (params.anneal_end / params.anneal_start).ln()
+    } else {
+        0.0
+    };
     if annealing {
         println!("Simulated annealing: T = {:.2} -> {:.2} over {} moves ({:.0}% of run)",
             params.anneal_start, params.anneal_end, anneal_n,
@@ -450,14 +619,25 @@ pub fn run_rmc(
             new_pos[d] -= l * (new_pos[d] / l).floor();
         }
 
-        // Check constraints
-        if !check_min_distances(config, atom_idx, &new_pos, constraints) {
+        // Determine cell for new position (for cell-list lookups)
+        let new_pos_cell = {
+            let cx = ((new_pos[0] / config.box_lengths[0]).fract() * cell_list.nc[0] as f64).floor() as usize;
+            let cy = ((new_pos[1] / config.box_lengths[1]).fract() * cell_list.nc[1] as f64).floor() as usize;
+            let cz = ((new_pos[2] / config.box_lengths[2]).fract() * cell_list.nc[2] as f64).floor() as usize;
+            let cx = cx.min(cell_list.nc[0] - 1);
+            let cy = cy.min(cell_list.nc[1] - 1);
+            let cz = cz.min(cell_list.nc[2] - 1);
+            cz * cell_list.nc[0] * cell_list.nc[1] + cy * cell_list.nc[0] + cx
+        };
+
+        // Check constraints using cell list (O(N_neighbors) instead of O(N))
+        if !check_min_distances_cell(config, atom_idx, &new_pos, &pc, &cell_list, new_pos_cell) {
             recent_total += 1;
             state.move_count += 1;
             continue;
         }
-        if !constraints.coordination.is_empty()
-            && !check_coordination(config, atom_idx, &new_pos, constraints)
+        if !pc.coordination.is_empty()
+            && !check_coordination_cell(config, atom_idx, &new_pos, &pc, &cell_list)
         {
             recent_total += 1;
             state.move_count += 1;
@@ -465,22 +645,26 @@ pub fn run_rmc(
         }
 
         // --- Incremental histogram + S(Q) update ---
-        // Compute old histogram contributions (single-threaded)
-        let old_hist = atom_histogram_st(
-            config, atom_idx, &old_pos, nbins, params.rdf_cutoff, inv_dr, n_pairs, n_types,
+        // Compute old histogram contributions using cell list
+        let old_pos_cell = cell_list.cell_of[atom_idx];
+        old_hist_buf.fill(0.0);
+        atom_histogram_st(
+            config, atom_idx, &old_pos, nbins, cutoff2, inv_dr, n_types,
+            &mut old_hist_buf, &cell_list, old_pos_cell,
         );
 
         // Move atom temporarily
         config.atoms[atom_idx].position = new_pos;
 
         // Compute new histogram contributions
-        let new_hist = atom_histogram_st(
-            config, atom_idx, &new_pos, nbins, params.rdf_cutoff, inv_dr, n_pairs, n_types,
+        new_hist_buf.fill(0.0);
+        atom_histogram_st(
+            config, atom_idx, &new_pos, nbins, cutoff2, inv_dr, n_types,
+            &mut new_hist_buf, &cell_list, new_pos_cell,
         );
 
-        // Compute ΔS_ab(Q) from histogram delta, accumulate into delta_partial_sq
+        // Compute ΔS_ab(Q) from histogram delta
         // ΔS_ab(Q_k) = (4πρ₀*dr/Q_k) * Σ_i rw_i * Δg_ab(r_i) * sin(Q_k*r_i)
-        // where Δg = like_factor * Δhist * inv_norm
         delta_partial_sq.fill(0.0);
 
         for p in 0..n_pairs {
@@ -490,8 +674,8 @@ pub fn run_rmc(
             let lf = like_factor[p];
 
             for i in 0..nbins {
-                let dh = new_hist[hist_base + i] - old_hist[hist_base + i];
-                if dh == 0.0 { continue; } // Skip unchanged bins (the key optimisation)
+                let dh = new_hist_buf[hist_base + i] - old_hist_buf[hist_base + i];
+                if dh == 0.0 { continue; }
                 let dg = lf * dh * inv_norm[norm_base + i];
                 let contrib = rw[i] * dg;
                 let sin_row = i * nq;
@@ -529,24 +713,30 @@ pub fn run_rmc(
         }
 
         // Compute new g(r) incrementally and its chi2
+        // Precompute ΔS(Q) vector once (enables auto-vectorization of matvec)
         let mut new_gr_chi2 = 0.0;
-        for (di, gd) in gr_data.iter().enumerate() {
-            let n_r = gd.r.len();
-            let matrix = &gr_ft_matrices[di];
-            for i in 0..n_r {
-                let row = i * nq;
-                let mut delta = 0.0;
-                for k in 0..nq {
-                    delta += matrix[row + k] * (new_total_sq[k] - total_sq[k]);
+        if has_gr {
+            for k in 0..nq {
+                delta_sq_buf[k] = new_total_sq[k] - total_sq[k];
+            }
+            for (di, gd) in gr_data.iter().enumerate() {
+                let n_r = gd.r.len();
+                let matrix = &gr_ft_matrices[di];
+                for i in 0..n_r {
+                    let row = i * nq;
+                    let mut delta = 0.0;
+                    for k in 0..nq {
+                        delta += matrix[row + k] * delta_sq_buf[k];
+                    }
+                    gr_scratch[di][i] = gr_cached[di][i] + delta;
                 }
-                gr_scratch[di][i] = gr_cached[di][i] + delta;
+                let mut chi2 = 0.0;
+                for &i in &gr_fit_indices[di] {
+                    let diff = gr_scratch[di][i] - gd.gr[i];
+                    chi2 += (diff * diff) / (gd.sigma[i] * gd.sigma[i]);
+                }
+                new_gr_chi2 += gd.weight * chi2;
             }
-            let mut chi2 = 0.0;
-            for &i in &gr_fit_indices[di] {
-                let diff = gr_scratch[di][i] - gd.gr[i];
-                chi2 += (diff * diff) / (gd.sigma[i] * gd.sigma[i]);
-            }
-            new_gr_chi2 += gd.weight * chi2;
         }
 
         let new_chi2 = new_sq_chi2 + new_gr_chi2;
@@ -556,7 +746,7 @@ pub fn run_rmc(
         // After anneal_n moves, T stays at anneal_end
         let temperature = if annealing {
             let frac = (move_num as f64 / anneal_n as f64).min(1.0);
-            params.anneal_start * (params.anneal_end / params.anneal_start).powf(frac)
+            params.anneal_start * (frac * anneal_log_ratio).exp()
         } else {
             1.0
         };
@@ -573,7 +763,7 @@ pub fn run_rmc(
             gr_chi2_current = new_gr_chi2;
             // Commit: update histograms, partial S(Q), total S(Q)
             for i in 0..n_pairs * nbins {
-                flat_hist[i] += new_hist[i] - old_hist[i];
+                flat_hist[i] += new_hist_buf[i] - old_hist_buf[i];
             }
             for i in 0..n_pairs * nq {
                 partial_sq[i] += delta_partial_sq[i];
@@ -583,6 +773,8 @@ pub fn run_rmc(
             for (di, _) in gr_data.iter().enumerate() {
                 std::mem::swap(&mut gr_cached[di], &mut gr_scratch[di]);
             }
+            // Update cell list for accepted move
+            cell_list.move_atom(atom_idx, &new_pos);
             state.accepted += 1;
             recent_accepted += 1;
 

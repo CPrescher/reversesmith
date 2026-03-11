@@ -48,6 +48,134 @@ impl Constraints {
     }
 }
 
+/// Precomputed constraint lookup table for the hot path.
+/// Avoids string allocations and HashMap lookups per move.
+pub struct PrecomputedConstraints {
+    /// min_dist_sq[ti * n_types + tj] = squared minimum distance for pair (ti, tj).
+    /// 0.0 means no constraint.
+    pub min_dist_sq: Vec<f64>,
+    pub n_types: usize,
+    /// Precomputed coordination constraints with type IDs instead of strings.
+    pub coordination: Vec<PrecomputedCoordConstraint>,
+}
+
+pub struct PrecomputedCoordConstraint {
+    pub type_a: usize,
+    pub type_b: usize,
+    pub min: usize,
+    pub max: usize,
+    pub cutoff2: f64,
+}
+
+impl PrecomputedConstraints {
+    pub fn from_constraints(constraints: &Constraints, config: &Configuration) -> Self {
+        let n_types = config.species.len();
+        let mut min_dist_sq = vec![0.0f64; n_types * n_types];
+
+        for a in 0..n_types {
+            for b in 0..n_types {
+                let d = constraints.min_distance_for_pair(config, a, b);
+                min_dist_sq[a * n_types + b] = d * d;
+            }
+        }
+
+        let mut coordination = Vec::new();
+        for cc in &constraints.coordination {
+            let parts: Vec<&str> = cc.pair.split('-').collect();
+            if parts.len() != 2 { continue; }
+            let type_a = config.species.iter().position(|s| s == parts[0]);
+            let type_b = config.species.iter().position(|s| s == parts[1]);
+            if let (Some(ta), Some(tb)) = (type_a, type_b) {
+                coordination.push(PrecomputedCoordConstraint {
+                    type_a: ta,
+                    type_b: tb,
+                    min: cc.min,
+                    max: cc.max,
+                    cutoff2: cc.cutoff * cc.cutoff,
+                });
+            }
+        }
+
+        PrecomputedConstraints { min_dist_sq, n_types, coordination }
+    }
+
+    #[inline]
+    pub fn min_dist_sq_for(&self, type_a: usize, type_b: usize) -> f64 {
+        self.min_dist_sq[type_a * self.n_types + type_b]
+    }
+}
+
+/// Check min distances using precomputed table (no allocations).
+pub fn check_min_distances_fast(
+    config: &Configuration,
+    atom_idx: usize,
+    new_pos: &[f64; 3],
+    pc: &PrecomputedConstraints,
+) -> bool {
+    let ti = config.atoms[atom_idx].type_id;
+    let box_lengths = &config.box_lengths;
+
+    for (j, atom_j) in config.atoms.iter().enumerate() {
+        if j == atom_idx { continue; }
+
+        let min_d2 = pc.min_dist_sq_for(ti, atom_j.type_id);
+        if min_d2 <= 0.0 { continue; }
+
+        let mut r2 = 0.0f64;
+        for d in 0..3 {
+            let mut delta = atom_j.position[d] - new_pos[d];
+            let l = box_lengths[d];
+            delta -= l * (delta / l).round();
+            r2 += delta * delta;
+        }
+
+        if r2 < min_d2 { return false; }
+    }
+    true
+}
+
+/// Check coordination constraints using precomputed type IDs (no string ops).
+pub fn check_coordination_fast(
+    config: &Configuration,
+    atom_idx: usize,
+    new_pos: &[f64; 3],
+    pc: &PrecomputedConstraints,
+) -> bool {
+    let moved_type = config.atoms[atom_idx].type_id;
+    let box_lengths = &config.box_lengths;
+
+    for cc in &pc.coordination {
+        // Only check if moved atom is involved
+        if moved_type != cc.type_a && moved_type != cc.type_b { continue; }
+
+        for (i, atom_i) in config.atoms.iter().enumerate() {
+            if atom_i.type_id != cc.type_a { continue; }
+
+            let pos_i = if i == atom_idx { *new_pos } else { atom_i.position };
+
+            // Skip atoms far from moved atom
+            if i != atom_idx {
+                let old_r2 = min_image_r2(&config.atoms[atom_idx].position, &atom_i.position, box_lengths);
+                let new_r2 = min_image_r2(new_pos, &atom_i.position, box_lengths);
+                if old_r2 > cc.cutoff2 * 4.0 && new_r2 > cc.cutoff2 * 4.0 { continue; }
+            }
+
+            let mut count = 0usize;
+            for (j, atom_j) in config.atoms.iter().enumerate() {
+                if j == i { continue; }
+                if atom_j.type_id != cc.type_b { continue; }
+
+                let pos_j = if j == atom_idx { *new_pos } else { atom_j.position };
+                let r2 = min_image_r2(&pos_i, &pos_j, box_lengths);
+                if r2 < cc.cutoff2 { count += 1; }
+            }
+
+            if count < cc.min || count > cc.max { return false; }
+        }
+    }
+    true
+}
+
 /// Check if moving atom `atom_idx` to `new_pos` violates minimum distance constraints.
 /// Returns true if the move is VALID (no violations).
 pub fn check_min_distances(

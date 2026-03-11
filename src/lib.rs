@@ -1,4 +1,5 @@
 pub mod atoms;
+pub mod cells;
 pub mod config;
 pub mod constraints;
 pub mod io;
