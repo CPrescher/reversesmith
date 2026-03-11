@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::atoms::Configuration;
+use crate::{log_println, log_print};
 
 /// A pair of species with a distance cutoff for analysis.
 #[derive(Debug, Clone)]
@@ -286,24 +287,24 @@ pub fn compute_bond_angles(
 
 /// Print formatted analysis summary to stdout.
 pub fn print_analysis_summary(cn_results: &[CnDistribution], angle_results: &[AngleDistribution]) {
-    println!("\n=== Coordination Number Analysis ===\n");
-    println!(
+    log_println!("\n=== Coordination Number Analysis ===\n");
+    log_println!(
         "{:<10} {:>8} {:>8} {:>8} {:>8} {:>10}",
         "Pair", "Cutoff", "Mean", "StdDev", "Min", "Max"
     );
-    println!("{}", "-".repeat(58));
+    log_println!("{}", "-".repeat(58));
     for cn in cn_results {
-        println!(
+        log_println!(
             "{:<10} {:>8.2} {:>8.3} {:>8.3} {:>8} {:>10}",
             cn.pair_label, cn.cutoff, cn.mean, cn.std_dev, cn.min, cn.max
         );
 
         // Print histogram inline
         let n_atoms: usize = cn.histogram.iter().sum();
-        print!("           CN distribution:");
+        log_print!("           CN distribution:");
         for (cn_val, &count) in cn.histogram.iter().enumerate() {
             if count > 0 {
-                print!(
+                log_print!(
                     " {}:{} ({:.1}%)",
                     cn_val,
                     count,
@@ -311,18 +312,18 @@ pub fn print_analysis_summary(cn_results: &[CnDistribution], angle_results: &[An
                 );
             }
         }
-        println!();
+        log_println!();
     }
 
     if !angle_results.is_empty() {
-        println!("\n=== Bond Angle Analysis ===\n");
-        println!(
+        log_println!("\n=== Bond Angle Analysis ===\n");
+        log_println!(
             "{:<14} {:>10} {:>12} {:>12}",
             "Triplet", "N_angles", "Peak (deg)", "Mean (deg)"
         );
-        println!("{}", "-".repeat(52));
+        log_println!("{}", "-".repeat(52));
         for ad in angle_results {
-            println!(
+            log_println!(
                 "{:<14} {:>10} {:>12.1} {:>12.1}",
                 ad.triplet_label, ad.n_angles, ad.peak_angle, ad.mean_angle
             );

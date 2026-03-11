@@ -1,3 +1,5 @@
+pub mod logging;
+
 pub mod analyze;
 pub mod atoms;
 pub mod cells;

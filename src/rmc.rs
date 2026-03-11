@@ -6,6 +6,7 @@ use rand::{Rng, SeedableRng};
 use crate::atoms::Configuration;
 use crate::cells::CellList;
 use crate::constraints::{Constraints, PrecomputedConstraints};
+use crate::log_println;
 use crate::potential::PotentialSet;
 use crate::rdf::compute_histograms;
 use crate::xray::form_factor;
@@ -311,7 +312,7 @@ pub fn run_rmc(
     let volume = config.volume();
 
     // Precompute tables
-    println!("Precomputing lookup tables...");
+    log_println!("Precomputing lookup tables...");
     let r_grid: Vec<f64> = (0..nbins).map(|i| (i as f64 + 0.5) * dr).collect();
     let r_max = r_grid[nbins - 1];
 
@@ -407,7 +408,7 @@ pub fn run_rmc(
     }
 
     // --- Compute initial state ---
-    println!("Computing initial RDF histograms...");
+    log_println!("Computing initial RDF histograms...");
     let hist_map = compute_histograms(config, nbins, params.rdf_cutoff);
     let mut flat_hist = vec![0.0f64; n_pairs * nbins];
     for (&p, bins) in &hist_map {
@@ -516,7 +517,7 @@ pub fn run_rmc(
 
     if has_gr {
         for (di, gd) in gr_data.iter().enumerate() {
-            println!(
+            log_println!(
                 "g(r) dataset {}: {} total points, {} in fit range [{:.2}, {:.2}] A",
                 di, gd.r.len(), gr_fit_indices[di].len(), gd.fit_min, gd.fit_max
             );
@@ -547,9 +548,9 @@ pub fn run_rmc(
     let mut current_chi2 = sq_chi2_current + gr_chi2_current;
 
     if has_gr {
-        println!("Initial chi2 = {:.6} (sq: {:.6}, gr: {:.6})", current_chi2, sq_chi2_current, gr_chi2_current);
+        log_println!("Initial chi2 = {:.6} (sq: {:.6}, gr: {:.6})", current_chi2, sq_chi2_current, gr_chi2_current);
     } else {
-        println!("Initial chi2 = {:.6}", current_chi2);
+        log_println!("Initial chi2 = {:.6}", current_chi2);
     }
 
     let mut state = RmcState {
@@ -577,7 +578,7 @@ pub fn run_rmc(
     // Build cell list for O(1)-per-neighbor spatial lookups
     let positions: Vec<[f64; 3]> = config.atoms.iter().map(|a| a.position).collect();
     let mut cell_list = CellList::new(&positions, &config.box_lengths, params.rdf_cutoff);
-    println!("Cell list: {}x{}x{} = {} cells (cell size: {:.2} A)",
+    log_println!("Cell list: {}x{}x{} = {} cells (cell size: {:.2} A)",
         cell_list.nc[0], cell_list.nc[1], cell_list.nc[2], cell_list.n_cells,
         cell_list.cell_size[0]);
 
@@ -585,7 +586,7 @@ pub fn run_rmc(
     let energy_weight = potential.map_or(0.0, |p| p.weight);
     let mut current_energy = if let Some(pot) = potential {
         let e = pot.total_energy(config, &cell_list);
-        println!("Initial potential energy = {:.6} eV (weight = {:.6})", e, energy_weight);
+        log_println!("Initial potential energy = {:.6} eV (weight = {:.6})", e, energy_weight);
         e
     } else {
         0.0
@@ -601,7 +602,7 @@ pub fn run_rmc(
         0.0
     };
     if annealing {
-        println!("Simulated annealing: T = {:.2} -> {:.2} over {} moves ({:.0}% of run)",
+        log_println!("Simulated annealing: T = {:.2} -> {:.2} over {} moves ({:.0}% of run)",
             params.anneal_start, params.anneal_end, anneal_n,
             100.0 * anneal_n as f64 / params.max_moves as f64);
     }
@@ -777,11 +778,11 @@ pub fn run_rmc(
                 let avg_dchi2 = calib_sum_dchi2 / calib_count as f64;
                 let avg_de = calib_sum_de / calib_count as f64;
                 let suggested = if avg_de > 1e-15 { avg_dchi2 / avg_de } else { 0.0 };
-                println!("Calibration ({} moves): avg |delta_chi2| = {:.6}, avg |delta_E| = {:.6} eV",
+                log_println!("Calibration ({} moves): avg |delta_chi2| = {:.6}, avg |delta_E| = {:.6} eV",
                     calib_count, avg_dchi2, avg_de);
-                println!("  Current weight = {:.6}, suggested weight for equal balance = {:.6}",
+                log_println!("  Current weight = {:.6}, suggested weight for equal balance = {:.6}",
                     energy_weight, suggested);
-                println!("  Ratio current/suggested = {:.4}", energy_weight / suggested.max(1e-30));
+                log_println!("  Ratio current/suggested = {:.4}", energy_weight / suggested.max(1e-30));
             }
         }
 
@@ -867,7 +868,7 @@ pub fn run_rmc(
             } else {
                 String::new()
             };
-            println!(
+            log_println!(
                 "Move {}/{}: {}, accept = {:.3} (recent {:.3}), step = {:.4} A{}",
                 state.move_count, params.max_moves, chi2_str,
                 overall_ratio, ratio, state.max_step, temp_str
@@ -905,7 +906,7 @@ pub fn run_rmc(
         if conv_active && state.move_count >= conv_next_check && temperature <= params.anneal_end * 1.01 {
             let improvement = conv_chi2 - current_chi2;
             if improvement < params.convergence_threshold {
-                println!(
+                log_println!(
                     "\nConverged at move {}: chi2 improved by {:.6} over last {} moves (threshold: {:.6})",
                     state.move_count, improvement, params.convergence_window, params.convergence_threshold
                 );
@@ -922,15 +923,15 @@ pub fn run_rmc(
 
     // Restore best structure
     if best_chi2 < state.chi2 {
-        println!("\nRestoring best structure from move {} (chi2 = {:.6})", best_move, best_chi2);
+        log_println!("\nRestoring best structure from move {} (chi2 = {:.6})", best_move, best_chi2);
         for (i, atom) in config.atoms.iter_mut().enumerate() {
             atom.position = best_positions[i];
         }
         state.chi2 = best_chi2;
     }
 
-    println!("\nRMC refinement complete.");
-    println!(
+    log_println!("\nRMC refinement complete.");
+    log_println!(
         "Final chi2 = {:.6} (best at move {}), accepted {}/{} ({:.1}%)",
         state.chi2, best_move, state.accepted, state.move_count,
         100.0 * state.accepted as f64 / state.move_count.max(1) as f64

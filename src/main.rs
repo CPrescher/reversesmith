@@ -9,6 +9,7 @@ use reversesmith::rdf;
 use reversesmith::rmc::{self, DataKind, ExperimentalData, ExperimentalGrData, RmcParams};
 use reversesmith::sq;
 use reversesmith::xray;
+use reversesmith::{log_println, log_eprintln};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -16,6 +17,8 @@ fn main() {
         eprintln!("Usage: reversesmith <config.toml> [--compute-sq-only] [--analyze [structure.xyz]]");
         process::exit(1);
     }
+
+    reversesmith::logging::init_log_file();
 
     let config_path = Path::new(&args[1]);
     let compute_sq_only = args.iter().any(|a| a == "--compute-sq-only");
@@ -35,7 +38,7 @@ fn main() {
         .to_path_buf();
 
     let cfg = Config::load(config_path).unwrap_or_else(|e| {
-        eprintln!("Error loading config: {}", e);
+        log_eprintln!("Error loading config: {}", e);
         process::exit(1);
     });
 
@@ -45,7 +48,7 @@ fn main() {
     } else {
         resolve_path(&config_dir, &cfg.system.structure)
     };
-    println!("Loading structure from {:?} ...", structure_path);
+    log_println!("Loading structure from {:?} ...", structure_path);
 
     // Auto-detect format from extension when path was overridden
     let format = if analyze_structure.is_some() {
@@ -62,31 +65,31 @@ fn main() {
         "lammps" => {
             let type_map = cfg.type_map();
             io::read_lammps_data(&structure_path, &type_map).unwrap_or_else(|e| {
-                eprintln!("Error reading LAMMPS data: {}", e);
+                log_eprintln!("Error reading LAMMPS data: {}", e);
                 process::exit(1);
             })
         }
         "xyz" => io::read_xyz(&structure_path).unwrap_or_else(|e| {
-            eprintln!("Error reading XYZ: {}", e);
+            log_eprintln!("Error reading XYZ: {}", e);
             process::exit(1);
         }),
         _ => {
-            eprintln!("Unknown format: {}", format);
+            log_eprintln!("Unknown format: {}", format);
             process::exit(1);
         }
     };
 
-    println!(
+    log_println!(
         "  {} atoms, {} species: {:?}",
         config.atoms.len(),
         config.species.len(),
         config.species
     );
-    println!(
+    log_println!(
         "  Box: {:.4} x {:.4} x {:.4} A",
         config.box_lengths[0], config.box_lengths[1], config.box_lengths[2]
     );
-    println!(
+    log_println!(
         "  Volume = {:.1} A^3, rho0 = {:.6} atoms/A^3",
         config.volume(),
         config.number_density()
@@ -105,13 +108,13 @@ fn main() {
             run_analysis(&config, &cfg, &config_dir, "starting");
             let refined_path = config_dir.join("refined.xyz");
             if refined_path.exists() {
-                println!("\n{}", "=".repeat(60));
+                log_println!("\n{}", "=".repeat(60));
                 let refined = io::read_xyz(&refined_path).unwrap_or_else(|e| {
-                    eprintln!("Error reading refined.xyz: {}", e);
+                    log_eprintln!("Error reading refined.xyz: {}", e);
                     process::exit(1);
                 });
-                println!("Loading refined structure from {:?} ...", refined_path);
-                println!(
+                log_println!("Loading refined structure from {:?} ...", refined_path);
+                log_println!(
                     "  {} atoms, {} species: {:?}",
                     refined.atoms.len(),
                     refined.species.len(),
@@ -120,12 +123,14 @@ fn main() {
                 run_analysis(&refined, &cfg, &config_dir, "refined");
             }
         }
+        reversesmith::logging::flush_log_file();
         return;
     }
 
     // --- Compute S(Q) mode ---
     if compute_sq_only {
         compute_sq_and_exit(&config, &params, rho0, &config_dir, &cfg);
+        reversesmith::logging::flush_log_file();
         return;
     }
 
@@ -134,9 +139,9 @@ fn main() {
 
     if let Some(ref xray_cfg) = cfg.data.xray_sq {
         let path = resolve_path(&config_dir, &xray_cfg.file);
-        println!("Loading X-ray S(Q) from {:?} ...", path);
+        log_println!("Loading X-ray S(Q) from {:?} ...", path);
         let (q, sq) = io::read_sq_data(&path).unwrap_or_else(|e| {
-            eprintln!("Error reading X-ray S(Q): {}", e);
+            log_eprintln!("Error reading X-ray S(Q): {}", e);
             process::exit(1);
         });
         let sigma_val = xray_cfg.sigma.unwrap_or(0.01);
@@ -144,7 +149,7 @@ fn main() {
         let weight = xray_cfg.weight.unwrap_or(1.0);
         let fit_min = xray_cfg.fit_min.unwrap_or(0.0);
         let fit_max = xray_cfg.fit_max.unwrap_or(f64::INFINITY);
-        println!("  {} Q points, Q range: {:.2} - {:.2}, fit range: [{:.2}, {:.2}]",
+        log_println!("  {} Q points, Q range: {:.2} - {:.2}, fit range: [{:.2}, {:.2}]",
             q.len(), q[0], q[q.len() - 1], fit_min, fit_max);
         experiments.push(ExperimentalData {
             q,
@@ -159,9 +164,9 @@ fn main() {
 
     if let Some(ref neutron_cfg) = cfg.data.neutron_sq {
         let path = resolve_path(&config_dir, &neutron_cfg.file);
-        println!("Loading neutron S(Q) from {:?} ...", path);
+        log_println!("Loading neutron S(Q) from {:?} ...", path);
         let (q, sq) = io::read_sq_data(&path).unwrap_or_else(|e| {
-            eprintln!("Error reading neutron S(Q): {}", e);
+            log_eprintln!("Error reading neutron S(Q): {}", e);
             process::exit(1);
         });
         let sigma_val = neutron_cfg.sigma.unwrap_or(0.01);
@@ -185,9 +190,9 @@ fn main() {
 
     if let Some(ref gr_cfg) = cfg.data.xray_gr {
         let path = resolve_path(&config_dir, &gr_cfg.file);
-        println!("Loading X-ray g(r) from {:?} ...", path);
+        log_println!("Loading X-ray g(r) from {:?} ...", path);
         let (r, gr) = io::read_sq_data(&path).unwrap_or_else(|e| {
-            eprintln!("Error reading X-ray g(r): {}", e);
+            log_eprintln!("Error reading X-ray g(r): {}", e);
             process::exit(1);
         });
         let sigma_val = gr_cfg.sigma.unwrap_or(0.01);
@@ -204,7 +209,7 @@ fn main() {
             }
         });
         let lorch = gr_cfg.lorch.unwrap_or(true);
-        println!("  {} r points, r range: {:.2} - {:.2} A, fit range: [{:.2}, {:.2}], FT Qmax: {:.2}, Lorch: {}",
+        log_println!("  {} r points, r range: {:.2} - {:.2} A, fit range: [{:.2}, {:.2}], FT Qmax: {:.2}, Lorch: {}",
             r.len(), r[0], r[r.len() - 1], fit_min, fit_max, qmax, lorch);
         gr_datasets.push(ExperimentalGrData {
             r,
@@ -219,22 +224,22 @@ fn main() {
     }
 
     if experiments.is_empty() && gr_datasets.is_empty() {
-        eprintln!("No experimental data specified in config!");
+        log_eprintln!("No experimental data specified in config!");
         process::exit(1);
     }
 
     // --- Constraints ---
     let constraints = cfg.constraints();
     if !constraints.min_distances.is_empty() {
-        println!("Minimum distance constraints:");
+        log_println!("Minimum distance constraints:");
         for (pair, d) in &constraints.min_distances {
-            println!("  {} > {:.2} A", pair, d);
+            log_println!("  {} > {:.2} A", pair, d);
         }
     }
     if !constraints.coordination.is_empty() {
-        println!("Coordination constraints:");
+        log_println!("Coordination constraints:");
         for cc in &constraints.coordination {
-            println!(
+            log_println!(
                 "  {} [{}, {}] within {:.2} A",
                 cc.pair, cc.min, cc.max, cc.cutoff
             );
@@ -245,14 +250,14 @@ fn main() {
     let potential_set = if let Some(ref pot_cfg) = cfg.potential {
         match PotentialSet::from_config(pot_cfg, &config.species, params.rdf_cutoff, &config_dir) {
             Ok(ps) => {
-                println!("\nPair potentials (weight = {:.6}, cutoff = {:.1} A):", ps.weight, ps.cutoff);
+                log_println!("\nPair potentials (weight = {:.6}, cutoff = {:.1} A):", ps.weight, ps.cutoff);
                 for pot in &ps.potentials {
-                    println!("  {}: {} bins, dr = {:.4} A", pot.pair_label, pot.n_bins, pot.dr);
+                    log_println!("  {}: {} bins, dr = {:.4} A", pot.pair_label, pot.n_bins, pot.dr);
                 }
                 Some(ps)
             }
             Err(e) => {
-                eprintln!("Error building potentials: {}", e);
+                log_eprintln!("Error building potentials: {}", e);
                 process::exit(1);
             }
         }
@@ -261,27 +266,27 @@ fn main() {
     };
 
     // --- RMC refinement ---
-    println!("\nStarting RMC refinement:");
-    println!("  max_moves = {}", params.max_moves);
-    println!("  max_step = {:.4} A", params.max_step);
-    println!("  RDF cutoff = {:.1} A, {} bins", params.rdf_cutoff, params.rdf_nbins);
-    println!("  Q grid: {} points up to {:.1} 1/A", params.q_grid.len(), params.q_grid.last().unwrap_or(&0.0));
+    log_println!("\nStarting RMC refinement:");
+    log_println!("  max_moves = {}", params.max_moves);
+    log_println!("  max_step = {:.4} A", params.max_step);
+    log_println!("  RDF cutoff = {:.1} A, {} bins", params.rdf_cutoff, params.rdf_nbins);
+    log_println!("  Q grid: {} points up to {:.1} 1/A", params.q_grid.len(), params.q_grid.last().unwrap_or(&0.0));
     if (params.anneal_start - params.anneal_end).abs() > 1e-10 {
-        println!("  Annealing: T = {:.2} -> {:.2}", params.anneal_start, params.anneal_end);
+        log_println!("  Annealing: T = {:.2} -> {:.2}", params.anneal_start, params.anneal_end);
     }
     if params.convergence_threshold > 0.0 {
-        println!("  Convergence: threshold = {:.1e}, window = {} moves", params.convergence_threshold, params.convergence_window);
+        log_println!("  Convergence: threshold = {:.1e}, window = {} moves", params.convergence_threshold, params.convergence_window);
     }
-    println!();
+    log_println!();
 
     let checkpoint_dir = config_dir.clone();
     let checkpoint_fn: Option<Box<dyn Fn(&rmc::RmcState, &reversesmith::atoms::Configuration)>> =
         Some(Box::new(move |state, cfg| {
             let path = checkpoint_dir.join("checkpoint.dat");
             if let Err(e) = io::write_checkpoint(&path, state, cfg) {
-                eprintln!("Warning: checkpoint failed: {}", e);
+                log_eprintln!("Warning: checkpoint failed: {}", e);
             } else {
-                println!("  Checkpoint saved at move {}", state.move_count);
+                log_println!("  Checkpoint saved at move {}", state.move_count);
             }
         }));
 
@@ -297,7 +302,7 @@ fn main() {
 
     // --- Save results ---
     let output_xyz = config_dir.join("refined.xyz");
-    println!("\nSaving refined structure to {:?}", output_xyz);
+    log_println!("\nSaving refined structure to {:?}", output_xyz);
     io::write_xyz(&output_xyz, &config).unwrap();
 
     // Compute and save final S(Q)
@@ -313,7 +318,7 @@ fn main() {
     let sx = xray::compute_xray_sq(&config, &partial_sq, &params.q_grid);
 
     let output_sq = config_dir.join("refined_sq.dat");
-    println!("Saving refined S(Q) to {:?}", output_sq);
+    log_println!("Saving refined S(Q) to {:?}", output_sq);
     io::write_sq(&output_sq, &params.q_grid, &sx).unwrap();
 
     // Save refined total X-ray g(r) via inverse FT of S_X(Q), using same Lorch+Qmax as RMC
@@ -342,11 +347,12 @@ fn main() {
             val
         }).collect();
         let output_gr = config_dir.join("refined_total_gr.dat");
-        println!("Saving refined total X-ray g(r) to {:?}", output_gr);
+        log_println!("Saving refined total X-ray g(r) to {:?}", output_gr);
         io::write_gr(&output_gr, &r_out, &total_gr).unwrap();
     }
 
-    println!("\nDone. Final chi2 = {:.6}", state.chi2);
+    log_println!("\nDone. Final chi2 = {:.6}", state.chi2);
+    reversesmith::logging::flush_log_file();
 }
 
 /// Compute S(Q) from the initial structure and exit (no RMC).
@@ -357,7 +363,7 @@ fn compute_sq_and_exit(
     config_dir: &Path,
     cfg: &Config,
 ) {
-    println!("\nComputing partial RDFs...");
+    log_println!("\nComputing partial RDFs...");
     let rdfs = rdf::compute_partial_rdfs(config, params.rdf_nbins, params.rdf_cutoff);
 
     // Print pair labels
@@ -373,14 +379,14 @@ fn compute_sq_and_exit(
                 .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
                 .unwrap()
                 .0];
-            println!(
+            log_println!(
                 "  {}-{}: max g(r) = {:.2} at r = {:.2} A",
                 config.species[a], config.species[b], max_val, max_pos
             );
         }
     }
 
-    println!("\nComputing partial S(Q)...");
+    log_println!("\nComputing partial S(Q)...");
     let partial_sq = sq::compute_all_partial_sq(
         &rdfs.r,
         &rdfs.partials,
@@ -389,11 +395,11 @@ fn compute_sq_and_exit(
         params.lorch,
     );
 
-    println!("Computing total X-ray S(Q)...");
+    log_println!("Computing total X-ray S(Q)...");
     let sx = xray::compute_xray_sq(config, &partial_sq, &params.q_grid);
 
     let output_sq = config_dir.join("computed_sq.dat");
-    println!("Saving computed S(Q) to {:?}", output_sq);
+    log_println!("Saving computed S(Q) to {:?}", output_sq);
     io::write_sq(&output_sq, &params.q_grid, &sx).unwrap();
 
     // Also save partial g(r) for validation
@@ -419,7 +425,7 @@ fn compute_sq_and_exit(
             writeln!(file).unwrap();
         }
     }
-    println!("Saving partial g(r) to {:?}", output_gr);
+    log_println!("Saving partial g(r) to {:?}", output_gr);
 
     // Compute and save total X-ray g(r) via inverse FT (with Lorch+Qmax from g(r) config)
     {
@@ -450,7 +456,7 @@ fn compute_sq_and_exit(
             val
         }).collect();
         let output_total_gr = config_dir.join("computed_total_gr.dat");
-        println!("Saving total X-ray g(r) to {:?}", output_total_gr);
+        log_println!("Saving total X-ray g(r) to {:?}", output_total_gr);
         io::write_gr(&output_total_gr, &r_out, &total_gr).unwrap();
     }
 
@@ -470,7 +476,7 @@ fn compute_sq_and_exit(
                     count += 1;
                 }
             }
-            println!("\nChi2 vs experimental X-ray S(Q): {:.2} ({} points, per-point: {:.6})", chi2, count, chi2 / count.max(1) as f64);
+            log_println!("\nChi2 vs experimental X-ray S(Q): {:.2} ({} points, per-point: {:.6})", chi2, count, chi2 / count.max(1) as f64);
         }
     }
 }
@@ -483,18 +489,18 @@ fn run_analysis(
 ) {
     let pair_cutoffs = cfg.analysis_pairs();
     if pair_cutoffs.is_empty() {
-        eprintln!("No pair cutoffs found for analysis. Add [analysis.cutoffs] or [[constraints.coordination]] to config.");
+        log_eprintln!("No pair cutoffs found for analysis. Add [analysis.cutoffs] or [[constraints.coordination]] to config.");
         process::exit(1);
     }
 
     let pairs = analyze::build_analysis_pairs(&pair_cutoffs);
-    println!("\n--- {} structure ---", label);
-    println!("Analysis pairs:");
+    log_println!("\n--- {} structure ---", label);
+    log_println!("Analysis pairs:");
     for p in &pairs {
-        println!("  {}-{}: cutoff = {:.2} A", p.species_a, p.species_b, p.cutoff);
+        log_println!("  {}-{}: cutoff = {:.2} A", p.species_a, p.species_b, p.cutoff);
     }
 
-    println!("\nComputing coordination numbers...");
+    log_println!("\nComputing coordination numbers...");
     let cn_results = analyze::compute_coordination_numbers(config, &pairs);
 
     let nbins = cfg
@@ -507,7 +513,7 @@ fn run_analysis(
         .as_ref()
         .and_then(|a| a.angle_triplets.clone());
 
-    println!("Computing bond angle distributions ({} bins)...", nbins);
+    log_println!("Computing bond angle distributions ({} bins)...", nbins);
     let angle_results = analyze::compute_bond_angles(
         config,
         &pairs,
@@ -519,16 +525,16 @@ fn run_analysis(
 
     let cn_path = config_dir.join(format!("analysis_{}_cn.dat", label));
     analyze::write_cn_histograms(&cn_path, &cn_results).unwrap_or_else(|e| {
-        eprintln!("Error writing CN histograms: {}", e);
+        log_eprintln!("Error writing CN histograms: {}", e);
     });
-    println!("\nWrote CN histograms to {:?}", cn_path);
+    log_println!("\nWrote CN histograms to {:?}", cn_path);
 
     if !angle_results.is_empty() {
         let angle_path = config_dir.join(format!("analysis_{}_angles.dat", label));
         analyze::write_angle_histograms(&angle_path, &angle_results).unwrap_or_else(|e| {
-            eprintln!("Error writing angle histograms: {}", e);
+            log_eprintln!("Error writing angle histograms: {}", e);
         });
-        println!("Wrote angle histograms to {:?}", angle_path);
+        log_println!("Wrote angle histograms to {:?}", angle_path);
     }
 }
 
