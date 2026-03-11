@@ -1,0 +1,692 @@
+use std::f64::consts::PI;
+
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
+
+use crate::atoms::Configuration;
+use crate::constraints::{check_coordination, check_min_distances, Constraints};
+use crate::rdf::compute_histograms;
+use crate::xray::form_factor;
+
+/// Serialisable RMC state (for checkpointing).
+#[derive(Debug, Clone)]
+pub struct RmcState {
+    pub move_count: u64,
+    pub accepted: u64,
+    pub chi2: f64,
+    pub max_step: f64,
+    pub seed: u64,
+}
+
+/// Experimental dataset to fit against.
+pub struct ExperimentalData {
+    pub q: Vec<f64>,
+    pub sq: Vec<f64>,
+    pub sigma: Vec<f64>,
+    pub weight: f64,
+    pub kind: DataKind,
+    pub fit_min: f64,
+    pub fit_max: f64,
+}
+
+pub enum DataKind {
+    Xray,
+    Neutron,
+}
+
+/// Experimental g(r) dataset to fit against (real-space target).
+pub struct ExperimentalGrData {
+    pub r: Vec<f64>,
+    pub gr: Vec<f64>,
+    pub sigma: Vec<f64>,
+    pub weight: f64,
+    pub fit_min: f64,
+    pub fit_max: f64,
+    /// Q_max used when deriving the experimental g(r) from S(Q).
+    pub qmax: f64,
+    /// Apply Lorch modification W(Q) = sin(πQ/Qmax)/(πQ/Qmax) in inverse FT.
+    pub lorch: bool,
+}
+
+/// RMC refinement parameters.
+pub struct RmcParams {
+    pub max_moves: u64,
+    pub max_step: f64,
+    pub checkpoint_every: u64,
+    pub seed: u64,
+    pub rdf_cutoff: f64,
+    pub rdf_nbins: usize,
+    pub q_grid: Vec<f64>,
+    pub lorch: bool,
+    pub print_every: u64,
+    pub target_acceptance: f64,
+    pub adjust_step_every: u64,
+    pub anneal_start: f64,
+    pub anneal_end: f64,
+    pub anneal_steps: u64,
+    pub convergence_threshold: f64,
+    pub convergence_window: u64,
+}
+
+impl Default for RmcParams {
+    fn default() -> Self {
+        let nq = 500;
+        let qmax = 20.0;
+        let dq = qmax / nq as f64;
+        RmcParams {
+            max_moves: 1_000_000,
+            max_step: 0.1,
+            checkpoint_every: 50_000,
+            seed: 42,
+            rdf_cutoff: 10.0,
+            rdf_nbins: 500,
+            q_grid: (0..nq).map(|i| 0.3 + i as f64 * dq).collect(),
+            lorch: true,
+            print_every: 1000,
+            target_acceptance: 0.3,
+            adjust_step_every: 5000,
+            anneal_start: 1.0,
+            anneal_end: 1.0,
+            anneal_steps: 0, // 0 = use max_moves
+            convergence_threshold: 0.0,
+            convergence_window: 50_000,
+        }
+    }
+}
+
+pub type StatusCallback = Box<dyn Fn(u64, u64, f64, f64, f64)>;
+
+/// Single-threaded atom histogram for the per-move hot path.
+/// Returns flat vec [n_pairs * nbins] of bin counts.
+fn atom_histogram_st(
+    config: &Configuration,
+    atom_idx: usize,
+    pos: &[f64; 3],
+    nbins: usize,
+    cutoff: f64,
+    inv_dr: f64,
+    n_pairs: usize,
+    n_species: usize,
+) -> Vec<f64> {
+    let ti = config.atoms[atom_idx].type_id;
+    let cutoff2 = cutoff * cutoff;
+    let box_lengths = &config.box_lengths;
+    let mut hist = vec![0.0f64; n_pairs * nbins];
+
+    for (j, atom_j) in config.atoms.iter().enumerate() {
+        if j == atom_idx { continue; }
+
+        let mut r2 = 0.0f64;
+        for d in 0..3 {
+            let mut delta = atom_j.position[d] - pos[d];
+            let l = box_lengths[d];
+            delta -= l * (delta / l).round();
+            r2 += delta * delta;
+        }
+
+        if r2 < cutoff2 {
+            let r = r2.sqrt();
+            let bin = (r * inv_dr) as usize;
+            if bin < nbins {
+                let tj = atom_j.type_id;
+                let (a, b) = if ti <= tj { (ti, tj) } else { (tj, ti) };
+                let pair_idx = a * n_species - a * (a + 1) / 2 + b;
+                hist[pair_idx * nbins + bin] += 1.0;
+            }
+        }
+    }
+
+    hist
+}
+
+/// Run the RMC refinement loop with incremental S(Q) updates.
+pub fn run_rmc(
+    config: &mut Configuration,
+    experiments: &[ExperimentalData],
+    gr_data: &[ExperimentalGrData],
+    constraints: &Constraints,
+    params: &RmcParams,
+    checkpoint_fn: Option<Box<dyn Fn(&RmcState, &Configuration)>>,
+) -> RmcState {
+    let mut rng = StdRng::seed_from_u64(params.seed);
+    let n_atoms = config.atoms.len();
+    let nbins = params.rdf_nbins;
+    let nq = params.q_grid.len();
+    let dr = params.rdf_cutoff / nbins as f64;
+    let inv_dr = 1.0 / dr;
+    let rho0 = config.number_density();
+    let n_types = config.species.len();
+    let n_pairs = config.num_type_pairs();
+    let volume = config.volume();
+
+    // Precompute tables
+    println!("Precomputing lookup tables...");
+    let r_grid: Vec<f64> = (0..nbins).map(|i| (i as f64 + 0.5) * dr).collect();
+    let r_max = r_grid[nbins - 1];
+
+    // sin(Q_k * r_i), row-major [nbins][nq]
+    let mut sin_table = vec![0.0f64; nbins * nq];
+    for i in 0..nbins {
+        let row = i * nq;
+        for k in 0..nq {
+            sin_table[row + k] = (params.q_grid[k] * r_grid[i]).sin();
+        }
+    }
+
+    // Lorch window
+    let lorch_w: Vec<f64> = (0..nbins).map(|i| {
+        let r = r_grid[i];
+        if params.lorch && r > 0.0 {
+            let arg = PI * r / r_max;
+            arg.sin() / arg
+        } else {
+            1.0
+        }
+    }).collect();
+
+    // r * W(r) with endpoint weight (midpoint rule, all weight 1)
+    let rw: Vec<f64> = (0..nbins).map(|i| r_grid[i] * lorch_w[i]).collect();
+
+    // Normalisation denominators per pair per bin
+    // For unlike (a!=b): norm = N_a * rho_b * 4πr²dr (hist counted once per pair in i<j loop)
+    //   g = hist / norm
+    // For like (a==b): norm = N_a * rho_a * 4πr²dr / 2
+    //   g = 2 * hist / (N_a * rho_a * 4πr²dr) = hist / (norm/2)... let's just store 1/norm.
+    let mut inv_norm: Vec<f64> = vec![0.0; n_pairs * nbins]; // 1/norm so g = inv_norm * hist * like_factor
+    let mut like_factor: Vec<f64> = vec![1.0; n_pairs]; // 2 for like pairs, 1 for unlike
+    for a in 0..n_types {
+        for b in a..n_types {
+            let pair_idx = config.pair_index(a, b);
+            let n_a = config.count_type(a) as f64;
+            let rho_b = config.count_type(b) as f64 / volume;
+            if a == b { like_factor[pair_idx] = 2.0; }
+            let base = pair_idx * nbins;
+            for i in 0..nbins {
+                let r = r_grid[i];
+                let shell = n_a * rho_b * 4.0 * PI * r * r * dr;
+                if shell > 0.0 {
+                    inv_norm[base + i] = 1.0 / shell;
+                }
+            }
+        }
+    }
+
+    // X-ray weights: w_ab(Q_k)
+    let conc: Vec<f64> = (0..n_types).map(|t| config.concentration(t)).collect();
+    let form_factors: Vec<Vec<f64>> = config.species.iter()
+        .map(|s| form_factor(s, &params.q_grid))
+        .collect();
+
+    let mut xray_w = vec![0.0f64; n_pairs * nq];
+    for k in 0..nq {
+        let f_avg: f64 = (0..n_types).map(|a| conc[a] * form_factors[a][k]).sum();
+        let f_avg_sq = f_avg * f_avg;
+        if f_avg_sq < 1e-30 { continue; }
+        for a in 0..n_types {
+            for b in a..n_types {
+                let pair_idx = config.pair_index(a, b);
+                let dab = if a == b { 1.0 } else { 2.0 };
+                xray_w[pair_idx * nq + k] = dab * conc[a] * conc[b]
+                    * form_factors[a][k] * form_factors[b][k] / f_avg_sq;
+            }
+        }
+    }
+
+    // Precompute experimental interpolation indices
+    let mut exp_interp: Vec<Vec<(usize, f64, usize)>> = Vec::new(); // (lo, t, exp_idx)
+    for exp in experiments.iter() {
+        let mut interp = Vec::new();
+        for (i, &qe) in exp.q.iter().enumerate() {
+            if qe < params.q_grid[0] || qe > params.q_grid[nq - 1] {
+                continue;
+            }
+            if qe < exp.fit_min || qe > exp.fit_max {
+                continue;
+            }
+            let mut lo = 0;
+            let mut hi = nq - 1;
+            while hi - lo > 1 {
+                let mid = (lo + hi) / 2;
+                if params.q_grid[mid] <= qe { lo = mid; } else { hi = mid; }
+            }
+            let t = (qe - params.q_grid[lo]) / (params.q_grid[hi] - params.q_grid[lo]);
+            interp.push((lo, t, i));
+        }
+        exp_interp.push(interp);
+    }
+
+    // --- Compute initial state ---
+    println!("Computing initial RDF histograms...");
+    let hist_map = compute_histograms(config, nbins, params.rdf_cutoff);
+    let mut flat_hist = vec![0.0f64; n_pairs * nbins];
+    for (&p, bins) in &hist_map {
+        let start = p * nbins;
+        flat_hist[start..start + nbins].copy_from_slice(bins);
+    }
+
+    // Compute initial partial S(Q) from histograms
+    // S_ab(Q_k) = 1 + (4πρ₀*dr/Q_k) * Σ_i rw_i * [g_ab(r_i) - 1] * sin(Q_k*r_i)
+    let prefactor_sq = 4.0 * PI * rho0 * dr;
+    let inv_q: Vec<f64> = params.q_grid.iter().map(|&q| {
+        if q > 0.05 { 1.0 / q } else { 0.0 }
+    }).collect();
+
+    let mut partial_sq = vec![0.0f64; n_pairs * nq]; // stores S_ab(Q) - 1 (the integral part)
+
+    for p in 0..n_pairs {
+        let hist_base = p * nbins;
+        let norm_base = p * nbins;
+        let sq_base = p * nq;
+        let lf = like_factor[p];
+
+        for i in 0..nbins {
+            let g = lf * flat_hist[hist_base + i] * inv_norm[norm_base + i];
+            let contrib = rw[i] * (g - 1.0); // r * W * (g - 1)
+            if contrib.abs() < 1e-30 { continue; }
+            let sin_row = i * nq;
+            for k in 0..nq {
+                partial_sq[sq_base + k] += contrib * sin_table[sin_row + k];
+            }
+        }
+
+        // Apply prefactor and add 1
+        for k in 0..nq {
+            partial_sq[sq_base + k] = 1.0 + prefactor_sq * partial_sq[sq_base + k] * inv_q[k];
+        }
+    }
+
+    // Compute initial total X-ray S(Q) and chi2
+    let mut total_sq = vec![0.0f64; nq];
+    for k in 0..nq {
+        let mut s = 0.0;
+        for p in 0..n_pairs {
+            s += xray_w[p * nq + k] * partial_sq[p * nq + k];
+        }
+        total_sq[k] = s;
+    }
+
+    let mut sq_chi2_current = 0.0;
+    for (ei, exp) in experiments.iter().enumerate() {
+        let mut chi2 = 0.0;
+        for &(lo, t, i) in &exp_interp[ei] {
+            let sq_calc = total_sq[lo] + t * (total_sq[lo + 1] - total_sq[lo]);
+            let diff = sq_calc - exp.sq[i];
+            chi2 += (diff * diff) / (exp.sigma[i] * exp.sigma[i]);
+        }
+        sq_chi2_current += exp.weight * chi2;
+    }
+
+    // --- g(r) precomputation via inverse Fourier transform of total S_X(Q) ---
+    let has_gr = !gr_data.is_empty();
+    let dq = if nq > 1 { params.q_grid[1] - params.q_grid[0] } else { 1.0 };
+
+    // For each g(r) dataset: build FT matrix M[n_r × nq], compute initial g(r)
+    let mut gr_ft_matrices: Vec<Vec<f64>> = Vec::new();
+    let mut gr_cached: Vec<Vec<f64>> = Vec::new();
+    let mut gr_scratch: Vec<Vec<f64>> = Vec::new();
+
+    for gd in gr_data.iter() {
+        let n_r = gd.r.len();
+        // M[i][k] = dq * Q_k * [W(Q_k)] * sin(Q_k * r_i) / (2π²ρ₀ * r_i)
+        // Only include Q_k <= qmax; optionally apply Lorch W(Q) = sin(πQ/Qmax)/(πQ/Qmax)
+        let qmax_gr = gd.qmax;
+        let use_lorch = gd.lorch;
+        let mut matrix = vec![0.0f64; n_r * nq];
+        for i in 0..n_r {
+            let ri = gd.r[i];
+            if ri < 1e-10 { continue; }
+            let row = i * nq;
+            let prefactor = dq / (2.0 * PI * PI * rho0 * ri);
+            for k in 0..nq {
+                let qk = params.q_grid[k];
+                if qk > qmax_gr { break; }
+                let window = if use_lorch {
+                    let arg = PI * qk / qmax_gr;
+                    if arg > 1e-10 { arg.sin() / arg } else { 1.0 }
+                } else {
+                    1.0
+                };
+                matrix[row + k] = prefactor * qk * window * (qk * ri).sin();
+            }
+        }
+        gr_ft_matrices.push(matrix);
+        gr_cached.push(vec![0.0; n_r]);
+        gr_scratch.push(vec![0.0; n_r]);
+    }
+
+    // Precompute g(r) fitting indices (only points within fit_min..fit_max)
+    let mut gr_fit_indices: Vec<Vec<usize>> = Vec::new();
+    for gd in gr_data.iter() {
+        let indices: Vec<usize> = (0..gd.r.len())
+            .filter(|&i| gd.r[i] >= gd.fit_min && gd.r[i] <= gd.fit_max)
+            .collect();
+        gr_fit_indices.push(indices);
+    }
+
+    if has_gr {
+        for (di, gd) in gr_data.iter().enumerate() {
+            println!(
+                "g(r) dataset {}: {} total points, {} in fit range [{:.2}, {:.2}] A",
+                di, gd.r.len(), gr_fit_indices[di].len(), gd.fit_min, gd.fit_max
+            );
+        }
+    }
+
+    // Compute initial model g(r) from initial total_sq
+    let mut gr_chi2_current = 0.0;
+    for (di, gd) in gr_data.iter().enumerate() {
+        let n_r = gd.r.len();
+        let matrix = &gr_ft_matrices[di];
+        for i in 0..n_r {
+            let row = i * nq;
+            let mut val = 1.0;
+            for k in 0..nq {
+                val += matrix[row + k] * (total_sq[k] - 1.0);
+            }
+            gr_cached[di][i] = val;
+        }
+        let mut chi2 = 0.0;
+        for &i in &gr_fit_indices[di] {
+            let diff = gr_cached[di][i] - gd.gr[i];
+            chi2 += (diff * diff) / (gd.sigma[i] * gd.sigma[i]);
+        }
+        gr_chi2_current += gd.weight * chi2;
+    }
+
+    let mut current_chi2 = sq_chi2_current + gr_chi2_current;
+
+    if has_gr {
+        println!("Initial chi2 = {:.6} (sq: {:.6}, gr: {:.6})", current_chi2, sq_chi2_current, gr_chi2_current);
+    } else {
+        println!("Initial chi2 = {:.6}", current_chi2);
+    }
+
+    let mut state = RmcState {
+        move_count: 0,
+        accepted: 0,
+        chi2: current_chi2,
+        max_step: params.max_step,
+        seed: params.seed,
+    };
+
+    let mut recent_accepted = 0u64;
+    let mut recent_total = 0u64;
+
+    // Scratch buffers for incremental updates
+    let mut delta_partial_sq = vec![0.0f64; n_pairs * nq];
+    let mut new_total_sq = vec![0.0f64; nq];
+
+    // Annealing setup
+    let annealing = (params.anneal_start - params.anneal_end).abs() > 1e-10;
+    let anneal_n = if params.anneal_steps > 0 { params.anneal_steps } else { params.max_moves };
+    if annealing {
+        println!("Simulated annealing: T = {:.2} -> {:.2} over {} moves ({:.0}% of run)",
+            params.anneal_start, params.anneal_end, anneal_n,
+            100.0 * anneal_n as f64 / params.max_moves as f64);
+    }
+
+    // Best-structure tracking: save atom positions at lowest chi2
+    let mut best_chi2 = current_chi2;
+    let mut best_positions: Vec<[f64; 3]> = config.atoms.iter().map(|a| a.position).collect();
+    let mut best_move = 0u64;
+
+    // Convergence detection
+    let conv_active = params.convergence_threshold > 0.0;
+    let mut conv_chi2 = current_chi2;
+    let mut conv_next_check = params.convergence_window;
+
+    // === Main RMC loop ===
+    for move_num in 0..params.max_moves {
+        let atom_idx = rng.gen_range(0..n_atoms);
+
+        let dx: f64 = rng.gen_range(-state.max_step..state.max_step);
+        let dy: f64 = rng.gen_range(-state.max_step..state.max_step);
+        let dz: f64 = rng.gen_range(-state.max_step..state.max_step);
+
+        let old_pos = config.atoms[atom_idx].position;
+        let mut new_pos = [old_pos[0] + dx, old_pos[1] + dy, old_pos[2] + dz];
+        for d in 0..3 {
+            let l = config.box_lengths[d];
+            new_pos[d] -= l * (new_pos[d] / l).floor();
+        }
+
+        // Check constraints
+        if !check_min_distances(config, atom_idx, &new_pos, constraints) {
+            recent_total += 1;
+            state.move_count += 1;
+            continue;
+        }
+        if !constraints.coordination.is_empty()
+            && !check_coordination(config, atom_idx, &new_pos, constraints)
+        {
+            recent_total += 1;
+            state.move_count += 1;
+            continue;
+        }
+
+        // --- Incremental histogram + S(Q) update ---
+        // Compute old histogram contributions (single-threaded)
+        let old_hist = atom_histogram_st(
+            config, atom_idx, &old_pos, nbins, params.rdf_cutoff, inv_dr, n_pairs, n_types,
+        );
+
+        // Move atom temporarily
+        config.atoms[atom_idx].position = new_pos;
+
+        // Compute new histogram contributions
+        let new_hist = atom_histogram_st(
+            config, atom_idx, &new_pos, nbins, params.rdf_cutoff, inv_dr, n_pairs, n_types,
+        );
+
+        // Compute ΔS_ab(Q) from histogram delta, accumulate into delta_partial_sq
+        // ΔS_ab(Q_k) = (4πρ₀*dr/Q_k) * Σ_i rw_i * Δg_ab(r_i) * sin(Q_k*r_i)
+        // where Δg = like_factor * Δhist * inv_norm
+        delta_partial_sq.fill(0.0);
+
+        for p in 0..n_pairs {
+            let hist_base = p * nbins;
+            let norm_base = p * nbins;
+            let sq_base = p * nq;
+            let lf = like_factor[p];
+
+            for i in 0..nbins {
+                let dh = new_hist[hist_base + i] - old_hist[hist_base + i];
+                if dh == 0.0 { continue; } // Skip unchanged bins (the key optimisation)
+                let dg = lf * dh * inv_norm[norm_base + i];
+                let contrib = rw[i] * dg;
+                let sin_row = i * nq;
+                for k in 0..nq {
+                    delta_partial_sq[sq_base + k] += contrib * sin_table[sin_row + k];
+                }
+            }
+
+            // Apply prefactor
+            for k in 0..nq {
+                delta_partial_sq[sq_base + k] *= prefactor_sq * inv_q[k];
+            }
+        }
+
+        // Compute new total S_X(Q) = Σ w_ab * (S_ab + ΔS_ab)
+        for k in 0..nq {
+            let mut s = 0.0;
+            for p in 0..n_pairs {
+                let idx = p * nq + k;
+                s += xray_w[idx] * (partial_sq[idx] + delta_partial_sq[idx]);
+            }
+            new_total_sq[k] = s;
+        }
+
+        // Compute new S(Q) chi2
+        let mut new_sq_chi2 = 0.0;
+        for (ei, exp) in experiments.iter().enumerate() {
+            let mut chi2 = 0.0;
+            for &(lo, t, i) in &exp_interp[ei] {
+                let sq_calc = new_total_sq[lo] + t * (new_total_sq[lo + 1] - new_total_sq[lo]);
+                let diff = sq_calc - exp.sq[i];
+                chi2 += (diff * diff) / (exp.sigma[i] * exp.sigma[i]);
+            }
+            new_sq_chi2 += exp.weight * chi2;
+        }
+
+        // Compute new g(r) incrementally and its chi2
+        let mut new_gr_chi2 = 0.0;
+        for (di, gd) in gr_data.iter().enumerate() {
+            let n_r = gd.r.len();
+            let matrix = &gr_ft_matrices[di];
+            for i in 0..n_r {
+                let row = i * nq;
+                let mut delta = 0.0;
+                for k in 0..nq {
+                    delta += matrix[row + k] * (new_total_sq[k] - total_sq[k]);
+                }
+                gr_scratch[di][i] = gr_cached[di][i] + delta;
+            }
+            let mut chi2 = 0.0;
+            for &i in &gr_fit_indices[di] {
+                let diff = gr_scratch[di][i] - gd.gr[i];
+                chi2 += (diff * diff) / (gd.sigma[i] * gd.sigma[i]);
+            }
+            new_gr_chi2 += gd.weight * chi2;
+        }
+
+        let new_chi2 = new_sq_chi2 + new_gr_chi2;
+
+        // Metropolis acceptance (with optional annealing temperature)
+        // Exponential schedule: T(n) = T_start * (T_end/T_start)^(n/anneal_n)
+        // After anneal_n moves, T stays at anneal_end
+        let temperature = if annealing {
+            let frac = (move_num as f64 / anneal_n as f64).min(1.0);
+            params.anneal_start * (params.anneal_end / params.anneal_start).powf(frac)
+        } else {
+            1.0
+        };
+        let accept = if new_chi2 < current_chi2 {
+            true
+        } else {
+            let prob = (-(new_chi2 - current_chi2) / (2.0 * temperature)).exp();
+            rng.gen::<f64>() < prob
+        };
+
+        if accept {
+            current_chi2 = new_chi2;
+            sq_chi2_current = new_sq_chi2;
+            gr_chi2_current = new_gr_chi2;
+            // Commit: update histograms, partial S(Q), total S(Q)
+            for i in 0..n_pairs * nbins {
+                flat_hist[i] += new_hist[i] - old_hist[i];
+            }
+            for i in 0..n_pairs * nq {
+                partial_sq[i] += delta_partial_sq[i];
+            }
+            total_sq.copy_from_slice(&new_total_sq);
+            // Commit g(r) updates
+            for (di, _) in gr_data.iter().enumerate() {
+                std::mem::swap(&mut gr_cached[di], &mut gr_scratch[di]);
+            }
+            state.accepted += 1;
+            recent_accepted += 1;
+
+            // Track best structure
+            if new_chi2 < best_chi2 {
+                best_chi2 = new_chi2;
+                best_move = move_num + 1;
+                for (i, atom) in config.atoms.iter().enumerate() {
+                    best_positions[i] = atom.position;
+                }
+            }
+        } else {
+            // Revert atom position
+            config.atoms[atom_idx].position = old_pos;
+        }
+
+        state.move_count = move_num + 1;
+        state.chi2 = current_chi2;
+        recent_total += 1;
+
+        // Print status
+        if state.move_count % params.print_every == 0 {
+            let ratio = if recent_total > 0 {
+                recent_accepted as f64 / recent_total as f64
+            } else { 0.0 };
+            let overall_ratio = state.accepted as f64 / state.move_count as f64;
+            let chi2_str = if has_gr {
+                format!("chi2 = {:.6} (sq: {:.6}, gr: {:.6})", current_chi2, sq_chi2_current, gr_chi2_current)
+            } else {
+                format!("chi2 = {:.6}", current_chi2)
+            };
+            let temp_str = if annealing {
+                format!(", T = {:.3}", temperature)
+            } else {
+                String::new()
+            };
+            println!(
+                "Move {}/{}: {}, accept = {:.3} (recent {:.3}), step = {:.4} A{}",
+                state.move_count, params.max_moves, chi2_str,
+                overall_ratio, ratio, state.max_step, temp_str
+            );
+        }
+
+        // Adaptive step size
+        if state.move_count % params.adjust_step_every == 0 && recent_total > 0 {
+            if annealing && move_num < anneal_n {
+                // During annealing: scale step with T, but never above initial max_step
+                state.max_step = params.max_step * temperature.clamp(params.anneal_end, 1.0);
+            } else {
+                // After annealing (or no annealing): adapt based on acceptance rate
+                let ratio = recent_accepted as f64 / recent_total as f64;
+                if ratio > params.target_acceptance + 0.05 {
+                    state.max_step *= 1.05;
+                } else if ratio < params.target_acceptance - 0.05 {
+                    state.max_step *= 0.95;
+                }
+            }
+            state.max_step = state.max_step.clamp(0.001, 2.0);
+            recent_accepted = 0;
+            recent_total = 0;
+        }
+
+        // Checkpoint
+        if state.move_count % params.checkpoint_every == 0 {
+            if let Some(ref f) = checkpoint_fn {
+                f(&state, config);
+            }
+
+        }
+
+        // Convergence check (skip while annealing is still active)
+        if conv_active && state.move_count >= conv_next_check && temperature <= params.anneal_end * 1.01 {
+            let improvement = conv_chi2 - current_chi2;
+            if improvement < params.convergence_threshold {
+                println!(
+                    "\nConverged at move {}: chi2 improved by {:.6} over last {} moves (threshold: {:.6})",
+                    state.move_count, improvement, params.convergence_window, params.convergence_threshold
+                );
+                break;
+            }
+            conv_chi2 = current_chi2;
+            conv_next_check += params.convergence_window;
+        } else if conv_active && state.move_count >= conv_next_check && temperature > params.anneal_end * 1.01 {
+            // Reset baseline during annealing so first post-anneal check has a fresh reference
+            conv_chi2 = current_chi2;
+            conv_next_check += params.convergence_window;
+        }
+    }
+
+    // Restore best structure
+    if best_chi2 < state.chi2 {
+        println!("\nRestoring best structure from move {} (chi2 = {:.6})", best_move, best_chi2);
+        for (i, atom) in config.atoms.iter_mut().enumerate() {
+            atom.position = best_positions[i];
+        }
+        state.chi2 = best_chi2;
+    }
+
+    println!("\nRMC refinement complete.");
+    println!(
+        "Final chi2 = {:.6} (best at move {}), accepted {}/{} ({:.1}%)",
+        state.chi2, best_move, state.accepted, state.move_count,
+        100.0 * state.accepted as f64 / state.move_count.max(1) as f64
+    );
+
+    state
+}

@@ -1,0 +1,11 @@
+/target
+
+# RMC output files
+checkpoint.dat
+refined.xyz
+refined_sq.dat
+refined_total_gr.dat
+computed_sq.dat
+computed_gr.dat
+computed_total_gr.dat
+results_comparison.png

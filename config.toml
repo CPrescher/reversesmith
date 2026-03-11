@@ -1,0 +1,55 @@
+[system]
+structure = "../run03/CaSiO3_glass.data"
+format = "lammps"
+
+[system.types]
+1 = "Ca"
+2 = "Si"
+3 = "O"
+
+[data]
+[data.xray_sq]
+file = "../CaSiO3_ambient_sample.sq"
+weight = 1.0
+sigma = 0.02
+fit_min = 0.5
+
+[data.xray_gr]
+file = "../CaSiO3_ambient_sample.gr"
+weight = 0.3
+sigma = 0.02
+fit_max = 7
+
+[rmc]
+max_moves = 1_000_000
+max_step = 0.1
+checkpoint_every = 50_000
+seed = 420
+print_every = 1000
+anneal_start = 2.0
+anneal_end = 0.1
+anneal_steps = 10_000
+convergence_threshold = 1e-4
+convergence_window = 50_000
+
+[sq]
+qmin = 0
+qmax = 20.0
+nq = 500
+lorch = true
+rdf_cutoff = 11.0
+rdf_nbins = 550
+
+[constraints.min_distance]
+"Ca-O" = 1.8
+"Si-O" = 1.2
+"O-O" = 2.0
+"Ca-Si" = 2.2
+"Ca-Ca" = 2.3
+"Si-Si" = 2.3
+
+[[constraints.coordination]]
+pair = "Si-O"
+min = 3
+max = 6
+cutoff = 2.2
