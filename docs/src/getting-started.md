@@ -34,6 +34,12 @@ reversesmith config.toml --quiet
 
 # Override the RNG seed
 reversesmith config.toml --seed 123
+
+# Resume an interrupted run from checkpoint
+reversesmith config.toml --resume
+
+# Resume with a different output directory
+reversesmith config.toml --resume --output-dir run01
 ```
 
 ### Parallel ensemble runs

@@ -21,6 +21,7 @@ fn main() {
         eprintln!("  --output-dir DIR            Write output to DIR instead of config directory");
         eprintln!("  --seed N                    Override RNG seed (default: random)");
         eprintln!("  --quiet                     Suppress terminal output (log file only)");
+        eprintln!("  --resume                    Resume RMC from checkpoint.dat");
         process::exit(1);
     }
 
@@ -28,6 +29,7 @@ fn main() {
     let compute_sq_only = args.iter().any(|a| a == "--compute-sq-only");
     let analyze_mode = args.iter().any(|a| a == "--analyze");
     let quiet_mode = args.iter().any(|a| a == "--quiet");
+    let resume_mode = args.iter().any(|a| a == "--resume");
 
     // --seed N
     let cli_seed: Option<u64> = args
@@ -165,6 +167,34 @@ fn main() {
         params.seed = seed;
         log_println!("  RNG seed (random): {}", seed);
     }
+
+    // --- Resume from checkpoint ---
+    let resume_state: Option<rmc::RmcState> = if resume_mode {
+        let checkpoint_path = output_dir.join("checkpoint.dat");
+        if !checkpoint_path.exists() {
+            log_eprintln!("Error: --resume specified but {:?} not found", checkpoint_path);
+            process::exit(1);
+        }
+        log_println!("\nResuming from checkpoint {:?}", checkpoint_path);
+        let (rs, ckpt_config) = io::read_checkpoint(&checkpoint_path, &config.species)
+            .unwrap_or_else(|e| {
+                log_eprintln!("Error reading checkpoint: {}", e);
+                process::exit(1);
+            });
+        log_println!(
+            "  Checkpoint: move {}/{}, accepted {}, chi2 = {:.6}, max_step = {:.4}",
+            rs.move_count, params.max_moves, rs.accepted, rs.chi2, rs.max_step
+        );
+        if rs.move_count >= params.max_moves {
+            log_eprintln!("Checkpoint move_count ({}) >= max_moves ({}), nothing to do.",
+                rs.move_count, params.max_moves);
+            process::exit(0);
+        }
+        config = ckpt_config;
+        Some(rs)
+    } else {
+        None
+    };
 
     let rho0 = config.number_density();
 
@@ -335,8 +365,8 @@ fn main() {
         None
     };
 
-    // --- Save starting structure S(Q) and g(r) ---
-    {
+    // --- Save starting structure S(Q) and g(r) (skip on resume) ---
+    if resume_state.is_none() {
         log_println!("\nComputing starting structure S(Q) and g(r)...");
         let rdf_dr = params.rdf_cutoff / params.rdf_nbins as f64;
         let histograms = rdf::compute_histograms(&config, params.rdf_nbins, params.rdf_cutoff);
@@ -440,6 +470,7 @@ fn main() {
         &params,
         potential_set.as_ref(),
         checkpoint_fn,
+        resume_state,
     );
 
     // --- Save results ---

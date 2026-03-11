@@ -24,7 +24,7 @@ convergence_window = 50_000   # ...over this many moves (0 = disabled)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `max_moves` | Integer | 1,000,000 | Total MC moves to attempt |
+| `max_moves` | Integer | 1,000,000 | Total MC moves to attempt (not additional moves on `--resume`) |
 | `max_step` | Float | 0.1 | Initial maximum displacement per dimension (A) |
 | `checkpoint_every` | Integer | 50,000 | Checkpoint interval (moves) |
 | `seed` | Integer | random | RNG seed for reproducibility. When omitted, a random seed is generated from system entropy and logged. Can also be overridden via `--seed N` on the command line. |

@@ -299,8 +299,15 @@ pub fn run_rmc(
     params: &RmcParams,
     potential: Option<&PotentialSet>,
     checkpoint_fn: Option<Box<dyn Fn(&RmcState, &Configuration)>>,
+    resume_state: Option<RmcState>,
 ) -> RmcState {
-    let mut rng = StdRng::seed_from_u64(params.seed);
+    // On resume, re-seed with seed + move_count (deterministic but different trajectory)
+    let rng_seed = if let Some(ref rs) = resume_state {
+        rs.seed.wrapping_add(rs.move_count)
+    } else {
+        params.seed
+    };
+    let mut rng = StdRng::seed_from_u64(rng_seed);
     let n_atoms = config.atoms.len();
     let nbins = params.rdf_nbins;
     let nq = params.q_grid.len();
@@ -553,12 +560,24 @@ pub fn run_rmc(
         log_println!("Initial chi2 = {:.6}", current_chi2);
     }
 
-    let mut state = RmcState {
-        move_count: 0,
-        accepted: 0,
-        chi2: current_chi2,
-        max_step: params.max_step,
-        seed: params.seed,
+    let mut state = if let Some(rs) = resume_state {
+        log_println!("Resuming from move {} (accepted {}, max_step {:.4})",
+            rs.move_count, rs.accepted, rs.max_step);
+        RmcState {
+            move_count: rs.move_count,
+            accepted: rs.accepted,
+            chi2: current_chi2,  // always recomputed from checkpoint configuration
+            max_step: rs.max_step,
+            seed: rs.seed,
+        }
+    } else {
+        RmcState {
+            move_count: 0,
+            accepted: 0,
+            chi2: current_chi2,
+            max_step: params.max_step,
+            seed: params.seed,
+        }
     };
 
     let mut recent_accepted = 0u64;
@@ -612,10 +631,10 @@ pub fn run_rmc(
     let mut best_positions: Vec<[f64; 3]> = config.atoms.iter().map(|a| a.position).collect();
     let mut best_move = 0u64;
 
-    // Convergence detection
+    // Convergence detection (offset by resume start)
     let conv_active = params.convergence_threshold > 0.0;
     let mut conv_chi2 = current_chi2;
-    let mut conv_next_check = params.convergence_window;
+    let mut conv_next_check = state.move_count + params.convergence_window;
 
     // Calibration: accumulate |delta_chi2| and |delta_E| to suggest weight
     let calibration_moves: u64 = if potential.is_some() { 1000 } else { 0 };
@@ -624,7 +643,8 @@ pub fn run_rmc(
     let mut calib_count = 0u64;
 
     // === Main RMC loop ===
-    for move_num in 0..params.max_moves {
+    let start_move = state.move_count;
+    for move_num in start_move..params.max_moves {
         let atom_idx = rng.gen_range(0..n_atoms);
 
         let dx: f64 = rng.gen_range(-state.max_step..state.max_step);
