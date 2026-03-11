@@ -1,5 +1,5 @@
 [system]
-structure = "../run03/CaSiO3_glass.data"
+structure = "../run04/CaSiO3_glass.data"
 format = "lammps"
 
 [system.types]
@@ -12,7 +12,7 @@ format = "lammps"
 file = "../CaSiO3_ambient_sample.sq"
 weight = 1.0
 sigma = 0.02
-fit_min = 0.5
+fit_min = 1.2 
 
 [data.xray_gr]
 file = "../CaSiO3_ambient_sample.gr"
@@ -37,8 +37,8 @@ qmin = 0
 qmax = 20.0
 nq = 500
 lorch = true
-rdf_cutoff = 11.0
-rdf_nbins = 550
+rdf_cutoff = 25.0
+rdf_nbins = 2500
 
 [constraints.min_distance]
 "Ca-O" = 1.8
@@ -53,6 +53,37 @@ pair = "Si-O"
 min = 3
 max = 6
 cutoff = 2.2
+
+[potential]
+weight = 2
+cutoff = 10.0
+
+# Pedone 2006 short-range: V(r) = D0*[1-exp(-α(r-r0))]² - D0 + C0/r¹²
+[[potential.pedone]]
+pair = "Ca-O"
+D0 = 0.030211
+alpha = 2.241334
+r0 = 2.923245
+C0 = 5.0
+
+[[potential.pedone]]
+pair = "Si-O"
+D0 = 0.340554
+alpha = 2.006700
+r0 = 2.100000
+C0 = 1.0
+
+[[potential.pedone]]
+pair = "O-O"
+D0 = 0.042395
+alpha = 1.379316
+r0 = 3.618701
+C0 = 22.0
+
+# Coulomb DSF (matching LAMMPS coul/dsf 0.25 15.0)
+[potential.coulomb]
+alpha = 0.25
+charges = { Ca = 1.2, Si = 2.4, O = -1.2 }
 
 [analysis.cutoffs]
 "Si-O" = 2.2
