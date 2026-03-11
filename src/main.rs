@@ -1,3 +1,6 @@
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::type_complexity)]
+
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -9,7 +12,7 @@ use rsmith::rdf;
 use rsmith::rmc::{self, DataKind, ExperimentalData, ExperimentalGrData, RmcParams};
 use rsmith::sq;
 use rsmith::xray;
-use rsmith::{log_println, log_eprintln};
+use rsmith::{log_eprintln, log_println};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -62,7 +65,11 @@ fn main() {
     // Output directory: --output-dir overrides config_dir
     let output_dir = cli_output_dir.unwrap_or_else(|| config_dir.clone());
     std::fs::create_dir_all(&output_dir).unwrap_or_else(|e| {
-        eprintln!("Error creating output directory {}: {}", output_dir.display(), e);
+        eprintln!(
+            "Error creating output directory {}: {}",
+            output_dir.display(),
+            e
+        );
         process::exit(1);
     });
 
@@ -120,7 +127,9 @@ fn main() {
     );
     log_println!(
         "  Box: {:.4} x {:.4} x {:.4} A",
-        config.box_lengths[0], config.box_lengths[1], config.box_lengths[2]
+        config.box_lengths[0],
+        config.box_lengths[1],
+        config.box_lengths[2]
     );
     log_println!(
         "  Volume = {:.1} A^3, rho0 = {:.6} atoms/A^3",
@@ -146,11 +155,15 @@ fn main() {
         }
         log_println!(
             "  New box: {:.4} x {:.4} x {:.4} A",
-            config.box_lengths[0], config.box_lengths[1], config.box_lengths[2]
+            config.box_lengths[0],
+            config.box_lengths[1],
+            config.box_lengths[2]
         );
         log_println!(
             "  New volume = {:.1} A^3, rho0 = {:.6} atoms/A^3, density = {:.4} g/cm^3",
-            config.volume(), config.number_density(), config.mass_density()
+            config.volume(),
+            config.number_density(),
+            config.mass_density()
         );
     }
 
@@ -172,7 +185,10 @@ fn main() {
     let resume_state: Option<rmc::RmcState> = if resume_mode {
         let checkpoint_path = output_dir.join("checkpoint.dat");
         if !checkpoint_path.exists() {
-            log_eprintln!("Error: --resume specified but {:?} not found", checkpoint_path);
+            log_eprintln!(
+                "Error: --resume specified but {:?} not found",
+                checkpoint_path
+            );
             process::exit(1);
         }
         log_println!("\nResuming from checkpoint {:?}", checkpoint_path);
@@ -183,11 +199,18 @@ fn main() {
             });
         log_println!(
             "  Checkpoint: move {}/{}, accepted {}, chi2 = {:.6}, max_step = {:.4}",
-            rs.move_count, params.max_moves, rs.accepted, rs.chi2, rs.max_step
+            rs.move_count,
+            params.max_moves,
+            rs.accepted,
+            rs.chi2,
+            rs.max_step
         );
         if rs.move_count >= params.max_moves {
-            log_eprintln!("Checkpoint move_count ({}) >= max_moves ({}), nothing to do.",
-                rs.move_count, params.max_moves);
+            log_eprintln!(
+                "Checkpoint move_count ({}) >= max_moves ({}), nothing to do.",
+                rs.move_count,
+                params.max_moves
+            );
             process::exit(0);
         }
         config = ckpt_config;
@@ -249,8 +272,14 @@ fn main() {
         let weight = xray_cfg.weight.unwrap_or(1.0);
         let fit_min = xray_cfg.fit_min.unwrap_or(0.0);
         let fit_max = xray_cfg.fit_max.unwrap_or(f64::INFINITY);
-        log_println!("  {} Q points, Q range: {:.2} - {:.2}, fit range: [{:.2}, {:.2}]",
-            q.len(), q[0], q[q.len() - 1], fit_min, fit_max);
+        log_println!(
+            "  {} Q points, Q range: {:.2} - {:.2}, fit range: [{:.2}, {:.2}]",
+            q.len(),
+            q[0],
+            q[q.len() - 1],
+            fit_min,
+            fit_max
+        );
         experiments.push(ExperimentalData {
             q,
             sq,
@@ -341,7 +370,10 @@ fn main() {
         for cc in &constraints.coordination {
             log_println!(
                 "  {} [{}, {}] within {:.2} A",
-                cc.pair, cc.min, cc.max, cc.cutoff
+                cc.pair,
+                cc.min,
+                cc.max,
+                cc.cutoff
             );
         }
     }
@@ -350,9 +382,18 @@ fn main() {
     let potential_set = if let Some(ref pot_cfg) = cfg.potential {
         match PotentialSet::from_config(pot_cfg, &config.species, params.rdf_cutoff, &config_dir) {
             Ok(ps) => {
-                log_println!("\nPair potentials (weight = {:.6}, cutoff = {:.1} A):", ps.weight, ps.cutoff);
+                log_println!(
+                    "\nPair potentials (weight = {:.6}, cutoff = {:.1} A):",
+                    ps.weight,
+                    ps.cutoff
+                );
                 for pot in &ps.potentials {
-                    log_println!("  {}: {} bins, dr = {:.4} A", pot.pair_label, pot.n_bins, pot.dr);
+                    log_println!(
+                        "  {}: {} bins, dr = {:.4} A",
+                        pot.pair_label,
+                        pot.n_bins,
+                        pot.dr
+                    );
                 }
                 Some(ps)
             }
@@ -370,8 +411,7 @@ fn main() {
         log_println!("\nComputing starting structure S(Q) and g(r)...");
         let rdf_dr = params.rdf_cutoff / params.rdf_nbins as f64;
         let histograms = rdf::compute_histograms(&config, params.rdf_nbins, params.rdf_cutoff);
-        let partials_gr =
-            rdf::normalise_histograms(&histograms, &config, params.rdf_nbins, rdf_dr);
+        let partials_gr = rdf::normalise_histograms(&histograms, &config, params.rdf_nbins, rdf_dr);
         let r_grid: Vec<f64> = (0..params.rdf_nbins)
             .map(|i| (i as f64 + 0.5) * rdf_dr)
             .collect();
@@ -414,23 +454,38 @@ fn main() {
             let gd0 = &gr_datasets[0];
             let qmax_gr = gd0.qmax;
             let use_lorch = gd0.lorch;
-            let dq = if params.q_grid.len() > 1 { params.q_grid[1] - params.q_grid[0] } else { 1.0 };
-            let total_gr: Vec<f64> = r_grid.iter().map(|&ri| {
-                if ri < 1e-10 { return 1.0; }
-                let pref = dq / (2.0 * std::f64::consts::PI * std::f64::consts::PI * rho0 * ri);
-                let mut val = 1.0;
-                for (k, &qk) in params.q_grid.iter().enumerate() {
-                    if qk > qmax_gr { break; }
-                    let window = if use_lorch {
-                        let arg = std::f64::consts::PI * qk / qmax_gr;
-                        if arg > 1e-10 { arg.sin() / arg } else { 1.0 }
-                    } else {
-                        1.0
-                    };
-                    val += pref * qk * window * (sx[k] - 1.0) * (qk * ri).sin();
-                }
-                val
-            }).collect();
+            let dq = if params.q_grid.len() > 1 {
+                params.q_grid[1] - params.q_grid[0]
+            } else {
+                1.0
+            };
+            let total_gr: Vec<f64> = r_grid
+                .iter()
+                .map(|&ri| {
+                    if ri < 1e-10 {
+                        return 1.0;
+                    }
+                    let pref = dq / (2.0 * std::f64::consts::PI * std::f64::consts::PI * rho0 * ri);
+                    let mut val = 1.0;
+                    for (k, &qk) in params.q_grid.iter().enumerate() {
+                        if qk > qmax_gr {
+                            break;
+                        }
+                        let window = if use_lorch {
+                            let arg = std::f64::consts::PI * qk / qmax_gr;
+                            if arg > 1e-10 {
+                                arg.sin() / arg
+                            } else {
+                                1.0
+                            }
+                        } else {
+                            1.0
+                        };
+                        val += pref * qk * window * (sx[k] - 1.0) * (qk * ri).sin();
+                    }
+                    val
+                })
+                .collect();
             let total_gr_path = output_dir.join("start_total_gr.dat");
             io::write_gr(&total_gr_path, &r_grid, &total_gr).unwrap();
             log_println!("  Saved starting total g(r) to {:?}", total_gr_path);
@@ -441,13 +496,29 @@ fn main() {
     log_println!("\nStarting RMC refinement:");
     log_println!("  max_moves = {}", params.max_moves);
     log_println!("  max_step = {:.4} A", params.max_step);
-    log_println!("  RDF cutoff = {:.1} A, {} bins", params.rdf_cutoff, params.rdf_nbins);
-    log_println!("  Q grid: {} points up to {:.1} 1/A", params.q_grid.len(), params.q_grid.last().unwrap_or(&0.0));
+    log_println!(
+        "  RDF cutoff = {:.1} A, {} bins",
+        params.rdf_cutoff,
+        params.rdf_nbins
+    );
+    log_println!(
+        "  Q grid: {} points up to {:.1} 1/A",
+        params.q_grid.len(),
+        params.q_grid.last().unwrap_or(&0.0)
+    );
     if (params.anneal_start - params.anneal_end).abs() > 1e-10 {
-        log_println!("  Annealing: T = {:.2} -> {:.2}", params.anneal_start, params.anneal_end);
+        log_println!(
+            "  Annealing: T = {:.2} -> {:.2}",
+            params.anneal_start,
+            params.anneal_end
+        );
     }
     if params.convergence_threshold > 0.0 {
-        log_println!("  Convergence: threshold = {:.1e}, window = {} moves", params.convergence_threshold, params.convergence_window);
+        log_println!(
+            "  Convergence: threshold = {:.1e}, window = {} moves",
+            params.convergence_threshold,
+            params.convergence_window
+        );
     }
     log_println!();
 
@@ -481,8 +552,7 @@ fn main() {
     // Compute and save final S(Q)
     let rdf_dr = params.rdf_cutoff / params.rdf_nbins as f64;
     let histograms = rdf::compute_histograms(&config, params.rdf_nbins, params.rdf_cutoff);
-    let partials_gr =
-        rdf::normalise_histograms(&histograms, &config, params.rdf_nbins, rdf_dr);
+    let partials_gr = rdf::normalise_histograms(&histograms, &config, params.rdf_nbins, rdf_dr);
     let r_grid: Vec<f64> = (0..params.rdf_nbins)
         .map(|i| (i as f64 + 0.5) * rdf_dr)
         .collect();
@@ -525,26 +595,41 @@ fn main() {
         let gd0 = &gr_datasets[0];
         let qmax_gr = gd0.qmax;
         let use_lorch = gd0.lorch;
-        let dq = if params.q_grid.len() > 1 { params.q_grid[1] - params.q_grid[0] } else { 1.0 };
+        let dq = if params.q_grid.len() > 1 {
+            params.q_grid[1] - params.q_grid[0]
+        } else {
+            1.0
+        };
         let n_r_out = params.rdf_nbins;
         let dr_out = params.rdf_cutoff / n_r_out as f64;
         let r_out: Vec<f64> = (0..n_r_out).map(|i| (i as f64 + 0.5) * dr_out).collect();
-        let total_gr: Vec<f64> = r_out.iter().map(|&ri| {
-            if ri < 1e-10 { return 1.0; }
-            let pref = dq / (2.0 * std::f64::consts::PI * std::f64::consts::PI * rho0 * ri);
-            let mut val = 1.0;
-            for (k, &qk) in params.q_grid.iter().enumerate() {
-                if qk > qmax_gr { break; }
-                let window = if use_lorch {
-                    let arg = std::f64::consts::PI * qk / qmax_gr;
-                    if arg > 1e-10 { arg.sin() / arg } else { 1.0 }
-                } else {
-                    1.0
-                };
-                val += pref * qk * window * (sx[k] - 1.0) * (qk * ri).sin();
-            }
-            val
-        }).collect();
+        let total_gr: Vec<f64> = r_out
+            .iter()
+            .map(|&ri| {
+                if ri < 1e-10 {
+                    return 1.0;
+                }
+                let pref = dq / (2.0 * std::f64::consts::PI * std::f64::consts::PI * rho0 * ri);
+                let mut val = 1.0;
+                for (k, &qk) in params.q_grid.iter().enumerate() {
+                    if qk > qmax_gr {
+                        break;
+                    }
+                    let window = if use_lorch {
+                        let arg = std::f64::consts::PI * qk / qmax_gr;
+                        if arg > 1e-10 {
+                            arg.sin() / arg
+                        } else {
+                            1.0
+                        }
+                    } else {
+                        1.0
+                    };
+                    val += pref * qk * window * (sx[k] - 1.0) * (qk * ri).sin();
+                }
+                val
+            })
+            .collect();
         let output_gr = output_dir.join("refined_total_gr.dat");
         log_println!("Saving refined total X-ray g(r) to {:?}", output_gr);
         io::write_gr(&output_gr, &r_out, &total_gr).unwrap();
@@ -581,19 +666,17 @@ fn compute_sq_and_exit(
                 .0];
             log_println!(
                 "  {}-{}: max g(r) = {:.2} at r = {:.2} A",
-                config.species[a], config.species[b], max_val, max_pos
+                config.species[a],
+                config.species[b],
+                max_val,
+                max_pos
             );
         }
     }
 
     log_println!("\nComputing partial S(Q)...");
-    let partial_sq = sq::compute_all_partial_sq(
-        &rdfs.r,
-        &rdfs.partials,
-        rho0,
-        &params.q_grid,
-        params.lorch,
-    );
+    let partial_sq =
+        sq::compute_all_partial_sq(&rdfs.r, &rdfs.partials, rho0, &params.q_grid, params.lorch);
 
     log_println!("Computing total X-ray S(Q)...");
     let sx = xray::compute_xray_sq(config, &partial_sq, &params.q_grid);
@@ -629,32 +712,53 @@ fn compute_sq_and_exit(
 
     // Compute and save total X-ray g(r) via inverse FT (with Lorch+Qmax from g(r) config)
     {
-        let qmax_gr = cfg.data.xray_gr.as_ref()
+        let qmax_gr = cfg
+            .data
+            .xray_gr
+            .as_ref()
             .and_then(|gc| gc.qmax)
             .unwrap_or_else(|| *params.q_grid.last().unwrap_or(&20.0));
-        let use_lorch = cfg.data.xray_gr.as_ref()
+        let use_lorch = cfg
+            .data
+            .xray_gr
+            .as_ref()
             .and_then(|gc| gc.lorch)
             .unwrap_or(true);
-        let dq = if params.q_grid.len() > 1 { params.q_grid[1] - params.q_grid[0] } else { 1.0 };
+        let dq = if params.q_grid.len() > 1 {
+            params.q_grid[1] - params.q_grid[0]
+        } else {
+            1.0
+        };
         let n_r_out = params.rdf_nbins;
         let dr_out = params.rdf_cutoff / n_r_out as f64;
         let r_out: Vec<f64> = (0..n_r_out).map(|i| (i as f64 + 0.5) * dr_out).collect();
-        let total_gr: Vec<f64> = r_out.iter().map(|&ri| {
-            if ri < 1e-10 { return 1.0; }
-            let pref = dq / (2.0 * std::f64::consts::PI * std::f64::consts::PI * rho0 * ri);
-            let mut val = 1.0;
-            for (k, &qk) in params.q_grid.iter().enumerate() {
-                if qk > qmax_gr { break; }
-                let window = if use_lorch {
-                    let arg = std::f64::consts::PI * qk / qmax_gr;
-                    if arg > 1e-10 { arg.sin() / arg } else { 1.0 }
-                } else {
-                    1.0
-                };
-                val += pref * qk * window * (sx[k] - 1.0) * (qk * ri).sin();
-            }
-            val
-        }).collect();
+        let total_gr: Vec<f64> = r_out
+            .iter()
+            .map(|&ri| {
+                if ri < 1e-10 {
+                    return 1.0;
+                }
+                let pref = dq / (2.0 * std::f64::consts::PI * std::f64::consts::PI * rho0 * ri);
+                let mut val = 1.0;
+                for (k, &qk) in params.q_grid.iter().enumerate() {
+                    if qk > qmax_gr {
+                        break;
+                    }
+                    let window = if use_lorch {
+                        let arg = std::f64::consts::PI * qk / qmax_gr;
+                        if arg > 1e-10 {
+                            arg.sin() / arg
+                        } else {
+                            1.0
+                        }
+                    } else {
+                        1.0
+                    };
+                    val += pref * qk * window * (sx[k] - 1.0) * (qk * ri).sin();
+                }
+                val
+            })
+            .collect();
         let output_total_gr = output_dir.join("computed_total_gr.dat");
         log_println!("Saving total X-ray g(r) to {:?}", output_total_gr);
         io::write_gr(&output_total_gr, &r_out, &total_gr).unwrap();
@@ -676,7 +780,12 @@ fn compute_sq_and_exit(
                     count += 1;
                 }
             }
-            log_println!("\nChi2 vs experimental X-ray S(Q): {:.2} ({} points, per-point: {:.6})", chi2, count, chi2 / count.max(1) as f64);
+            log_println!(
+                "\nChi2 vs experimental X-ray S(Q): {:.2} ({} points, per-point: {:.6})",
+                chi2,
+                count,
+                chi2 / count.max(1) as f64
+            );
         }
     }
 }
@@ -697,7 +806,12 @@ fn run_analysis(
     log_println!("\n--- {} structure ---", label);
     log_println!("Analysis pairs:");
     for p in &pairs {
-        log_println!("  {}-{}: cutoff = {:.2} A", p.species_a, p.species_b, p.cutoff);
+        log_println!(
+            "  {}-{}: cutoff = {:.2} A",
+            p.species_a,
+            p.species_b,
+            p.cutoff
+        );
     }
 
     log_println!("\nComputing coordination numbers...");
@@ -708,18 +822,12 @@ fn run_analysis(
         .as_ref()
         .and_then(|a| a.angle_bins)
         .unwrap_or(180);
-    let triplet_filter: Option<Vec<String>> = cfg
-        .analysis
-        .as_ref()
-        .and_then(|a| a.angle_triplets.clone());
+    let triplet_filter: Option<Vec<String>> =
+        cfg.analysis.as_ref().and_then(|a| a.angle_triplets.clone());
 
     log_println!("Computing bond angle distributions ({} bins)...", nbins);
-    let angle_results = analyze::compute_bond_angles(
-        config,
-        &pairs,
-        nbins,
-        triplet_filter.as_deref(),
-    );
+    let angle_results =
+        analyze::compute_bond_angles(config, &pairs, nbins, triplet_filter.as_deref());
 
     analyze::print_analysis_summary(&cn_results, &angle_results);
 

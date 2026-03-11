@@ -52,16 +52,34 @@ fn test_rdf_peaks() {
     // Si-O first peak should be around 1.6 A
     let si_o_idx = config.pair_index(1, 2); // Si=1, O=2
     let gr = &rdfs.partials[&si_o_idx];
-    let max_bin = gr.iter().enumerate().max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).unwrap().0;
+    let max_bin = gr
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+        .unwrap()
+        .0;
     let peak_r = rdfs.r[max_bin];
-    assert!((peak_r - 1.6).abs() < 0.2, "Si-O peak at {} A, expected ~1.6 A", peak_r);
+    assert!(
+        (peak_r - 1.6).abs() < 0.2,
+        "Si-O peak at {} A, expected ~1.6 A",
+        peak_r
+    );
 
     // O-O first peak should be around 2.6 A
     let o_o_idx = config.pair_index(2, 2); // O=2
     let gr = &rdfs.partials[&o_o_idx];
-    let max_bin = gr.iter().enumerate().max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).unwrap().0;
+    let max_bin = gr
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+        .unwrap()
+        .0;
     let peak_r = rdfs.r[max_bin];
-    assert!((peak_r - 2.6).abs() < 0.2, "O-O peak at {} A, expected ~2.6 A", peak_r);
+    assert!(
+        (peak_r - 2.6).abs() < 0.2,
+        "O-O peak at {} A, expected ~2.6 A",
+        peak_r
+    );
 }
 
 #[test]
@@ -83,7 +101,9 @@ fn test_sq_normalisation() {
     let rdfs = rdf::compute_partial_rdfs(&config, 550, 11.0);
 
     let nq = 500;
-    let q: Vec<f64> = (0..nq).map(|i| 0.3 + i as f64 * (20.0 - 0.3) / nq as f64).collect();
+    let q: Vec<f64> = (0..nq)
+        .map(|i| 0.3 + i as f64 * (20.0 - 0.3) / nq as f64)
+        .collect();
 
     let partial_sq = sq::compute_all_partial_sq(&rdfs.r, &rdfs.partials, rho0, &q, true);
     let sx = xray::compute_xray_sq(&config, &partial_sq, &q);

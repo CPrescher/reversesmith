@@ -6,13 +6,7 @@ use std::f64::consts::PI;
 /// S(Q) = 1 + 4πρ₀ dr Σᵢ rᵢ [g(rᵢ)-1] W(rᵢ) sin(Q rᵢ) / Q
 ///
 /// where W(r) is the optional Lorch window function.
-pub fn compute_partial_sq(
-    r: &[f64],
-    gr: &[f64],
-    rho0: f64,
-    q: &[f64],
-    lorch: bool,
-) -> Vec<f64> {
+pub fn compute_partial_sq(r: &[f64], gr: &[f64], rho0: f64, q: &[f64], lorch: bool) -> Vec<f64> {
     let nr = r.len();
     let dr = if nr > 1 { r[1] - r[0] } else { 1.0 };
     let r_max = r[nr - 1];
@@ -35,7 +29,11 @@ pub fn compute_partial_sq(
             if qi < 0.05 {
                 return 1.0;
             }
-            let sum: f64 = f.iter().zip(r.iter()).map(|(&fi, &ri)| fi * (qi * ri).sin()).sum();
+            let sum: f64 = f
+                .iter()
+                .zip(r.iter())
+                .map(|(&fi, &ri)| fi * (qi * ri).sin())
+                .sum();
             1.0 + prefactor * sum / qi
         })
         .collect()

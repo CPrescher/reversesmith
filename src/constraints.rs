@@ -22,6 +22,12 @@ pub struct Constraints {
     pub coordination: Vec<CoordinationConstraint>,
 }
 
+impl Default for Constraints {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Constraints {
     pub fn new() -> Self {
         Constraints {
@@ -32,7 +38,12 @@ impl Constraints {
 
     /// Get minimum distance for a pair given type ids.
     /// Returns 0.0 if no constraint is set for this pair.
-    pub fn min_distance_for_pair(&self, config: &Configuration, type_a: usize, type_b: usize) -> f64 {
+    pub fn min_distance_for_pair(
+        &self,
+        config: &Configuration,
+        type_a: usize,
+        type_b: usize,
+    ) -> f64 {
         let sa = &config.species[type_a];
         let sb = &config.species[type_b];
 
@@ -82,7 +93,9 @@ impl PrecomputedConstraints {
         let mut coordination = Vec::new();
         for cc in &constraints.coordination {
             let parts: Vec<&str> = cc.pair.split('-').collect();
-            if parts.len() != 2 { continue; }
+            if parts.len() != 2 {
+                continue;
+            }
             let type_a = config.species.iter().position(|s| s == parts[0]);
             let type_b = config.species.iter().position(|s| s == parts[1]);
             if let (Some(ta), Some(tb)) = (type_a, type_b) {
@@ -96,7 +109,11 @@ impl PrecomputedConstraints {
             }
         }
 
-        PrecomputedConstraints { min_dist_sq, n_types, coordination }
+        PrecomputedConstraints {
+            min_dist_sq,
+            n_types,
+            coordination,
+        }
     }
 
     #[inline]
@@ -116,10 +133,14 @@ pub fn check_min_distances_fast(
     let box_lengths = &config.box_lengths;
 
     for (j, atom_j) in config.atoms.iter().enumerate() {
-        if j == atom_idx { continue; }
+        if j == atom_idx {
+            continue;
+        }
 
         let min_d2 = pc.min_dist_sq_for(ti, atom_j.type_id);
-        if min_d2 <= 0.0 { continue; }
+        if min_d2 <= 0.0 {
+            continue;
+        }
 
         let mut r2 = 0.0f64;
         for d in 0..3 {
@@ -129,7 +150,9 @@ pub fn check_min_distances_fast(
             r2 += delta * delta;
         }
 
-        if r2 < min_d2 { return false; }
+        if r2 < min_d2 {
+            return false;
+        }
     }
     true
 }
@@ -146,31 +169,57 @@ pub fn check_coordination_fast(
 
     for cc in &pc.coordination {
         // Only check if moved atom is involved
-        if moved_type != cc.type_a && moved_type != cc.type_b { continue; }
+        if moved_type != cc.type_a && moved_type != cc.type_b {
+            continue;
+        }
 
         for (i, atom_i) in config.atoms.iter().enumerate() {
-            if atom_i.type_id != cc.type_a { continue; }
+            if atom_i.type_id != cc.type_a {
+                continue;
+            }
 
-            let pos_i = if i == atom_idx { *new_pos } else { atom_i.position };
+            let pos_i = if i == atom_idx {
+                *new_pos
+            } else {
+                atom_i.position
+            };
 
             // Skip atoms far from moved atom
             if i != atom_idx {
-                let old_r2 = min_image_r2(&config.atoms[atom_idx].position, &atom_i.position, box_lengths);
+                let old_r2 = min_image_r2(
+                    &config.atoms[atom_idx].position,
+                    &atom_i.position,
+                    box_lengths,
+                );
                 let new_r2 = min_image_r2(new_pos, &atom_i.position, box_lengths);
-                if old_r2 > cc.cutoff2 * 4.0 && new_r2 > cc.cutoff2 * 4.0 { continue; }
+                if old_r2 > cc.cutoff2 * 4.0 && new_r2 > cc.cutoff2 * 4.0 {
+                    continue;
+                }
             }
 
             let mut count = 0usize;
             for (j, atom_j) in config.atoms.iter().enumerate() {
-                if j == i { continue; }
-                if atom_j.type_id != cc.type_b { continue; }
+                if j == i {
+                    continue;
+                }
+                if atom_j.type_id != cc.type_b {
+                    continue;
+                }
 
-                let pos_j = if j == atom_idx { *new_pos } else { atom_j.position };
+                let pos_j = if j == atom_idx {
+                    *new_pos
+                } else {
+                    atom_j.position
+                };
                 let r2 = min_image_r2(&pos_i, &pos_j, box_lengths);
-                if r2 < cc.cutoff2 { count += 1; }
+                if r2 < cc.cutoff2 {
+                    count += 1;
+                }
             }
 
-            if count < cc.min || count > cc.max { return false; }
+            if count < cc.min || count > cc.max {
+                return false;
+            }
         }
     }
     true
@@ -242,7 +291,7 @@ pub fn check_coordination(
 
         // Check atoms of type sp_a: their coordination with sp_b
         for (i, atom_i) in config.atoms.iter().enumerate() {
-            if &atom_i.species != sp_a {
+            if atom_i.species != sp_a {
                 continue;
             }
 
@@ -261,8 +310,7 @@ pub fn check_coordination(
                     &atom_i.position,
                     &config.box_lengths,
                 );
-                let new_r2 =
-                    min_image_r2(new_pos, &atom_i.position, &config.box_lengths);
+                let new_r2 = min_image_r2(new_pos, &atom_i.position, &config.box_lengths);
                 if old_r2 > cutoff2 * 4.0 && new_r2 > cutoff2 * 4.0 {
                     continue; // This atom is far from the moved atom
                 }
@@ -274,7 +322,7 @@ pub fn check_coordination(
                 if j == i {
                     continue;
                 }
-                if &atom_j.species != sp_b {
+                if atom_j.species != sp_b {
                     continue;
                 }
 

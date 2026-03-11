@@ -12,10 +12,7 @@ use crate::rmc::RmcState;
 ///   atom_id type_id charge x y z [ix iy iz]
 ///
 /// `type_map` maps LAMMPS type integers to species names, e.g. {1: "Ca", 2: "Si", 3: "O"}.
-pub fn read_lammps_data(
-    path: &Path,
-    type_map: &HashMap<u32, String>,
-) -> io::Result<Configuration> {
+pub fn read_lammps_data(path: &Path, type_map: &HashMap<u32, String>) -> io::Result<Configuration> {
     let content = fs::read_to_string(path)?;
     let lines: Vec<&str> = content.lines().collect();
 
@@ -278,10 +275,7 @@ pub fn write_checkpoint(path: &Path, state: &RmcState, config: &Configuration) -
 }
 
 /// Read checkpoint file, returning (RmcState, Configuration).
-pub fn read_checkpoint(
-    path: &Path,
-    species: &[String],
-) -> io::Result<(RmcState, Configuration)> {
+pub fn read_checkpoint(path: &Path, species: &[String]) -> io::Result<(RmcState, Configuration)> {
     let content = fs::read_to_string(path)?;
     let mut move_count = 0u64;
     let mut accepted = 0u64;

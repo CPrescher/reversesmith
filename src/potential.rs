@@ -65,9 +65,19 @@ impl PairPotential {
             let r = (i as f64 * dr).max(0.5); // cap at 0.5 A to avoid divergence
             table[i] = buckingham_eval(r, a_param, rho, c_param) - v_cut;
         }
-        if n_bins > 0 { table[n_bins - 1] = 0.0; }
+        if n_bins > 0 {
+            table[n_bins - 1] = 0.0;
+        }
 
-        PairPotential { pair_label, type_a, type_b, table, dr, n_bins, cutoff }
+        PairPotential {
+            pair_label,
+            type_a,
+            type_b,
+            table,
+            dr,
+            n_bins,
+            cutoff,
+        }
     }
 
     /// Tabulate Pedone potential V(r) = D0*[1 - exp(-α(r-r0))]² - D0 + C0/r¹².
@@ -90,9 +100,19 @@ impl PairPotential {
             let r = (i as f64 * dr).max(0.5);
             table[i] = pedone_eval(r, d0, alpha, r0, c0) - v_cut;
         }
-        if n_bins > 0 { table[n_bins - 1] = 0.0; }
+        if n_bins > 0 {
+            table[n_bins - 1] = 0.0;
+        }
 
-        PairPotential { pair_label, type_a, type_b, table, dr, n_bins, cutoff }
+        PairPotential {
+            pair_label,
+            type_a,
+            type_b,
+            table,
+            dr,
+            n_bins,
+            cutoff,
+        }
     }
 
     /// Tabulate Coulomb DSF interaction for a specific pair: qi*qj * V_dsf(r).
@@ -116,7 +136,8 @@ impl PairPotential {
         let erfc_rc = erfc_approx(alpha_dsf * cutoff);
         let shift = erfc_rc / cutoff;
         let dshift = erfc_rc / (cutoff * cutoff)
-            + 2.0 * alpha_dsf / PI.sqrt() * (-alpha_dsf * alpha_dsf * cutoff * cutoff).exp() / cutoff;
+            + 2.0 * alpha_dsf / PI.sqrt() * (-alpha_dsf * alpha_dsf * cutoff * cutoff).exp()
+                / cutoff;
 
         let qq = COULOMB_CONST * qi * qj;
 
@@ -131,9 +152,19 @@ impl PairPotential {
         }
         // The DSF form is self-shifting: V(rc) = 0 by construction.
         // But enforce exactly due to floating point:
-        if n_bins > 0 { table[n_bins - 1] = 0.0; }
+        if n_bins > 0 {
+            table[n_bins - 1] = 0.0;
+        }
 
-        PairPotential { pair_label, type_a, type_b, table, dr, n_bins, cutoff }
+        PairPotential {
+            pair_label,
+            type_a,
+            type_b,
+            table,
+            dr,
+            n_bins,
+            cutoff,
+        }
     }
 
     /// Read a tabulated potential from a two-column file (r in A, V in eV),
@@ -148,7 +179,9 @@ impl PairPotential {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (r_data, v_data) = io::read_sq_data(path)?;
         if r_data.len() < 2 {
-            return Err(format!("Potential table {} has fewer than 2 points", path.display()).into());
+            return Err(
+                format!("Potential table {} has fewer than 2 points", path.display()).into(),
+            );
         }
 
         let n_bins = (cutoff / dr).ceil() as usize + 1;
@@ -159,9 +192,19 @@ impl PairPotential {
             let r = i as f64 * dr;
             table[i] = interp(&r_data, &v_data, r) - v_cut;
         }
-        if n_bins > 0 { table[n_bins - 1] = 0.0; }
+        if n_bins > 0 {
+            table[n_bins - 1] = 0.0;
+        }
 
-        Ok(PairPotential { pair_label, type_a, type_b, table, dr, n_bins, cutoff })
+        Ok(PairPotential {
+            pair_label,
+            type_a,
+            type_b,
+            table,
+            dr,
+            n_bins,
+            cutoff,
+        })
     }
 
     /// Add another potential's table onto this one (element-wise).
@@ -206,7 +249,8 @@ impl PotentialSet {
                 "Potential cutoff ({:.1} A) exceeds rdf_cutoff ({:.1} A). \
                  Increase [sq] rdf_cutoff or reduce [potential] cutoff.",
                 cutoff, rdf_cutoff
-            ).into());
+            )
+            .into());
         }
 
         let parse_pair = |pair: &str| -> Result<(usize, usize), Box<dyn std::error::Error>> {
@@ -214,9 +258,13 @@ impl PotentialSet {
             if parts.len() != 2 {
                 return Err(format!("Invalid pair format '{}', expected 'A-B'", pair).into());
             }
-            let a = species.iter().position(|s| s == parts[0])
+            let a = species
+                .iter()
+                .position(|s| s == parts[0])
                 .ok_or_else(|| format!("Unknown species '{}' in pair '{}'", parts[0], pair))?;
-            let b = species.iter().position(|s| s == parts[1])
+            let b = species
+                .iter()
+                .position(|s| s == parts[1])
                 .ok_or_else(|| format!("Unknown species '{}' in pair '{}'", parts[1], pair))?;
             Ok((a, b))
         };
@@ -228,10 +276,11 @@ impl PotentialSet {
         let find_or_push = |potentials: &mut Vec<PairPotential>,
                             defined_pairs: &mut Vec<(usize, usize)>,
                             pot: PairPotential,
-                            a: usize, b: usize| {
-            let existing = defined_pairs.iter().position(|&(pa, pb)| {
-                (pa == a && pb == b) || (pa == b && pb == a)
-            });
+                            a: usize,
+                            b: usize| {
+            let existing = defined_pairs
+                .iter()
+                .position(|&(pa, pb)| (pa == a && pb == b) || (pa == b && pb == a));
             if let Some(idx) = existing {
                 // Add to existing (accumulate short-range + Coulomb)
                 potentials[idx].add_table(&pot);
@@ -246,7 +295,14 @@ impl PotentialSet {
             for buck in bucks {
                 let (a, b) = parse_pair(&buck.pair)?;
                 let pot = PairPotential::from_buckingham(
-                    buck.pair.clone(), a, b, buck.a_param, buck.rho, buck.c_param, cutoff, dr,
+                    buck.pair.clone(),
+                    a,
+                    b,
+                    buck.a_param,
+                    buck.rho,
+                    buck.c_param,
+                    cutoff,
+                    dr,
                 );
                 find_or_push(&mut potentials, &mut defined_pairs, pot, a, b);
             }
@@ -257,7 +313,15 @@ impl PotentialSet {
             for ped in peds {
                 let (a, b) = parse_pair(&ped.pair)?;
                 let pot = PairPotential::from_pedone(
-                    ped.pair.clone(), a, b, ped.d0, ped.alpha, ped.r0, ped.c0, cutoff, dr,
+                    ped.pair.clone(),
+                    a,
+                    b,
+                    ped.d0,
+                    ped.alpha,
+                    ped.r0,
+                    ped.c0,
+                    cutoff,
+                    dr,
                 );
                 find_or_push(&mut potentials, &mut defined_pairs, pot, a, b);
             }
@@ -275,7 +339,9 @@ impl PotentialSet {
                         Some(&q) => q,
                         None => continue,
                     };
-                    if (qi * qj).abs() < 1e-15 { continue; }
+                    if (qi * qj).abs() < 1e-15 {
+                        continue;
+                    }
 
                     let label = format!("{}-{}", species[a], species[b]);
                     let pot = PairPotential::from_coulomb_dsf(
@@ -298,9 +364,9 @@ impl PotentialSet {
                 let pot = PairPotential::from_table(tab.pair.clone(), a, b, &path, cutoff, dr)?;
 
                 // Tabulated replaces (not adds to) any existing entry
-                let existing = defined_pairs.iter().position(|&(pa, pb)| {
-                    (pa == a && pb == b) || (pa == b && pb == a)
-                });
+                let existing = defined_pairs
+                    .iter()
+                    .position(|&(pa, pb)| (pa == a && pb == b) || (pa == b && pb == a));
                 if let Some(idx) = existing {
                     potentials[idx] = pot;
                 } else {
@@ -346,11 +412,15 @@ impl PotentialSet {
         let neighbor_cells = cell_list.neighbor_cells(pos_cell);
         for &nc in &neighbor_cells {
             for j in cell_list.atoms_in_cell(nc) {
-                if j == atom_idx { continue; }
+                if j == atom_idx {
+                    continue;
+                }
 
                 let tj = config.atoms[j].type_id;
                 let pot_idx = self.potential_index[ti * n_types + tj];
-                if pot_idx == usize::MAX { continue; }
+                if pot_idx == usize::MAX {
+                    continue;
+                }
 
                 let pj = &config.atoms[j].position;
                 let mut r2 = 0.0f64;
@@ -372,11 +442,7 @@ impl PotentialSet {
 
     /// Compute total pair potential energy of the configuration.
     /// Each pair is counted once (i < j).
-    pub fn total_energy(
-        &self,
-        config: &Configuration,
-        cell_list: &CellList,
-    ) -> f64 {
+    pub fn total_energy(&self, config: &Configuration, cell_list: &CellList) -> f64 {
         let n_atoms = config.atoms.len();
         let box_lengths = &config.box_lengths;
         let cutoff2 = self.cutoff * self.cutoff;
@@ -390,11 +456,15 @@ impl PotentialSet {
             let neighbor_cells = cell_list.neighbor_cells(ci);
             for &nc in &neighbor_cells {
                 for j in cell_list.atoms_in_cell(nc) {
-                    if j <= i { continue; }
+                    if j <= i {
+                        continue;
+                    }
 
                     let tj = config.atoms[j].type_id;
                     let pot_idx = self.potential_index[ti * n_types + tj];
-                    if pot_idx == usize::MAX { continue; }
+                    if pot_idx == usize::MAX {
+                        continue;
+                    }
 
                     let pj = &config.atoms[j].position;
                     let mut r2 = 0.0f64;
@@ -434,24 +504,34 @@ fn pedone_eval(r: f64, d0: f64, alpha: f64, r0: f64, c0: f64) -> f64 {
 #[inline]
 fn erfc_approx(x: f64) -> f64 {
     let t = 1.0 / (1.0 + 0.3275911 * x.abs());
-    let poly = t * (0.254829592
-        + t * (-0.284496736
-        + t * (1.421413741
-        + t * (-1.453152027
-        + t * 1.061405429))));
+    let poly = t
+        * (0.254829592
+            + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
     let result = poly * (-x * x).exp();
-    if x >= 0.0 { result } else { 2.0 - result }
+    if x >= 0.0 {
+        result
+    } else {
+        2.0 - result
+    }
 }
 
 /// Linear interpolation helper for tabulated data.
 fn interp(x: &[f64], y: &[f64], xi: f64) -> f64 {
-    if xi <= x[0] { return y[0]; }
-    if xi >= x[x.len() - 1] { return y[y.len() - 1]; }
+    if xi <= x[0] {
+        return y[0];
+    }
+    if xi >= x[x.len() - 1] {
+        return y[y.len() - 1];
+    }
     let mut lo = 0;
     let mut hi = x.len() - 1;
     while hi - lo > 1 {
         let mid = (lo + hi) / 2;
-        if x[mid] <= xi { lo = mid; } else { hi = mid; }
+        if x[mid] <= xi {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
     }
     let t = (xi - x[lo]) / (x[hi] - x[lo]);
     y[lo] + t * (y[hi] - y[lo])

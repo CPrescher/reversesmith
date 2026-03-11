@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::atoms::Configuration;
-use crate::{log_println, log_print};
+use crate::{log_print, log_println};
 
 /// A pair of species with a distance cutoff for analysis.
 #[derive(Debug, Clone)]
@@ -100,10 +100,14 @@ pub fn compute_coordination_numbers(
         let max_cn = *cn_values.iter().max().unwrap();
         let n = cn_values.len() as f64;
         let mean = cn_values.iter().sum::<usize>() as f64 / n;
-        let variance = cn_values.iter().map(|&c| {
-            let d = c as f64 - mean;
-            d * d
-        }).sum::<f64>() / n;
+        let variance = cn_values
+            .iter()
+            .map(|&c| {
+                let d = c as f64 - mean;
+                d * d
+            })
+            .sum::<f64>()
+            / n;
         let std_dev = variance.sqrt();
 
         let mut histogram = vec![0usize; max_cn + 1];
@@ -290,13 +294,23 @@ pub fn print_analysis_summary(cn_results: &[CnDistribution], angle_results: &[An
     log_println!("\n=== Coordination Number Analysis ===\n");
     log_println!(
         "{:<10} {:>8} {:>8} {:>8} {:>8} {:>10}",
-        "Pair", "Cutoff", "Mean", "StdDev", "Min", "Max"
+        "Pair",
+        "Cutoff",
+        "Mean",
+        "StdDev",
+        "Min",
+        "Max"
     );
     log_println!("{}", "-".repeat(58));
     for cn in cn_results {
         log_println!(
             "{:<10} {:>8.2} {:>8.3} {:>8.3} {:>8} {:>10}",
-            cn.pair_label, cn.cutoff, cn.mean, cn.std_dev, cn.min, cn.max
+            cn.pair_label,
+            cn.cutoff,
+            cn.mean,
+            cn.std_dev,
+            cn.min,
+            cn.max
         );
 
         // Print histogram inline
@@ -319,13 +333,19 @@ pub fn print_analysis_summary(cn_results: &[CnDistribution], angle_results: &[An
         log_println!("\n=== Bond Angle Analysis ===\n");
         log_println!(
             "{:<14} {:>10} {:>12} {:>12}",
-            "Triplet", "N_angles", "Peak (deg)", "Mean (deg)"
+            "Triplet",
+            "N_angles",
+            "Peak (deg)",
+            "Mean (deg)"
         );
         log_println!("{}", "-".repeat(52));
         for ad in angle_results {
             log_println!(
                 "{:<14} {:>10} {:>12.1} {:>12.1}",
-                ad.triplet_label, ad.n_angles, ad.peak_angle, ad.mean_angle
+                ad.triplet_label,
+                ad.n_angles,
+                ad.peak_angle,
+                ad.mean_angle
             );
         }
     }

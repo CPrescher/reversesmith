@@ -1,5 +1,4 @@
 /// Cell list for O(1)-per-neighbor spatial lookups with periodic boundary conditions.
-
 pub struct CellList {
     /// Number of cells per dimension.
     pub nc: [usize; 3],
@@ -21,11 +20,7 @@ pub struct CellList {
 
 impl CellList {
     /// Build a cell list for the given positions and box.
-    pub fn new(
-        positions: &[[f64; 3]],
-        box_lengths: &[f64; 3],
-        cutoff: f64,
-    ) -> Self {
+    pub fn new(positions: &[[f64; 3]], box_lengths: &[f64; 3], cutoff: f64) -> Self {
         let n = positions.len();
         // Determine number of cells per dimension (at least 3 to avoid self-interaction issues)
         let nc = [
@@ -132,7 +127,10 @@ impl CellList {
     /// Iterate over all atoms in a cell.
     #[inline]
     pub fn atoms_in_cell(&self, cell_idx: usize) -> CellIter<'_> {
-        CellIter { cell_list: self, current: self.head[cell_idx] }
+        CellIter {
+            cell_list: self,
+            current: self.head[cell_idx],
+        }
     }
 }
 
@@ -156,7 +154,12 @@ impl<'a> Iterator for CellIter<'a> {
 }
 
 #[inline]
-fn cell_index(pos: &[f64; 3], _cell_size: &[f64; 3], nc: &[usize; 3], box_lengths: &[f64; 3]) -> usize {
+fn cell_index(
+    pos: &[f64; 3],
+    _cell_size: &[f64; 3],
+    nc: &[usize; 3],
+    box_lengths: &[f64; 3],
+) -> usize {
     let cx = ((pos[0] / box_lengths[0]).fract() * nc[0] as f64).floor() as usize;
     let cy = ((pos[1] / box_lengths[1]).fract() * nc[1] as f64).floor() as usize;
     let cz = ((pos[2] / box_lengths[2]).fract() * nc[2] as f64).floor() as usize;

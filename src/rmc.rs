@@ -120,7 +120,9 @@ fn atom_histogram_st(
     let neighbor_cells = cell_list.neighbor_cells(pos_cell);
     for &nc in &neighbor_cells {
         for j in cell_list.atoms_in_cell(nc) {
-            if j == atom_idx { continue; }
+            if j == atom_idx {
+                continue;
+            }
 
             let pj = &config.atoms[j].position;
             let mut r2 = 0.0f64;
@@ -161,10 +163,14 @@ fn check_min_distances_cell(
     let neighbor_cells = cell_list.neighbor_cells(pos_cell);
     for &nc in &neighbor_cells {
         for j in cell_list.atoms_in_cell(nc) {
-            if j == atom_idx { continue; }
+            if j == atom_idx {
+                continue;
+            }
 
             let min_d2 = pc.min_dist_sq_for(ti, config.atoms[j].type_id);
-            if min_d2 <= 0.0 { continue; }
+            if min_d2 <= 0.0 {
+                continue;
+            }
 
             let pj = &config.atoms[j].position;
             let mut r2 = 0.0f64;
@@ -175,7 +181,9 @@ fn check_min_distances_cell(
                 r2 += delta * delta;
             }
 
-            if r2 < min_d2 { return false; }
+            if r2 < min_d2 {
+                return false;
+            }
         }
     }
     true
@@ -194,15 +202,20 @@ fn check_coordination_cell(
     let box_lengths = &config.box_lengths;
 
     for cc in &pc.coordination {
-        if moved_type != cc.type_a && moved_type != cc.type_b { continue; }
+        if moved_type != cc.type_a && moved_type != cc.type_b {
+            continue;
+        }
 
         // We need to check atoms of type_a near the moved atom.
         // Use cell list centered on new_pos to find affected atoms.
         let new_cell = cell_list.cell_of[atom_idx]; // atom already has old cell; use new_pos cell
         let new_pos_cell = {
-            let cx = ((new_pos[0] / box_lengths[0]).fract() * cell_list.nc[0] as f64).floor() as usize;
-            let cy = ((new_pos[1] / box_lengths[1]).fract() * cell_list.nc[1] as f64).floor() as usize;
-            let cz = ((new_pos[2] / box_lengths[2]).fract() * cell_list.nc[2] as f64).floor() as usize;
+            let cx =
+                ((new_pos[0] / box_lengths[0]).fract() * cell_list.nc[0] as f64).floor() as usize;
+            let cy =
+                ((new_pos[1] / box_lengths[1]).fract() * cell_list.nc[1] as f64).floor() as usize;
+            let cz =
+                ((new_pos[2] / box_lengths[2]).fract() * cell_list.nc[2] as f64).floor() as usize;
             let cx = cx.min(cell_list.nc[0] - 1);
             let cy = cy.min(cell_list.nc[1] - 1);
             let cz = cz.min(cell_list.nc[2] - 1);
@@ -227,8 +240,12 @@ fn check_coordination_cell(
 
         for &nc in old_neighbors.iter().chain(new_neighbors.iter()) {
             for j in cell_list.atoms_in_cell(nc) {
-                if j == atom_idx { continue; }
-                if config.atoms[j].type_id != cc.type_a { continue; }
+                if j == atom_idx {
+                    continue;
+                }
+                if config.atoms[j].type_id != cc.type_a {
+                    continue;
+                }
 
                 let pj = &config.atoms[j].position;
                 let old_pos = &config.atoms[atom_idx].position;
@@ -246,13 +263,20 @@ fn check_coordination_cell(
 
         // For each atom of type_a to check, count type_b neighbors
         for &i in &atoms_to_check {
-            let pos_i = if i == atom_idx { *new_pos } else { config.atoms[i].position };
+            let pos_i = if i == atom_idx {
+                *new_pos
+            } else {
+                config.atoms[i].position
+            };
 
             // Find cell for pos_i
             let ci = {
-                let cx = ((pos_i[0] / box_lengths[0]).fract() * cell_list.nc[0] as f64).floor() as usize;
-                let cy = ((pos_i[1] / box_lengths[1]).fract() * cell_list.nc[1] as f64).floor() as usize;
-                let cz = ((pos_i[2] / box_lengths[2]).fract() * cell_list.nc[2] as f64).floor() as usize;
+                let cx =
+                    ((pos_i[0] / box_lengths[0]).fract() * cell_list.nc[0] as f64).floor() as usize;
+                let cy =
+                    ((pos_i[1] / box_lengths[1]).fract() * cell_list.nc[1] as f64).floor() as usize;
+                let cz =
+                    ((pos_i[2] / box_lengths[2]).fract() * cell_list.nc[2] as f64).floor() as usize;
                 let cx = cx.min(cell_list.nc[0] - 1);
                 let cy = cy.min(cell_list.nc[1] - 1);
                 let cz = cz.min(cell_list.nc[2] - 1);
@@ -263,16 +287,28 @@ fn check_coordination_cell(
             let nbr_cells = cell_list.neighbor_cells(ci);
             for &nc in &nbr_cells {
                 for j in cell_list.atoms_in_cell(nc) {
-                    if j == i { continue; }
-                    if config.atoms[j].type_id != cc.type_b { continue; }
+                    if j == i {
+                        continue;
+                    }
+                    if config.atoms[j].type_id != cc.type_b {
+                        continue;
+                    }
 
-                    let pos_j = if j == atom_idx { *new_pos } else { config.atoms[j].position };
+                    let pos_j = if j == atom_idx {
+                        *new_pos
+                    } else {
+                        config.atoms[j].position
+                    };
                     let r2 = min_image_r2_inline(&pos_i, &pos_j, box_lengths);
-                    if r2 < cc.cutoff2 { count += 1; }
+                    if r2 < cc.cutoff2 {
+                        count += 1;
+                    }
                 }
             }
 
-            if count < cc.min || count > cc.max { return false; }
+            if count < cc.min || count > cc.max {
+                return false;
+            }
         }
     }
     true
@@ -333,15 +369,17 @@ pub fn run_rmc(
     }
 
     // Lorch window
-    let lorch_w: Vec<f64> = (0..nbins).map(|i| {
-        let r = r_grid[i];
-        if params.lorch && r > 0.0 {
-            let arg = PI * r / r_max;
-            arg.sin() / arg
-        } else {
-            1.0
-        }
-    }).collect();
+    let lorch_w: Vec<f64> = (0..nbins)
+        .map(|i| {
+            let r = r_grid[i];
+            if params.lorch && r > 0.0 {
+                let arg = PI * r / r_max;
+                arg.sin() / arg
+            } else {
+                1.0
+            }
+        })
+        .collect();
 
     // r * W(r) with endpoint weight (midpoint rule, all weight 1)
     let rw: Vec<f64> = (0..nbins).map(|i| r_grid[i] * lorch_w[i]).collect();
@@ -358,7 +396,9 @@ pub fn run_rmc(
             let pair_idx = config.pair_index(a, b);
             let n_a = config.count_type(a) as f64;
             let rho_b = config.count_type(b) as f64 / volume;
-            if a == b { like_factor[pair_idx] = 2.0; }
+            if a == b {
+                like_factor[pair_idx] = 2.0;
+            }
             let base = pair_idx * nbins;
             for i in 0..nbins {
                 let r = r_grid[i];
@@ -372,7 +412,9 @@ pub fn run_rmc(
 
     // X-ray weights: w_ab(Q_k)
     let conc: Vec<f64> = (0..n_types).map(|t| config.concentration(t)).collect();
-    let form_factors: Vec<Vec<f64>> = config.species.iter()
+    let form_factors: Vec<Vec<f64>> = config
+        .species
+        .iter()
         .map(|s| form_factor(s, &params.q_grid))
         .collect();
 
@@ -380,13 +422,15 @@ pub fn run_rmc(
     for k in 0..nq {
         let f_avg: f64 = (0..n_types).map(|a| conc[a] * form_factors[a][k]).sum();
         let f_avg_sq = f_avg * f_avg;
-        if f_avg_sq < 1e-30 { continue; }
+        if f_avg_sq < 1e-30 {
+            continue;
+        }
         for a in 0..n_types {
             for b in a..n_types {
                 let pair_idx = config.pair_index(a, b);
                 let dab = if a == b { 1.0 } else { 2.0 };
-                xray_w[pair_idx * nq + k] = dab * conc[a] * conc[b]
-                    * form_factors[a][k] * form_factors[b][k] / f_avg_sq;
+                xray_w[pair_idx * nq + k] =
+                    dab * conc[a] * conc[b] * form_factors[a][k] * form_factors[b][k] / f_avg_sq;
             }
         }
     }
@@ -406,7 +450,11 @@ pub fn run_rmc(
             let mut hi = nq - 1;
             while hi - lo > 1 {
                 let mid = (lo + hi) / 2;
-                if params.q_grid[mid] <= qe { lo = mid; } else { hi = mid; }
+                if params.q_grid[mid] <= qe {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
             }
             let t = (qe - params.q_grid[lo]) / (params.q_grid[hi] - params.q_grid[lo]);
             interp.push((lo, t, i));
@@ -426,9 +474,11 @@ pub fn run_rmc(
     // Compute initial partial S(Q) from histograms
     // S_ab(Q_k) = 1 + (4πρ₀*dr/Q_k) * Σ_i rw_i * [g_ab(r_i) - 1] * sin(Q_k*r_i)
     let prefactor_sq = 4.0 * PI * rho0 * dr;
-    let inv_q: Vec<f64> = params.q_grid.iter().map(|&q| {
-        if q > 0.05 { 1.0 / q } else { 0.0 }
-    }).collect();
+    let inv_q: Vec<f64> = params
+        .q_grid
+        .iter()
+        .map(|&q| if q > 0.05 { 1.0 / q } else { 0.0 })
+        .collect();
 
     let mut partial_sq = vec![0.0f64; n_pairs * nq]; // stores S_ab(Q) - 1 (the integral part)
 
@@ -441,7 +491,9 @@ pub fn run_rmc(
         for i in 0..nbins {
             let g = lf * flat_hist[hist_base + i] * inv_norm[norm_base + i];
             let contrib = rw[i] * (g - 1.0); // r * W * (g - 1)
-            if contrib.abs() < 1e-30 { continue; }
+            if contrib.abs() < 1e-30 {
+                continue;
+            }
             let sin_row = i * nq;
             for k in 0..nq {
                 partial_sq[sq_base + k] += contrib * sin_table[sin_row + k];
@@ -477,7 +529,11 @@ pub fn run_rmc(
 
     // --- g(r) precomputation via inverse Fourier transform of total S_X(Q) ---
     let has_gr = !gr_data.is_empty();
-    let dq = if nq > 1 { params.q_grid[1] - params.q_grid[0] } else { 1.0 };
+    let dq = if nq > 1 {
+        params.q_grid[1] - params.q_grid[0]
+    } else {
+        1.0
+    };
 
     // For each g(r) dataset: build FT matrix M[n_r × nq], compute initial g(r)
     let mut gr_ft_matrices: Vec<Vec<f64>> = Vec::new();
@@ -493,15 +549,23 @@ pub fn run_rmc(
         let mut matrix = vec![0.0f64; n_r * nq];
         for i in 0..n_r {
             let ri = gd.r[i];
-            if ri < 1e-10 { continue; }
+            if ri < 1e-10 {
+                continue;
+            }
             let row = i * nq;
             let prefactor = dq / (2.0 * PI * PI * rho0 * ri);
             for k in 0..nq {
                 let qk = params.q_grid[k];
-                if qk > qmax_gr { break; }
+                if qk > qmax_gr {
+                    break;
+                }
                 let window = if use_lorch {
                     let arg = PI * qk / qmax_gr;
-                    if arg > 1e-10 { arg.sin() / arg } else { 1.0 }
+                    if arg > 1e-10 {
+                        arg.sin() / arg
+                    } else {
+                        1.0
+                    }
                 } else {
                     1.0
                 };
@@ -526,7 +590,11 @@ pub fn run_rmc(
         for (di, gd) in gr_data.iter().enumerate() {
             log_println!(
                 "g(r) dataset {}: {} total points, {} in fit range [{:.2}, {:.2}] A",
-                di, gd.r.len(), gr_fit_indices[di].len(), gd.fit_min, gd.fit_max
+                di,
+                gd.r.len(),
+                gr_fit_indices[di].len(),
+                gd.fit_min,
+                gd.fit_max
             );
         }
     }
@@ -555,18 +623,27 @@ pub fn run_rmc(
     let mut current_chi2 = sq_chi2_current + gr_chi2_current;
 
     if has_gr {
-        log_println!("Initial chi2 = {:.6} (sq: {:.6}, gr: {:.6})", current_chi2, sq_chi2_current, gr_chi2_current);
+        log_println!(
+            "Initial chi2 = {:.6} (sq: {:.6}, gr: {:.6})",
+            current_chi2,
+            sq_chi2_current,
+            gr_chi2_current
+        );
     } else {
         log_println!("Initial chi2 = {:.6}", current_chi2);
     }
 
     let mut state = if let Some(rs) = resume_state {
-        log_println!("Resuming from move {} (accepted {}, max_step {:.4})",
-            rs.move_count, rs.accepted, rs.max_step);
+        log_println!(
+            "Resuming from move {} (accepted {}, max_step {:.4})",
+            rs.move_count,
+            rs.accepted,
+            rs.max_step
+        );
         RmcState {
             move_count: rs.move_count,
             accepted: rs.accepted,
-            chi2: current_chi2,  // always recomputed from checkpoint configuration
+            chi2: current_chi2, // always recomputed from checkpoint configuration
             max_step: rs.max_step,
             seed: rs.seed,
         }
@@ -597,15 +674,24 @@ pub fn run_rmc(
     // Build cell list for O(1)-per-neighbor spatial lookups
     let positions: Vec<[f64; 3]> = config.atoms.iter().map(|a| a.position).collect();
     let mut cell_list = CellList::new(&positions, &config.box_lengths, params.rdf_cutoff);
-    log_println!("Cell list: {}x{}x{} = {} cells (cell size: {:.2} A)",
-        cell_list.nc[0], cell_list.nc[1], cell_list.nc[2], cell_list.n_cells,
-        cell_list.cell_size[0]);
+    log_println!(
+        "Cell list: {}x{}x{} = {} cells (cell size: {:.2} A)",
+        cell_list.nc[0],
+        cell_list.nc[1],
+        cell_list.nc[2],
+        cell_list.n_cells,
+        cell_list.cell_size[0]
+    );
 
     // Potential energy initialization
     let energy_weight = potential.map_or(0.0, |p| p.weight);
     let mut current_energy = if let Some(pot) = potential {
         let e = pot.total_energy(config, &cell_list);
-        log_println!("Initial potential energy = {:.6} eV (weight = {:.6})", e, energy_weight);
+        log_println!(
+            "Initial potential energy = {:.6} eV (weight = {:.6})",
+            e,
+            energy_weight
+        );
         e
     } else {
         0.0
@@ -613,7 +699,11 @@ pub fn run_rmc(
 
     // Annealing setup
     let annealing = (params.anneal_start - params.anneal_end).abs() > 1e-10;
-    let anneal_n = if params.anneal_steps > 0 { params.anneal_steps } else { params.max_moves };
+    let anneal_n = if params.anneal_steps > 0 {
+        params.anneal_steps
+    } else {
+        params.max_moves
+    };
     // Precompute log ratio to replace powf with exp (faster per-move)
     let anneal_log_ratio = if annealing {
         (params.anneal_end / params.anneal_start).ln()
@@ -621,9 +711,13 @@ pub fn run_rmc(
         0.0
     };
     if annealing {
-        log_println!("Simulated annealing: T = {:.2} -> {:.2} over {} moves ({:.0}% of run)",
-            params.anneal_start, params.anneal_end, anneal_n,
-            100.0 * anneal_n as f64 / params.max_moves as f64);
+        log_println!(
+            "Simulated annealing: T = {:.2} -> {:.2} over {} moves ({:.0}% of run)",
+            params.anneal_start,
+            params.anneal_end,
+            anneal_n,
+            100.0 * anneal_n as f64 / params.max_moves as f64
+        );
     }
 
     // Best-structure tracking: save atom positions at lowest chi2
@@ -660,9 +754,12 @@ pub fn run_rmc(
 
         // Determine cell for new position (for cell-list lookups)
         let new_pos_cell = {
-            let cx = ((new_pos[0] / config.box_lengths[0]).fract() * cell_list.nc[0] as f64).floor() as usize;
-            let cy = ((new_pos[1] / config.box_lengths[1]).fract() * cell_list.nc[1] as f64).floor() as usize;
-            let cz = ((new_pos[2] / config.box_lengths[2]).fract() * cell_list.nc[2] as f64).floor() as usize;
+            let cx = ((new_pos[0] / config.box_lengths[0]).fract() * cell_list.nc[0] as f64).floor()
+                as usize;
+            let cy = ((new_pos[1] / config.box_lengths[1]).fract() * cell_list.nc[1] as f64).floor()
+                as usize;
+            let cz = ((new_pos[2] / config.box_lengths[2]).fract() * cell_list.nc[2] as f64).floor()
+                as usize;
             let cx = cx.min(cell_list.nc[0] - 1);
             let cy = cy.min(cell_list.nc[1] - 1);
             let cz = cz.min(cell_list.nc[2] - 1);
@@ -688,8 +785,16 @@ pub fn run_rmc(
         let old_pos_cell = cell_list.cell_of[atom_idx];
         old_hist_buf.fill(0.0);
         atom_histogram_st(
-            config, atom_idx, &old_pos, nbins, cutoff2, inv_dr, n_types,
-            &mut old_hist_buf, &cell_list, old_pos_cell,
+            config,
+            atom_idx,
+            &old_pos,
+            nbins,
+            cutoff2,
+            inv_dr,
+            n_types,
+            &mut old_hist_buf,
+            &cell_list,
+            old_pos_cell,
         );
 
         // Move atom temporarily
@@ -698,8 +803,16 @@ pub fn run_rmc(
         // Compute new histogram contributions
         new_hist_buf.fill(0.0);
         atom_histogram_st(
-            config, atom_idx, &new_pos, nbins, cutoff2, inv_dr, n_types,
-            &mut new_hist_buf, &cell_list, new_pos_cell,
+            config,
+            atom_idx,
+            &new_pos,
+            nbins,
+            cutoff2,
+            inv_dr,
+            n_types,
+            &mut new_hist_buf,
+            &cell_list,
+            new_pos_cell,
         );
 
         // Compute ΔS_ab(Q) from histogram delta
@@ -714,7 +827,9 @@ pub fn run_rmc(
 
             for i in 0..nbins {
                 let dh = new_hist_buf[hist_base + i] - old_hist_buf[hist_base + i];
-                if dh == 0.0 { continue; }
+                if dh == 0.0 {
+                    continue;
+                }
                 let dg = lf * dh * inv_norm[norm_base + i];
                 let contrib = rw[i] * dg;
                 let sin_row = i * nq;
@@ -797,12 +912,26 @@ pub fn run_rmc(
             if calib_count == calibration_moves {
                 let avg_dchi2 = calib_sum_dchi2 / calib_count as f64;
                 let avg_de = calib_sum_de / calib_count as f64;
-                let suggested = if avg_de > 1e-15 { avg_dchi2 / avg_de } else { 0.0 };
-                log_println!("Calibration ({} moves): avg |delta_chi2| = {:.6}, avg |delta_E| = {:.6} eV",
-                    calib_count, avg_dchi2, avg_de);
-                log_println!("  Current weight = {:.6}, suggested weight for equal balance = {:.6}",
-                    energy_weight, suggested);
-                log_println!("  Ratio current/suggested = {:.4}", energy_weight / suggested.max(1e-30));
+                let suggested = if avg_de > 1e-15 {
+                    avg_dchi2 / avg_de
+                } else {
+                    0.0
+                };
+                log_println!(
+                    "Calibration ({} moves): avg |delta_chi2| = {:.6}, avg |delta_E| = {:.6} eV",
+                    calib_count,
+                    avg_dchi2,
+                    avg_de
+                );
+                log_println!(
+                    "  Current weight = {:.6}, suggested weight for equal balance = {:.6}",
+                    energy_weight,
+                    suggested
+                );
+                log_println!(
+                    "  Ratio current/suggested = {:.4}",
+                    energy_weight / suggested.max(1e-30)
+                );
             }
         }
 
@@ -867,19 +996,35 @@ pub fn run_rmc(
         if state.move_count % params.print_every == 0 {
             let ratio = if recent_total > 0 {
                 recent_accepted as f64 / recent_total as f64
-            } else { 0.0 };
+            } else {
+                0.0
+            };
             let overall_ratio = state.accepted as f64 / state.move_count as f64;
             let chi2_str = if potential.is_some() && has_gr {
                 let cost = current_chi2 + energy_weight * current_energy;
-                format!("cost = {:.4} (chi2: {:.4} [sq: {:.4}, gr: {:.4}], w*E: {:.4} [E: {:.2}])",
-                    cost, current_chi2, sq_chi2_current, gr_chi2_current,
-                    energy_weight * current_energy, current_energy)
+                format!(
+                    "cost = {:.4} (chi2: {:.4} [sq: {:.4}, gr: {:.4}], w*E: {:.4} [E: {:.2}])",
+                    cost,
+                    current_chi2,
+                    sq_chi2_current,
+                    gr_chi2_current,
+                    energy_weight * current_energy,
+                    current_energy
+                )
             } else if potential.is_some() {
                 let cost = current_chi2 + energy_weight * current_energy;
-                format!("cost = {:.4} (chi2: {:.4}, w*E: {:.4} [E: {:.2}])",
-                    cost, current_chi2, energy_weight * current_energy, current_energy)
+                format!(
+                    "cost = {:.4} (chi2: {:.4}, w*E: {:.4} [E: {:.2}])",
+                    cost,
+                    current_chi2,
+                    energy_weight * current_energy,
+                    current_energy
+                )
             } else if has_gr {
-                format!("chi2 = {:.6} (sq: {:.6}, gr: {:.6})", current_chi2, sq_chi2_current, gr_chi2_current)
+                format!(
+                    "chi2 = {:.6} (sq: {:.6}, gr: {:.6})",
+                    current_chi2, sq_chi2_current, gr_chi2_current
+                )
             } else {
                 format!("chi2 = {:.6}", current_chi2)
             };
@@ -890,8 +1035,13 @@ pub fn run_rmc(
             };
             log_println!(
                 "Move {}/{}: {}, accept = {:.3} (recent {:.3}), step = {:.4} A{}",
-                state.move_count, params.max_moves, chi2_str,
-                overall_ratio, ratio, state.max_step, temp_str
+                state.move_count,
+                params.max_moves,
+                chi2_str,
+                overall_ratio,
+                ratio,
+                state.max_step,
+                temp_str
             );
         }
 
@@ -919,11 +1069,13 @@ pub fn run_rmc(
             if let Some(ref f) = checkpoint_fn {
                 f(&state, config);
             }
-
         }
 
         // Convergence check (skip while annealing is still active)
-        if conv_active && state.move_count >= conv_next_check && temperature <= params.anneal_end * 1.01 {
+        if conv_active
+            && state.move_count >= conv_next_check
+            && temperature <= params.anneal_end * 1.01
+        {
             let improvement = conv_chi2 - current_chi2;
             if improvement < params.convergence_threshold {
                 log_println!(
@@ -934,7 +1086,10 @@ pub fn run_rmc(
             }
             conv_chi2 = current_chi2;
             conv_next_check += params.convergence_window;
-        } else if conv_active && state.move_count >= conv_next_check && temperature > params.anneal_end * 1.01 {
+        } else if conv_active
+            && state.move_count >= conv_next_check
+            && temperature > params.anneal_end * 1.01
+        {
             // Reset baseline during annealing so first post-anneal check has a fresh reference
             conv_chi2 = current_chi2;
             conv_next_check += params.convergence_window;
@@ -943,7 +1098,11 @@ pub fn run_rmc(
 
     // Restore best structure
     if best_chi2 < state.chi2 {
-        log_println!("\nRestoring best structure from move {} (chi2 = {:.6})", best_move, best_chi2);
+        log_println!(
+            "\nRestoring best structure from move {} (chi2 = {:.6})",
+            best_move,
+            best_chi2
+        );
         for (i, atom) in config.atoms.iter_mut().enumerate() {
             atom.position = best_positions[i];
         }
@@ -953,7 +1112,10 @@ pub fn run_rmc(
     log_println!("\nRMC refinement complete.");
     log_println!(
         "Final chi2 = {:.6} (best at move {}), accepted {}/{} ({:.1}%)",
-        state.chi2, best_move, state.accepted, state.move_count,
+        state.chi2,
+        best_move,
+        state.accepted,
+        state.move_count,
         100.0 * state.accepted as f64 / state.move_count.max(1) as f64
     );
 

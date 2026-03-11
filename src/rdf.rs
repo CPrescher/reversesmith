@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-
 use crate::atoms::Configuration;
 
 /// Partial pair distribution functions g_ab(r) computed from atomic positions.
