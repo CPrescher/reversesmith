@@ -14,15 +14,35 @@ use reversesmith::{log_println, log_eprintln};
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        eprintln!("Usage: reversesmith <config.toml> [--compute-sq-only] [--analyze [structure.xyz]]");
+        eprintln!("Usage: reversesmith <config.toml> [OPTIONS]");
+        eprintln!("Options:");
+        eprintln!("  --compute-sq-only          Compute S(Q) and exit");
+        eprintln!("  --analyze [structure.xyz]   Run structural analysis");
+        eprintln!("  --output-dir DIR            Write output to DIR instead of config directory");
+        eprintln!("  --seed N                    Override RNG seed (default: random)");
+        eprintln!("  --quiet                     Suppress terminal output (log file only)");
         process::exit(1);
     }
-
-    reversesmith::logging::init_log_file();
 
     let config_path = Path::new(&args[1]);
     let compute_sq_only = args.iter().any(|a| a == "--compute-sq-only");
     let analyze_mode = args.iter().any(|a| a == "--analyze");
+    let quiet_mode = args.iter().any(|a| a == "--quiet");
+
+    // --seed N
+    let cli_seed: Option<u64> = args
+        .iter()
+        .position(|a| a == "--seed")
+        .and_then(|pos| args.get(pos + 1))
+        .and_then(|s| s.parse().ok());
+
+    // --output-dir DIR
+    let cli_output_dir: Option<PathBuf> = args
+        .iter()
+        .position(|a| a == "--output-dir")
+        .and_then(|pos| args.get(pos + 1))
+        .map(PathBuf::from);
+
     // Optional structure path override after --analyze
     let analyze_structure: Option<String> = args
         .iter()
@@ -36,6 +56,17 @@ fn main() {
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .to_path_buf();
+
+    // Output directory: --output-dir overrides config_dir
+    let output_dir = cli_output_dir.unwrap_or_else(|| config_dir.clone());
+    std::fs::create_dir_all(&output_dir).unwrap_or_else(|e| {
+        eprintln!("Error creating output directory {}: {}", output_dir.display(), e);
+        process::exit(1);
+    });
+
+    // Init logging
+    reversesmith::logging::set_quiet(quiet_mode);
+    reversesmith::logging::init_log_file_in(&output_dir);
 
     let cfg = Config::load(config_path).unwrap_or_else(|e| {
         log_eprintln!("Error loading config: {}", e);
@@ -121,18 +152,31 @@ fn main() {
         );
     }
 
-    let params = cfg.rmc_params();
+    let mut params = cfg.rmc_params();
+
+    // Seed priority: CLI --seed > TOML seed > random from entropy
+    if let Some(seed) = cli_seed {
+        params.seed = seed;
+        log_println!("  RNG seed (CLI): {}", seed);
+    } else if cfg.rmc.seed.is_some() {
+        log_println!("  RNG seed (config): {}", params.seed);
+    } else {
+        let seed: u64 = rand::random();
+        params.seed = seed;
+        log_println!("  RNG seed (random): {}", seed);
+    }
+
     let rho0 = config.number_density();
 
     // --- Analyze mode ---
     if analyze_mode {
         if analyze_structure.is_some() {
             // Explicit path: analyze just that one structure
-            run_analysis(&config, &cfg, &config_dir, "analysis");
+            run_analysis(&config, &cfg, &output_dir, "analysis");
         } else {
             // No explicit path: analyze starting structure, then refined if it exists
-            run_analysis(&config, &cfg, &config_dir, "starting");
-            let refined_path = config_dir.join("refined.xyz");
+            run_analysis(&config, &cfg, &output_dir, "starting");
+            let refined_path = output_dir.join("refined.xyz");
             if refined_path.exists() {
                 log_println!("\n{}", "=".repeat(60));
                 let refined = io::read_xyz(&refined_path).unwrap_or_else(|e| {
@@ -146,7 +190,7 @@ fn main() {
                     refined.species.len(),
                     refined.species
                 );
-                run_analysis(&refined, &cfg, &config_dir, "refined");
+                run_analysis(&refined, &cfg, &output_dir, "refined");
             }
         }
         reversesmith::logging::flush_log_file();
@@ -155,7 +199,7 @@ fn main() {
 
     // --- Compute S(Q) mode ---
     if compute_sq_only {
-        compute_sq_and_exit(&config, &params, rho0, &config_dir, &cfg);
+        compute_sq_and_exit(&config, &params, rho0, &config_dir, &output_dir, &cfg);
         reversesmith::logging::flush_log_file();
         return;
     }
@@ -291,6 +335,55 @@ fn main() {
         None
     };
 
+    // --- Save starting structure S(Q) and g(r) ---
+    {
+        log_println!("\nComputing starting structure S(Q) and g(r)...");
+        let rdf_dr = params.rdf_cutoff / params.rdf_nbins as f64;
+        let histograms = rdf::compute_histograms(&config, params.rdf_nbins, params.rdf_cutoff);
+        let partials_gr =
+            rdf::normalise_histograms(&histograms, &config, params.rdf_nbins, rdf_dr);
+        let r_grid: Vec<f64> = (0..params.rdf_nbins)
+            .map(|i| (i as f64 + 0.5) * rdf_dr)
+            .collect();
+        let partial_sq =
+            sq::compute_all_partial_sq(&r_grid, &partials_gr, rho0, &params.q_grid, params.lorch);
+        let sx = xray::compute_xray_sq(&config, &partial_sq, &params.q_grid);
+
+        let sq_path = output_dir.join("start_sq.dat");
+        io::write_sq(&sq_path, &params.q_grid, &sx).unwrap();
+        log_println!("  Saved starting S(Q) to {:?}", sq_path);
+
+        // Save starting total X-ray g(r) via inverse FT
+        if !gr_datasets.is_empty() {
+            let gd0 = &gr_datasets[0];
+            let qmax_gr = gd0.qmax;
+            let use_lorch = gd0.lorch;
+            let dq = if params.q_grid.len() > 1 { params.q_grid[1] - params.q_grid[0] } else { 1.0 };
+            let r_out: Vec<f64> = (0..params.rdf_nbins)
+                .map(|i| (i as f64 + 0.5) * rdf_dr)
+                .collect();
+            let total_gr: Vec<f64> = r_out.iter().map(|&ri| {
+                if ri < 1e-10 { return 1.0; }
+                let pref = dq / (2.0 * std::f64::consts::PI * std::f64::consts::PI * rho0 * ri);
+                let mut val = 1.0;
+                for (k, &qk) in params.q_grid.iter().enumerate() {
+                    if qk > qmax_gr { break; }
+                    let window = if use_lorch {
+                        let arg = std::f64::consts::PI * qk / qmax_gr;
+                        if arg > 1e-10 { arg.sin() / arg } else { 1.0 }
+                    } else {
+                        1.0
+                    };
+                    val += pref * qk * window * (sx[k] - 1.0) * (qk * ri).sin();
+                }
+                val
+            }).collect();
+            let gr_path = output_dir.join("start_gr.dat");
+            io::write_gr(&gr_path, &r_out, &total_gr).unwrap();
+            log_println!("  Saved starting g(r) to {:?}", gr_path);
+        }
+    }
+
     // --- RMC refinement ---
     log_println!("\nStarting RMC refinement:");
     log_println!("  max_moves = {}", params.max_moves);
@@ -305,7 +398,7 @@ fn main() {
     }
     log_println!();
 
-    let checkpoint_dir = config_dir.clone();
+    let checkpoint_dir = output_dir.clone();
     let checkpoint_fn: Option<Box<dyn Fn(&rmc::RmcState, &reversesmith::atoms::Configuration)>> =
         Some(Box::new(move |state, cfg| {
             let path = checkpoint_dir.join("checkpoint.dat");
@@ -327,7 +420,7 @@ fn main() {
     );
 
     // --- Save results ---
-    let output_xyz = config_dir.join("refined.xyz");
+    let output_xyz = output_dir.join("refined.xyz");
     log_println!("\nSaving refined structure to {:?}", output_xyz);
     io::write_xyz(&output_xyz, &config).unwrap();
 
@@ -343,7 +436,7 @@ fn main() {
         sq::compute_all_partial_sq(&r_grid, &partials_gr, rho0, &params.q_grid, params.lorch);
     let sx = xray::compute_xray_sq(&config, &partial_sq, &params.q_grid);
 
-    let output_sq = config_dir.join("refined_sq.dat");
+    let output_sq = output_dir.join("refined_sq.dat");
     log_println!("Saving refined S(Q) to {:?}", output_sq);
     io::write_sq(&output_sq, &params.q_grid, &sx).unwrap();
 
@@ -372,7 +465,7 @@ fn main() {
             }
             val
         }).collect();
-        let output_gr = config_dir.join("refined_total_gr.dat");
+        let output_gr = output_dir.join("refined_total_gr.dat");
         log_println!("Saving refined total X-ray g(r) to {:?}", output_gr);
         io::write_gr(&output_gr, &r_out, &total_gr).unwrap();
     }
@@ -387,6 +480,7 @@ fn compute_sq_and_exit(
     params: &RmcParams,
     rho0: f64,
     config_dir: &Path,
+    output_dir: &Path,
     cfg: &Config,
 ) {
     log_println!("\nComputing partial RDFs...");
@@ -424,12 +518,12 @@ fn compute_sq_and_exit(
     log_println!("Computing total X-ray S(Q)...");
     let sx = xray::compute_xray_sq(config, &partial_sq, &params.q_grid);
 
-    let output_sq = config_dir.join("computed_sq.dat");
+    let output_sq = output_dir.join("computed_sq.dat");
     log_println!("Saving computed S(Q) to {:?}", output_sq);
     io::write_sq(&output_sq, &params.q_grid, &sx).unwrap();
 
     // Also save partial g(r) for validation
-    let output_gr = config_dir.join("computed_gr.dat");
+    let output_gr = output_dir.join("computed_gr.dat");
     {
         let mut file = std::fs::File::create(&output_gr).unwrap();
         use std::io::Write;
@@ -481,7 +575,7 @@ fn compute_sq_and_exit(
             }
             val
         }).collect();
-        let output_total_gr = config_dir.join("computed_total_gr.dat");
+        let output_total_gr = output_dir.join("computed_total_gr.dat");
         log_println!("Saving total X-ray g(r) to {:?}", output_total_gr);
         io::write_gr(&output_total_gr, &r_out, &total_gr).unwrap();
     }
@@ -510,7 +604,7 @@ fn compute_sq_and_exit(
 fn run_analysis(
     config: &reversesmith::atoms::Configuration,
     cfg: &Config,
-    config_dir: &Path,
+    output_dir: &Path,
     label: &str,
 ) {
     let pair_cutoffs = cfg.analysis_pairs();
@@ -549,14 +643,14 @@ fn run_analysis(
 
     analyze::print_analysis_summary(&cn_results, &angle_results);
 
-    let cn_path = config_dir.join(format!("analysis_{}_cn.dat", label));
+    let cn_path = output_dir.join(format!("analysis_{}_cn.dat", label));
     analyze::write_cn_histograms(&cn_path, &cn_results).unwrap_or_else(|e| {
         log_eprintln!("Error writing CN histograms: {}", e);
     });
     log_println!("\nWrote CN histograms to {:?}", cn_path);
 
     if !angle_results.is_empty() {
-        let angle_path = config_dir.join(format!("analysis_{}_angles.dat", label));
+        let angle_path = output_dir.join(format!("analysis_{}_angles.dat", label));
         analyze::write_angle_histograms(&angle_path, &angle_results).unwrap_or_else(|e| {
             log_eprintln!("Error writing angle histograms: {}", e);
         });

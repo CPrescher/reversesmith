@@ -1,14 +1,29 @@
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
 static LOG_FILE: OnceLock<Mutex<BufWriter<File>>> = OnceLock::new();
+static QUIET: AtomicBool = AtomicBool::new(false);
 
-/// Create/overwrite `reversesmith.log` in the current working directory.
+/// Suppress terminal output (log file only).
+pub fn set_quiet(quiet: bool) {
+    QUIET.store(quiet, Ordering::Relaxed);
+}
+
+/// Check whether quiet mode is active.
+pub fn is_quiet() -> bool {
+    QUIET.load(Ordering::Relaxed)
+}
+
+/// Create/overwrite `reversesmith.log` in the given directory.
 /// Panics if the file cannot be created (fail fast).
-pub fn init_log_file() {
-    let file = File::create("reversesmith.log").expect("Failed to create reversesmith.log");
+pub fn init_log_file_in(dir: &Path) {
+    let path = dir.join("reversesmith.log");
+    let file = File::create(&path)
+        .unwrap_or_else(|e| panic!("Failed to create {}: {}", path.display(), e));
     let writer = BufWriter::new(file);
     LOG_FILE
         .set(Mutex::new(writer))
@@ -23,6 +38,12 @@ pub fn init_log_file() {
         "# reversesmith log — {} UTC\n# cwd: {}\n",
         timestamp, cwd
     ));
+}
+
+/// Create/overwrite `reversesmith.log` in the current working directory.
+/// Panics if the file cannot be created (fail fast).
+pub fn init_log_file() {
+    init_log_file_in(Path::new("."));
 }
 
 /// Flush the log buffer. Call at the end of main().
@@ -89,13 +110,17 @@ fn format_utc_timestamp() -> String {
 #[macro_export]
 macro_rules! log_println {
     () => {
-        println!();
+        if !$crate::logging::is_quiet() {
+            println!();
+        }
         $crate::logging::writeln_to_log("");
     };
     ($($arg:tt)*) => {
         {
             let msg = format!($($arg)*);
-            println!("{}", msg);
+            if !$crate::logging::is_quiet() {
+                println!("{}", msg);
+            }
             $crate::logging::writeln_to_log(&msg);
         }
     };
@@ -107,7 +132,9 @@ macro_rules! log_eprintln {
     ($($arg:tt)*) => {
         {
             let msg = format!($($arg)*);
-            eprintln!("{}", msg);
+            if !$crate::logging::is_quiet() {
+                eprintln!("{}", msg);
+            }
             $crate::logging::writeln_to_log(&msg);
         }
     };
@@ -119,7 +146,9 @@ macro_rules! log_print {
     ($($arg:tt)*) => {
         {
             let msg = format!($($arg)*);
-            print!("{}", msg);
+            if !$crate::logging::is_quiet() {
+                print!("{}", msg);
+            }
             $crate::logging::write_to_log(&msg);
         }
     };
