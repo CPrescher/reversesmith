@@ -1,35 +1,21 @@
 # Supported Elements
 
+All elements from hydrogen (Z=1) through californium (Z=98) are supported for X-ray form factors, molar masses, and (where applicable) neutron scattering.
+
 ## X-ray form factors
 
-Cromer-Mann parameterization of atomic form factors f(Q):
+Cromer-Mann 9-parameter fits from the International Tables for Crystallography, Vol C (2004). All neutral atoms Z=1–98 are included:
 
-| Element | Supported |
-|---------|-----------|
-| Ca | Yes |
-| Si | Yes |
-| O  | Yes |
-| Na | Yes |
-| Al | Yes |
-| Mg | Yes |
+H, He, Li, Be, B, C, N, O, F, Ne, Na, Mg, Al, Si, P, S, Cl, Ar, K, Ca, Sc, Ti, V, Cr, Mn, Fe, Co, Ni, Cu, Zn, Ga, Ge, As, Se, Br, Kr, Rb, Sr, Y, Zr, Nb, Mo, Tc, Ru, Rh, Pd, Ag, Cd, In, Sn, Sb, Te, I, Xe, Cs, Ba, La, Ce, Pr, Nd, Pm, Sm, Eu, Gd, Tb, Dy, Ho, Er, Tm, Yb, Lu, Hf, Ta, W, Re, Os, Ir, Pt, Au, Hg, Tl, Pb, Bi, Po, At, Rn, Fr, Ra, Ac, Th, Pa, U, Np, Pu, Am, Cm, Bk, Cf
 
 ## Neutron scattering lengths
 
-Coherent neutron scattering lengths b (fm):
+Coherent neutron scattering lengths (fm) from the NIST Center for Neutron Research are provided for most stable elements up to uranium. Notable elements with large absorption cross-sections (e.g., Cd, Sm, Gd) are included but should be used with care.
 
-| Element | b (fm) |
-|---------|--------|
-| Ca | 4.70 |
-| Si | 4.149 |
-| O  | 5.803 |
-| Na | 3.63 |
-| Al | 3.449 |
-| Mg | 5.375 |
+## Molar masses
 
-## Adding new elements
+IUPAC 2021 standard atomic weights for Z=1–98. Used for mass density computation and box rescaling.
 
-Additional elements can be added in `src/xray.rs` by providing:
-1. Cromer-Mann coefficients (a1-a4, b1-b4, c) for X-ray form factors
-2. Coherent scattering length for neutron weighting
+## Adding ionic form factors
 
-The Cromer-Mann coefficients are tabulated in the International Tables for Crystallography, Volume C, or in Waasmaier & Kirfel (1995), *Acta Cryst.* A51, 416-431.
+The current tables use neutral-atom form factors. If ionic form factors are needed (e.g., Ca²⁺, O¹⁻), additional entries can be added to the `cromer_mann_params` match table in `src/xray.rs`. The International Tables tabulate coefficients for common valence states.
