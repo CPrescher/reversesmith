@@ -30,9 +30,24 @@ When potentials are active, the energy computation adds O(N_neighbors) distance 
 - **RDF bins**: O(N_bins) per move. Fewer bins (e.g., 275 at 0.04 A resolution) can significantly reduce cost.
 - **Potential cutoff**: Larger cutoff = more neighbours = more overhead for both histograms and potentials.
 
+## RDF cutoff and performance
+
+The `rdf_cutoff` has the largest impact on per-move cost after `nq`. Here is an approximate comparison for 10,000 atoms (box ~51 A, 500 Q points):
+
+| `rdf_cutoff` | `rdf_nbins` | Neighbors/atom | Per-move time | Note |
+|---|---|---|---|---|
+| 11 A | 550 | ~4000 | ~390 us | Fast, FSDP may be inaccurate |
+| 15 A | 750 | ~10000 | ~700 us | Good for most applications |
+| 20 A | 1000 | ~24000 | ~1.5 ms | Accurate FSDP |
+| 25 A | 1250 | ~47000 | ~3 ms | Matches LAMMPS `compute rdf` quality |
+
+The dominant scaling factor is the number of neighbors, which grows as `cutoff^3`. Each neighbor contributes to multiple RDF bins and thus to the incremental S(Q) update.
+
+See [S(Q) Computation](./config/sq.md) for guidance on choosing `rdf_cutoff`.
+
 ## Tips
 
 - Use `cargo build --release` -- debug builds are ~10x slower.
-- Set `rdf_cutoff` and potential `cutoff` no larger than needed.
+- Set `rdf_cutoff` and potential `cutoff` no larger than needed. For quick convergence tests, start with 11--15 A; for publication-quality fits, use 20+ A.
+- Use `--compute-sq-only` to check S(Q) quality at different `rdf_cutoff` values before committing to a long refinement.
 - Run multiple independent replicas with different seeds (trivially parallel) and pick the best result.
-- The `--compute-sq-only` mode is useful for quickly checking S(Q) quality before committing to a long refinement run.

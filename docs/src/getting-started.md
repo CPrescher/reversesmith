@@ -51,7 +51,7 @@ max_step = 0.1
 
 [sq]
 qmax = 20.0
-rdf_cutoff = 11.0
+rdf_cutoff = 20.0     # Use 20+ A for accurate first peak in S(Q)
 
 [constraints.min_distance]
 "Si-O" = 1.2

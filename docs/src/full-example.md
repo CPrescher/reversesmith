@@ -67,8 +67,8 @@ qmin = 0.0
 qmax = 20.0
 nq = 500
 lorch = true
-rdf_cutoff = 15.0     # Must be >= potential cutoff
-rdf_nbins = 750
+rdf_cutoff = 20.0     # Must be >= potential cutoff; 20 A for accurate FSDP
+rdf_nbins = 1000      # dr = 0.02 A
 
 # =============================================================
 # Hard constraints
@@ -137,7 +137,8 @@ angle_triplets = ["O-Si-O", "Si-O-Si", "O-Ca-O", "Ca-O-Si"]
 ## Workflow
 
 ```bash
-# 1. Check the starting structure
+# 1. Check S(Q) quality -- compare initial S(Q) with experiment
+#    If the first peak (FSDP) is underestimated, increase rdf_cutoff
 reversesmith config.toml --compute-sq-only
 
 # 2. Run refinement
