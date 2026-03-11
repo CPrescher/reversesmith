@@ -24,6 +24,9 @@ pub struct SystemConfig {
     pub structure: String,
     pub format: String,
     pub types: Option<HashMap<String, String>>,
+    /// Target mass density in g/cm^3.  When set, the box and atom positions
+    /// are rescaled isotropically before any computation begins.
+    pub density: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]

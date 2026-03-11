@@ -1,5 +1,35 @@
 use std::collections::HashMap;
 
+/// Return the standard molar mass (g/mol) for a given element symbol.
+pub fn molar_mass(element: &str) -> f64 {
+    match element {
+        "H"  =>   1.008,
+        "Li" =>   6.941,
+        "B"  =>  10.81,
+        "C"  =>  12.011,
+        "N"  =>  14.007,
+        "O"  =>  15.999,
+        "F"  =>  18.998,
+        "Na" =>  22.990,
+        "Mg" =>  24.305,
+        "Al" =>  26.982,
+        "Si" =>  28.086,
+        "P"  =>  30.974,
+        "S"  =>  32.06,
+        "Cl" =>  35.45,
+        "K"  =>  39.098,
+        "Ca" =>  40.078,
+        "Ti" =>  47.867,
+        "Fe" =>  55.845,
+        "Zn" =>  65.38,
+        "Ge" =>  72.63,
+        "Ba" => 137.327,
+        "La" => 138.905,
+        "Pb" => 207.2,
+        _ => panic!("molar_mass: unknown element '{}'", element),
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Atom {
     pub position: [f64; 3],
@@ -75,6 +105,19 @@ impl Configuration {
     /// Total number density.
     pub fn number_density(&self) -> f64 {
         self.atoms.len() as f64 / self.volume()
+    }
+
+    /// Mass density in g/cm^3.
+    pub fn mass_density(&self) -> f64 {
+        let na: f64 = 6.02214076e23;
+        // total mass in g/mol
+        let total_mass: f64 = self
+            .composition
+            .iter()
+            .map(|(el, &n)| n as f64 * molar_mass(el))
+            .sum();
+        // volume in A^3 -> cm^3: 1 A^3 = 1e-24 cm^3
+        (total_mass / self.volume()) * (1e24 / na)
     }
 
     /// Number of distinct type pairs (upper triangle including diagonal).

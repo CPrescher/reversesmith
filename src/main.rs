@@ -95,6 +95,32 @@ fn main() {
         config.number_density()
     );
 
+    // --- Optional density rescaling ---
+    if let Some(target_density) = cfg.system.density {
+        let current_density = config.mass_density();
+        let scale = (current_density / target_density).cbrt();
+        log_println!(
+            "\nRescaling box to target density {:.4} g/cm^3 (current: {:.4} g/cm^3, scale factor: {:.6})",
+            target_density, current_density, scale
+        );
+        for d in 0..3 {
+            config.box_lengths[d] *= scale;
+        }
+        for atom in &mut config.atoms {
+            for d in 0..3 {
+                atom.position[d] *= scale;
+            }
+        }
+        log_println!(
+            "  New box: {:.4} x {:.4} x {:.4} A",
+            config.box_lengths[0], config.box_lengths[1], config.box_lengths[2]
+        );
+        log_println!(
+            "  New volume = {:.1} A^3, rho0 = {:.6} atoms/A^3, density = {:.4} g/cm^3",
+            config.volume(), config.number_density(), config.mass_density()
+        );
+    }
+
     let params = cfg.rmc_params();
     let rho0 = config.number_density();
 
