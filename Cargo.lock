@@ -111,7 +111,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "reversesmith"
+name = "rsmith"
 version = "1.0.0"
 dependencies = [
  "rand",

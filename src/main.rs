@@ -1,20 +1,20 @@
 use std::path::{Path, PathBuf};
 use std::process;
 
-use reversesmith::analyze;
-use reversesmith::config::Config;
-use reversesmith::io;
-use reversesmith::potential::PotentialSet;
-use reversesmith::rdf;
-use reversesmith::rmc::{self, DataKind, ExperimentalData, ExperimentalGrData, RmcParams};
-use reversesmith::sq;
-use reversesmith::xray;
-use reversesmith::{log_println, log_eprintln};
+use rsmith::analyze;
+use rsmith::config::Config;
+use rsmith::io;
+use rsmith::potential::PotentialSet;
+use rsmith::rdf;
+use rsmith::rmc::{self, DataKind, ExperimentalData, ExperimentalGrData, RmcParams};
+use rsmith::sq;
+use rsmith::xray;
+use rsmith::{log_println, log_eprintln};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        eprintln!("Usage: reversesmith <config.toml> [OPTIONS]");
+        eprintln!("Usage: rsmith <config.toml> [OPTIONS]");
         eprintln!("Options:");
         eprintln!("  --compute-sq-only          Compute S(Q) and exit");
         eprintln!("  --analyze [structure.xyz]   Run structural analysis");
@@ -67,8 +67,8 @@ fn main() {
     });
 
     // Init logging
-    reversesmith::logging::set_quiet(quiet_mode);
-    reversesmith::logging::init_log_file_in(&output_dir);
+    rsmith::logging::set_quiet(quiet_mode);
+    rsmith::logging::init_log_file_in(&output_dir);
 
     let cfg = Config::load(config_path).unwrap_or_else(|e| {
         log_eprintln!("Error loading config: {}", e);
@@ -223,14 +223,14 @@ fn main() {
                 run_analysis(&refined, &cfg, &output_dir, "refined");
             }
         }
-        reversesmith::logging::flush_log_file();
+        rsmith::logging::flush_log_file();
         return;
     }
 
     // --- Compute S(Q) mode ---
     if compute_sq_only {
         compute_sq_and_exit(&config, &params, rho0, &config_dir, &output_dir, &cfg);
-        reversesmith::logging::flush_log_file();
+        rsmith::logging::flush_log_file();
         return;
     }
 
@@ -452,7 +452,7 @@ fn main() {
     log_println!();
 
     let checkpoint_dir = output_dir.clone();
-    let checkpoint_fn: Option<Box<dyn Fn(&rmc::RmcState, &reversesmith::atoms::Configuration)>> =
+    let checkpoint_fn: Option<Box<dyn Fn(&rmc::RmcState, &rsmith::atoms::Configuration)>> =
         Some(Box::new(move |state, cfg| {
             let path = checkpoint_dir.join("checkpoint.dat");
             if let Err(e) = io::write_checkpoint(&path, state, cfg) {
@@ -551,12 +551,12 @@ fn main() {
     }
 
     log_println!("\nDone. Final chi2 = {:.6}", state.chi2);
-    reversesmith::logging::flush_log_file();
+    rsmith::logging::flush_log_file();
 }
 
 /// Compute S(Q) from the initial structure and exit (no RMC).
 fn compute_sq_and_exit(
-    config: &reversesmith::atoms::Configuration,
+    config: &rsmith::atoms::Configuration,
     params: &RmcParams,
     rho0: f64,
     config_dir: &Path,
@@ -682,7 +682,7 @@ fn compute_sq_and_exit(
 }
 
 fn run_analysis(
-    config: &reversesmith::atoms::Configuration,
+    config: &rsmith::atoms::Configuration,
     cfg: &Config,
     output_dir: &Path,
     label: &str,

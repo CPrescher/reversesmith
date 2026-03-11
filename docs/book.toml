@@ -2,10 +2,10 @@
 authors = ["Clemens Prescher"]
 language = "en"
 src = "src"
-title = "Reversesmith"
+title = "rsmith"
 description = "Reverse Monte Carlo structure refinement against scattering data"
 
 [output.html]
 default-theme = "light"
 preferred-dark-theme = "ayu"
-git-repository-url = "https://github.com/CPrescher/reversesmith"
+git-repository-url = "https://github.com/CPrescher/rsmith"

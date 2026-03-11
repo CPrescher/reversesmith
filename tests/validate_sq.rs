@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use reversesmith::atoms::Configuration;
-use reversesmith::io;
-use reversesmith::rdf;
-use reversesmith::sq;
-use reversesmith::xray;
+use rsmith::atoms::Configuration;
+use rsmith::io;
+use rsmith::rdf;
+use rsmith::sq;
+use rsmith::xray;
 
 #[test]
 fn test_load_lammps_data() {
@@ -102,12 +102,12 @@ fn test_sq_normalisation() {
 fn test_pbc_distance() {
     let config = Configuration {
         atoms: vec![
-            reversesmith::atoms::Atom {
+            rsmith::atoms::Atom {
                 position: [0.5, 0.5, 0.5],
                 species: "A".to_string(),
                 type_id: 0,
             },
-            reversesmith::atoms::Atom {
+            rsmith::atoms::Atom {
                 position: [9.5, 9.5, 9.5],
                 species: "A".to_string(),
                 type_id: 0,

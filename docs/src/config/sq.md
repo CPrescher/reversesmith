@@ -62,11 +62,11 @@ where L is the shortest box dimension. Use `--compute-sq-only` to check S(Q) qua
 
 ### Comparison with LAMMPS
 
-If you compare the initial S(Q) from reversesmith with one computed from the same structure in LAMMPS (e.g., via `compute rdf`), differences typically arise from:
+If you compare the initial S(Q) from rsmith with one computed from the same structure in LAMMPS (e.g., via `compute rdf`), differences typically arise from:
 
-1. **RDF cutoff**: LAMMPS often uses 20--25 A cutoffs for `compute rdf` while reversesmith defaults to 10 A. This is usually the dominant source of discrepancy, particularly for the first peak.
+1. **RDF cutoff**: LAMMPS often uses 20--25 A cutoffs for `compute rdf` while rsmith defaults to 10 A. This is usually the dominant source of discrepancy, particularly for the first peak.
 2. **Trajectory averaging vs. single snapshot**: LAMMPS `fix ave/time` averages g(r) over many frames, producing smoother curves. Reversesmith uses a single snapshot, so the g(r) has more statistical noise.
-3. **Form factor source**: reversesmith uses Cromer-Mann parameterization; other tools may use xraylib. These are very similar but not identical at high Q.
+3. **Form factor source**: rsmith uses Cromer-Mann parameterization; other tools may use xraylib. These are very similar but not identical at high Q.
 
 To achieve agreement with LAMMPS-derived S(Q), increase `rdf_cutoff` to match the LAMMPS `compute rdf` cutoff.
 

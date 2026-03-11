@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot reversesmith computed S(Q) and g(r) against experimental data."""
+"""Plot rsmith computed S(Q) and g(r) against experimental data."""
 
 import os
 import re
@@ -111,7 +111,7 @@ ax.set(
     xlabel="r (Å)",
     ylabel="g(r)",
     xlim=(0, 10),
-    title="Partial pair distribution functions — reversesmith",
+    title="Partial pair distribution functions — rsmith",
 )
 ax.legend(ncol=2)
 

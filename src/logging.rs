@@ -18,10 +18,10 @@ pub fn is_quiet() -> bool {
     QUIET.load(Ordering::Relaxed)
 }
 
-/// Create/overwrite `reversesmith.log` in the given directory.
+/// Create/overwrite `rsmith.log` in the given directory.
 /// Panics if the file cannot be created (fail fast).
 pub fn init_log_file_in(dir: &Path) {
-    let path = dir.join("reversesmith.log");
+    let path = dir.join("rsmith.log");
     let file = File::create(&path)
         .unwrap_or_else(|e| panic!("Failed to create {}: {}", path.display(), e));
     let writer = BufWriter::new(file);
@@ -35,12 +35,12 @@ pub fn init_log_file_in(dir: &Path) {
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| "<unknown>".to_string());
     writeln_to_log(&format!(
-        "# reversesmith log — {} UTC\n# cwd: {}\n",
+        "# rsmith log — {} UTC\n# cwd: {}\n",
         timestamp, cwd
     ));
 }
 
-/// Create/overwrite `reversesmith.log` in the current working directory.
+/// Create/overwrite `rsmith.log` in the current working directory.
 /// Panics if the file cannot be created (fail fast).
 pub fn init_log_file() {
     init_log_file_in(Path::new("."));

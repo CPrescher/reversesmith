@@ -23,7 +23,7 @@ density = 3.27                 # Optional: target mass density in g/cm^3
 
 ## Density rescaling
 
-When `density` is set, reversesmith computes the current mass density of the input structure and derives an isotropic scale factor `(current/target)^(1/3)`. Both box dimensions and all atom positions are multiplied by this factor. This is useful for high-pressure simulations where the input structure's box size doesn't match the desired density.
+When `density` is set, rsmith computes the current mass density of the input structure and derives an isotropic scale factor `(current/target)^(1/3)`. Both box dimensions and all atom positions are multiplied by this factor. This is useful for high-pressure simulations where the input structure's box size doesn't match the desired density.
 
 The rescaling happens before S(Q)/g(r) computation and before RMC refinement, so all output reflects the target density.
 

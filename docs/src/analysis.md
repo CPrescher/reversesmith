@@ -6,10 +6,10 @@ Post-refinement validation of coordination environments and bond angle distribut
 
 ```bash
 # Compare starting vs. refined structure (automatic)
-reversesmith config.toml --analyze
+rsmith config.toml --analyze
 
 # Analyze a specific structure
-reversesmith config.toml --analyze some_structure.xyz
+rsmith config.toml --analyze some_structure.xyz
 ```
 
 **Without an explicit path**, `--analyze` runs the analysis twice:

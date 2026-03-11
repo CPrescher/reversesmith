@@ -90,7 +90,7 @@ The energy of an MD-equilibrated structure is large and negative (e.g., -85000 e
 
 ### Which potential to use
 
-Use the **same potential that generated your starting structure**. If you ran MD with Pedone + Coulomb in LAMMPS, use Pedone + Coulomb in reversesmith. This ensures the energy surface the RMC explores is consistent with the initial equilibrium structure.
+Use the **same potential that generated your starting structure**. If you ran MD with Pedone + Coulomb in LAMMPS, use Pedone + Coulomb in rsmith. This ensures the energy surface the RMC explores is consistent with the initial equilibrium structure.
 
 If you don't have analytical parameters, you can export tabulated potentials from LAMMPS using `pair_write` and use the `[[potential.tabulated]]` format.
 
@@ -144,7 +144,7 @@ pair_write 1 3 5000 r 0.5 15.0 CaO_potential.dat Ca-O
 ## Example workflow
 
 1. Run MD with Pedone + Coulomb in LAMMPS to generate starting structure
-2. Set up reversesmith with the same potential parameters
+2. Set up rsmith with the same potential parameters
 3. Run with `weight = 0` first to establish baseline chi2
 4. Check calibration output for suggested weight
 5. Run with suggested weight, monitor chi2 and E

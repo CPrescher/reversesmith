@@ -21,7 +21,7 @@ Refined structure (after refinement completes):
 | `refined_gr.dat` | All partial g(r) functions of the refined structure |
 | `refined_total_gr.dat` | Final computed total X-ray g(r) via inverse FT |
 | `checkpoint.dat` | Periodic checkpoint; use `--resume` to continue from it |
-| `reversesmith.log` | Full log of the run |
+| `rsmith.log` | Full log of the run |
 
 ## `--compute-sq-only`
 

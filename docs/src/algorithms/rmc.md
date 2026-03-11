@@ -25,7 +25,7 @@ The sum runs only over data points within the specified fit range. When no poten
 
 ## Incremental S(Q) updates
 
-Recomputing S(Q) from scratch after each atom move would be O(N^2). Instead, reversesmith uses incremental updates:
+Recomputing S(Q) from scratch after each atom move would be O(N^2). Instead, rsmith uses incremental updates:
 
 1. **Histogram delta**: Compute the RDF histogram contribution of the moved atom at its old and new positions using the cell list. Only bins that change contribute to the S(Q) update.
 

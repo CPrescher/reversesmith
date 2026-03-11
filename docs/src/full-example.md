@@ -139,13 +139,13 @@ angle_triplets = ["O-Si-O", "Si-O-Si", "O-Ca-O", "Ca-O-Si"]
 ```bash
 # 1. Check S(Q) quality -- compare initial S(Q) with experiment
 #    If the first peak (FSDP) is underestimated, increase rdf_cutoff
-reversesmith config.toml --compute-sq-only
+rsmith config.toml --compute-sq-only
 
 # 2. Run refinement
-reversesmith config.toml
+rsmith config.toml
 
 # 3. Validate the result
-reversesmith config.toml --analyze
+rsmith config.toml --analyze
 ```
 
 ## Expected output

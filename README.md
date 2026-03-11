@@ -1,4 +1,4 @@
-# Reversesmith
+# rsmith
 
 A Reverse Monte Carlo (RMC) structure refinement tool written in Rust. Refines atomic structures against experimental X-ray and neutron scattering data while enforcing physical constraints and pair potentials.
 
@@ -15,7 +15,7 @@ A Reverse Monte Carlo (RMC) structure refinement tool written in Rust. Refines a
 
 ```bash
 cargo build --release
-./target/release/reversesmith config.toml
+./target/release/rsmith config.toml
 ```
 
 Minimal `config.toml`:
@@ -49,14 +49,14 @@ rdf_cutoff = 11.0
 ## Modes
 
 ```bash
-reversesmith config.toml                      # RMC refinement
-reversesmith config.toml --compute-sq-only    # Compute S(Q) only
-reversesmith config.toml --analyze            # Structural analysis
+rsmith config.toml                      # RMC refinement
+rsmith config.toml --compute-sq-only    # Compute S(Q) only
+rsmith config.toml --analyze            # Structural analysis
 ```
 
 ## Documentation
 
-Full documentation is available at [reversesmith book](docs/src/SUMMARY.md) or build locally:
+Full documentation is available at [rsmith book](docs/src/SUMMARY.md) or build locally:
 
 ```bash
 cd docs && mdbook serve

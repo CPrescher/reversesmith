@@ -255,7 +255,7 @@ pub fn write_gr(path: &Path, r: &[f64], gr: &[f64]) -> io::Result<()> {
 /// Serialize RMC state to a checkpoint file (simple text format).
 pub fn write_checkpoint(path: &Path, state: &RmcState, config: &Configuration) -> io::Result<()> {
     let mut file = fs::File::create(path)?;
-    writeln!(file, "# reversesmith checkpoint")?;
+    writeln!(file, "# rsmith checkpoint")?;
     writeln!(file, "move_count {}", state.move_count)?;
     writeln!(file, "accepted {}", state.accepted)?;
     writeln!(file, "chi2 {:.10}", state.chi2)?;

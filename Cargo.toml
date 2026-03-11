@@ -1,5 +1,5 @@
 [package]
-name = "reversesmith"
+name = "rsmith"
 version = "1.0.0"
 edition = "2021"
 description = "Reverse Monte Carlo structure refinement against scattering data"
