@@ -3,6 +3,7 @@ name = "reversesmith"
 version = "1.0.0"
 edition = "2021"
 description = "Reverse Monte Carlo structure refinement against scattering data"
+license = "MIT"
 
 [dependencies]
 rand = "0.8"
