@@ -588,24 +588,31 @@ pub fn run_rmc(
         1.0
     };
 
-    // For each g(r) dataset: build FT matrix M[n_r × nq], compute initial g(r)
+    // For each g(r) dataset: build FT matrix ONLY for fit-range r-points.
+    // This avoids computing g(r) at r-points outside the fit range, which
+    // would otherwise dominate runtime (n_r × nq FMAs per move).
     let mut gr_ft_matrices: Vec<Vec<f64>> = Vec::new();
     let mut gr_cached: Vec<Vec<f64>> = Vec::new();
     let mut gr_scratch: Vec<Vec<f64>> = Vec::new();
+    let mut gr_fit_exp_gr: Vec<Vec<f64>> = Vec::new();
+    let mut gr_fit_exp_sigma2: Vec<Vec<f64>> = Vec::new();
+    let mut gr_n_fit: Vec<usize> = Vec::new();
 
     for gd in gr_data.iter() {
-        let n_r = gd.r.len();
-        // M[i][k] = dq * Q_k * [W(Q_k)] * sin(Q_k * r_i) / (2π²ρ₀ * r_i)
-        // Only include Q_k <= qmax; optionally apply Lorch W(Q) = sin(πQ/Qmax)/(πQ/Qmax)
+        let fit_indices: Vec<usize> = (0..gd.r.len())
+            .filter(|&i| gd.r[i] >= gd.fit_min && gd.r[i] <= gd.fit_max)
+            .collect();
+        let n_fit = fit_indices.len();
+
         let qmax_gr = gd.qmax;
         let use_lorch = gd.lorch;
-        let mut matrix = vec![0.0f64; n_r * nq];
-        for i in 0..n_r {
-            let ri = gd.r[i];
+        let mut matrix = vec![0.0f64; n_fit * nq];
+        for (fi, &orig_i) in fit_indices.iter().enumerate() {
+            let ri = gd.r[orig_i];
             if ri < 1e-10 {
                 continue;
             }
-            let row = i * nq;
+            let row = fi * nq;
             let prefactor = dq / (2.0 * PI * PI * rho0 * ri);
             for k in 0..nq {
                 let qk = params.q_grid[k];
@@ -626,17 +633,11 @@ pub fn run_rmc(
             }
         }
         gr_ft_matrices.push(matrix);
-        gr_cached.push(vec![0.0; n_r]);
-        gr_scratch.push(vec![0.0; n_r]);
-    }
-
-    // Precompute g(r) fitting indices (only points within fit_min..fit_max)
-    let mut gr_fit_indices: Vec<Vec<usize>> = Vec::new();
-    for gd in gr_data.iter() {
-        let indices: Vec<usize> = (0..gd.r.len())
-            .filter(|&i| gd.r[i] >= gd.fit_min && gd.r[i] <= gd.fit_max)
-            .collect();
-        gr_fit_indices.push(indices);
+        gr_cached.push(vec![0.0; n_fit]);
+        gr_scratch.push(vec![0.0; n_fit]);
+        gr_fit_exp_gr.push(fit_indices.iter().map(|&i| gd.gr[i]).collect());
+        gr_fit_exp_sigma2.push(fit_indices.iter().map(|&i| gd.sigma[i] * gd.sigma[i]).collect());
+        gr_n_fit.push(n_fit);
     }
 
     if has_gr {
@@ -645,19 +646,19 @@ pub fn run_rmc(
                 "g(r) dataset {}: {} total points, {} in fit range [{:.2}, {:.2}] A",
                 di,
                 gd.r.len(),
-                gr_fit_indices[di].len(),
+                gr_n_fit[di],
                 gd.fit_min,
                 gd.fit_max
             );
         }
     }
 
-    // Compute initial model g(r) from initial total_sq
+    // Compute initial model g(r) from initial total_sq (fit-range only)
     let mut gr_chi2_current = 0.0;
     for (di, gd) in gr_data.iter().enumerate() {
-        let n_r = gd.r.len();
+        let n_fit = gr_n_fit[di];
         let matrix = &gr_ft_matrices[di];
-        for i in 0..n_r {
+        for i in 0..n_fit {
             let row = i * nq;
             let mut val = 1.0;
             for k in 0..nq {
@@ -666,9 +667,9 @@ pub fn run_rmc(
             gr_cached[di][i] = val;
         }
         let mut chi2 = 0.0;
-        for &i in &gr_fit_indices[di] {
-            let diff = gr_cached[di][i] - gd.gr[i];
-            chi2 += (diff * diff) / (gd.sigma[i] * gd.sigma[i]);
+        for i in 0..n_fit {
+            let diff = gr_cached[di][i] - gr_fit_exp_gr[di][i];
+            chi2 += diff * diff / gr_fit_exp_sigma2[di][i];
         }
         gr_chi2_current += gd.weight * chi2;
     }
@@ -929,17 +930,16 @@ pub fn run_rmc(
             new_sq_chi2 += exp.weight * chi2;
         }
 
-        // Compute new g(r) incrementally and its chi2
-        // Precompute ΔS(Q) vector once (enables auto-vectorization of matvec)
+        // Compute new g(r) incrementally (fit-range only) and its chi2
         let mut new_gr_chi2 = 0.0;
         if has_gr {
             for k in 0..nq {
                 delta_sq_buf[k] = new_total_sq[k] - total_sq[k];
             }
             for (di, gd) in gr_data.iter().enumerate() {
-                let n_r = gd.r.len();
+                let n_fit = gr_n_fit[di];
                 let matrix = &gr_ft_matrices[di];
-                for i in 0..n_r {
+                for i in 0..n_fit {
                     let row = i * nq;
                     let mut delta = 0.0;
                     for k in 0..nq {
@@ -948,9 +948,9 @@ pub fn run_rmc(
                     gr_scratch[di][i] = gr_cached[di][i] + delta;
                 }
                 let mut chi2 = 0.0;
-                for &i in &gr_fit_indices[di] {
-                    let diff = gr_scratch[di][i] - gd.gr[i];
-                    chi2 += (diff * diff) / (gd.sigma[i] * gd.sigma[i]);
+                for i in 0..n_fit {
+                    let diff = gr_scratch[di][i] - gr_fit_exp_gr[di][i];
+                    chi2 += diff * diff / gr_fit_exp_sigma2[di][i];
                 }
                 new_gr_chi2 += gd.weight * chi2;
             }

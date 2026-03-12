@@ -12,8 +12,6 @@ pub struct CellList {
     pub next: Vec<usize>,
     /// `cell_of[atom_idx]` = cell index for this atom.
     pub cell_of: Vec<usize>,
-    /// Precomputed neighbor cell offsets (including self).
-    pub neighbor_offsets: Vec<usize>,
     /// Number of cells total.
     pub n_cells: usize,
 }
@@ -46,20 +44,6 @@ impl CellList {
             head[ci] = i;
         }
 
-        // Precompute neighbor cell offsets (27 neighbors in 3D)
-        let mut neighbor_offsets = Vec::with_capacity(27);
-        for dz in [-1i32, 0, 1] {
-            for dy in [-1i32, 0, 1] {
-                for dx in [-1i32, 0, 1] {
-                    // Compute offset using modular arithmetic trick
-                    let ox = ((dx + nc[0] as i32) % nc[0] as i32) as usize;
-                    let oy = ((dy + nc[1] as i32) % nc[1] as i32) as usize;
-                    let oz = ((dz + nc[2] as i32) % nc[2] as i32) as usize;
-                    neighbor_offsets.push(oz * nc[0] * nc[1] + oy * nc[0] + ox);
-                }
-            }
-        }
-
         CellList {
             nc,
             cell_size,
@@ -67,7 +51,6 @@ impl CellList {
             head,
             next,
             cell_of,
-            neighbor_offsets,
             n_cells,
         }
     }

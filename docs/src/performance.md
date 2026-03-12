@@ -45,6 +45,86 @@ The dominant scaling factor is the number of neighbors, which grows as `cutoff^3
 
 See [S(Q) Computation](./config/sq.md) for guidance on choosing `rdf_cutoff`.
 
+## Optimization history
+
+This section documents optimization attempts and their outcomes, to avoid re-investigating
+dead ends and to record what actually helped.
+
+### Implemented: g(r) fit-range-only FT matrix
+
+**Result: ~10% faster for configs with g(r) data.**
+
+The inverse Fourier transform that converts total S(Q) to model g(r) was computed for all
+r-points in the experimental dataset (e.g., 1001 points for a 0–10 Å range). However, chi2
+is only evaluated over the fit range (e.g., 0–7 Å = 700 points). By building the FT matrix
+and computing the g(r) update only for fit-range points, we eliminate ~30% of the FT work
+without any approximation.
+
+Benchmark (1560-atom CaSiO3, 50K moves, S(Q) + g(r) + Pedone potential):
+- Before: 48.5s
+- After: 43.3s (−10.7%)
+- S(Q)-only configs are unaffected
+
+### Attempted and reverted: combined sin table
+
+**Result: 7–8% regression in S(Q) path.**
+
+Folded `rw[i] * prefactor_sq * inv_q[k]` into `sin_table` to eliminate the separate
+prefactor pass after the bin loop. Despite doing fewer total operations, the combined table
+was consistently slower. The original two-phase approach (accumulate with raw sin values,
+then apply prefactors in a separate pass) appears to optimize better under LLVM — likely
+because the separate passes are individually simpler and more amenable to auto-vectorization.
+
+### Attempted and reverted: Goertzel/Clenshaw recurrence (no sin table)
+
+**Result: 5.5× slower.**
+
+Replaced the 10 MB sin lookup table with on-the-fly computation using the Goertzel
+recurrence `sin(Q_k * r) = 2·cos(dQ·r)·sin(Q_{k-1}·r) − sin(Q_{k-2}·r)`. This eliminates
+all memory bandwidth for the sin table (which exceeds L2 cache). However, the recurrence has
+a sequential data dependency (each value depends on the two previous), which prevents SIMD
+vectorization of the inner loop. The table-based approach auto-vectorizes to 4-wide NEON on
+Apple Silicon, making it ~5× faster despite the cache misses. Hardware prefetching of the
+sequential table access pattern further reduces the memory penalty.
+
+### Investigated but not implemented: affected-pairs-only S(Q) delta
+
+**Estimated savings: <0.5%.**
+
+When moving an atom of type t, only the 3 pair channels involving t (out of 6 for a 3-type
+system) have nonzero histogram deltas. Skipping the other 3 channels avoids scanning 2500
+zero-valued bins and one prefactor pass of 500 multiplies per skipped channel. However, the
+existing `if dh == 0.0 { continue; }` check already short-circuits unaffected bins at
+negligible cost. Total savings: ~9000 trivial operations per move = ~0.1s over 50K moves.
+
+### Investigated but not implemented: sparse bin tracking
+
+**Estimated savings: <0.5%.**
+
+Collect indices of nonzero histogram bins during the histogram computation to avoid scanning
+all 2500 bins in the S(Q) delta loop. The overhead of collecting and storing sparse indices
+offsets the minor savings from skipping zero bins, especially since the `dh == 0.0` branch
+is well-predicted by the CPU.
+
+### Investigated but not implemented: CellList precomputed neighbor table
+
+**Measured cost: <1% of total runtime.**
+
+Profiling confirmed that `CellList::neighbor_cells()` accounts for fewer than 0.02% of
+samples. Precomputing a neighbor table adds complexity with no measurable benefit.
+
+### Bottleneck analysis
+
+The S(Q) delta computation (the SAXPY inner loop over Q-points for each nonzero RDF bin) is
+**memory-bandwidth-limited**. The sin table (nbins × nq × 8 bytes) typically exceeds L2
+cache (e.g., 2500 × 500 × 8 = 10 MB). Each move accesses ~6 MB of sin table data (one 4 KB
+row per nonzero bin × ~1500 bins for large-cutoff systems). Hardware prefetching mitigates
+this for sequential access, but the fundamental constraint is DRAM bandwidth, not compute.
+
+This means the dominant per-move cost scales with `rdf_nbins × nq × sizeof(f64)` — reducing
+either `rdf_nbins` (via smaller `rdf_cutoff`) or `nq` is the most effective way to speed up
+the refinement.
+
 ## Tips
 
 - Use `cargo build --release` -- debug builds are ~10x slower.
