@@ -412,12 +412,15 @@ pub fn run_rmc(
     let r_grid: Vec<f64> = (0..nbins).map(|i| (i as f64 + 0.5) * dr).collect();
     let r_max = r_grid[nbins - 1];
 
-    // sin(Q_k * r_i), row-major [nbins][nq]
-    let mut sin_table = vec![0.0f64; nbins * nq];
+    // sin(Q_k * r_i), row-major [nbins][nq], stored as f32 to halve memory bandwidth.
+    // The table is ~5 MB in f32 vs ~10 MB in f64; this can fit in L2 cache,
+    // reducing cache misses in the bandwidth-limited S(Q) delta inner loop.
+    // Accumulation remains in f64 for full precision.
+    let mut sin_table = vec![0.0f32; nbins * nq];
     for i in 0..nbins {
         let row = i * nq;
         for k in 0..nq {
-            sin_table[row + k] = (params.q_grid[k] * r_grid[i]).sin();
+            sin_table[row + k] = (params.q_grid[k] * r_grid[i]).sin() as f32;
         }
     }
 
@@ -549,7 +552,7 @@ pub fn run_rmc(
             }
             let sin_row = i * nq;
             for k in 0..nq {
-                partial_sq[sq_base + k] += contrib * sin_table[sin_row + k];
+                partial_sq[sq_base + k] += contrib * sin_table[sin_row + k] as f64;
             }
         }
 
@@ -898,7 +901,7 @@ pub fn run_rmc(
                 let contrib = rw[i] * dg;
                 let sin_row = i * nq;
                 for k in 0..nq {
-                    delta_partial_sq[sq_base + k] += contrib * sin_table[sin_row + k];
+                    delta_partial_sq[sq_base + k] += contrib * sin_table[sin_row + k] as f64;
                 }
             }
 
@@ -1192,7 +1195,7 @@ pub fn run_rmc(
                 }
                 let sin_row = i * nq;
                 for k in 0..nq {
-                    partial_sq[sq_base + k] += contrib * sin_table[sin_row + k];
+                    partial_sq[sq_base + k] += contrib * sin_table[sin_row + k] as f64;
                 }
             }
             for k in 0..nq {
