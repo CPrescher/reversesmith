@@ -9,6 +9,7 @@ use crate::rmc::RmcParams;
 
 /// Top-level TOML configuration.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     pub system: SystemConfig,
     pub data: DataConfig,
@@ -21,6 +22,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SystemConfig {
     pub structure: String,
     pub format: String,
@@ -31,6 +33,7 @@ pub struct SystemConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DataConfig {
     pub xray_sq: Option<DatasetConfig>,
     pub neutron_sq: Option<DatasetConfig>,
@@ -38,6 +41,7 @@ pub struct DataConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DatasetConfig {
     pub file: String,
     pub weight: Option<f64>,
@@ -55,6 +59,7 @@ pub struct DatasetConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RmcConfig {
     pub max_moves: Option<u64>,
     pub max_step: Option<f64>,
@@ -71,6 +76,7 @@ pub struct RmcConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SqConfig {
     pub qmin: Option<f64>,
     pub qmax: Option<f64>,
@@ -81,12 +87,14 @@ pub struct SqConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ConstraintsConfig {
     pub min_distance: Option<HashMap<String, f64>>,
     pub coordination: Option<Vec<CoordinationConfig>>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CoordinationConfig {
     pub pair: String,
     pub min: usize,
@@ -95,6 +103,7 @@ pub struct CoordinationConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AnalysisConfig {
     pub cutoffs: Option<HashMap<String, f64>>,
     pub angle_triplets: Option<Vec<String>>,
@@ -107,6 +116,7 @@ pub struct AnalysisConfig {
 /// refines a perturbation potential so the simulation naturally reproduces
 /// the experimental data (Soper, 1996).
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EpsrConfig {
     /// Number of outer EPSR iterations (default: 10).
     pub iterations: Option<usize>,
@@ -132,6 +142,7 @@ pub struct EpsrConfig {
 /// Parsed from the `[potential]` TOML section. Multiple potential types
 /// can be combined: analytical forms are summed, tabulated replaces all.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PotentialConfig {
     pub weight: Option<f64>,
     pub cutoff: Option<f64>,
@@ -143,6 +154,7 @@ pub struct PotentialConfig {
 
 /// Buckingham potential: V(r) = A exp(-r/rho) - C/r^6.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BuckinghamConfig {
     pub pair: String,
     #[serde(rename = "A")]
@@ -156,6 +168,7 @@ pub struct BuckinghamConfig {
 ///
 /// Pedone et al. (2006), J. Phys. Chem. B, 110, 11780.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PedoneConfig {
     pub pair: String,
     #[serde(rename = "D0")]
@@ -173,6 +186,7 @@ pub struct PedoneConfig {
 /// Automatically generates pair potentials for all species combinations
 /// with nonzero charge products.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CoulombConfig {
     /// DSF damping parameter (1/A), matching LAMMPS coul/dsf alpha
     pub alpha: f64,
@@ -181,6 +195,7 @@ pub struct CoulombConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TabulatedConfig {
     pub pair: String,
     pub file: String,

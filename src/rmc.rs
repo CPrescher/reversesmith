@@ -101,6 +101,7 @@ pub struct ExperimentalGrData {
 }
 
 /// RMC refinement parameters.
+#[derive(Clone)]
 pub struct RmcParams {
     pub max_moves: u64,
     pub max_step: f64,

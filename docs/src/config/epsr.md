@@ -55,15 +55,17 @@ EPSR iter N: chi2 = X, max |ΔEP| = Y eV, acceptance = Z%
 
 ## How EPSR iterations differ from standard RMC
 
-Each EPSR iteration runs the MC inner loop with two key differences from standard RMC:
+The **first EPSR iteration** uses the full `[rmc]` settings — annealing, convergence checking, best-structure restoration, and `max_moves`. This ensures the structure is well-converged under the initial combined potential before equilibrium sampling begins.
 
-- **No best-structure restoration**: Standard RMC tracks the lowest-chi2 configuration and restores it at the end. EPSR skips this — it keeps the final (equilibrium) structure and S(Q). The EP update needs the equilibrium S(Q), not a biased low-chi2 snapshot, because the goal is to shift the equilibrium itself.
+**Subsequent iterations** (2, 3, ...) switch to equilibrium mode with key differences from standard RMC:
+
+- **No best-structure restoration**: The EP update needs the equilibrium S(Q), not a biased low-chi2 snapshot, because the goal is to shift the equilibrium itself.
 
 - **No early convergence stopping**: Each iteration runs the full `moves_per_iteration` moves. The system needs to equilibrate under the combined potential before the residual S(Q) is meaningful.
 
-- **Annealing only on the first iteration**: Subsequent iterations start from the equilibrated structure at `anneal_end` temperature.
+- **No annealing**: Iterations start from the equilibrated structure at `anneal_end` temperature.
 
-As a result, the chi2 reported per EPSR iteration is the **equilibrium chi2** under the current combined potential, not the best fluctuation. This value is typically higher than what a standard RMC would report (which picks the luckiest fluctuation). The improvement across EPSR iterations comes from the cumulative EP steering the equilibrium S(Q) toward experiment.
+As a result, the chi2 reported for iterations 2+ is the **equilibrium chi2** under the current combined potential, not the best fluctuation. This value is typically higher than what iteration 1 reports (which uses best-structure restoration). The improvement across EPSR iterations comes from the cumulative EP steering the equilibrium S(Q) toward experiment.
 
 ## Notes
 

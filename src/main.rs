@@ -650,35 +650,41 @@ fn main() {
             .find(|e| matches!(e.kind, DataKind::Xray))
             .map(|exp| epsr::interpolate_exp_to_grid(&exp.q, &exp.sq, &params.q_grid));
 
-        // Override max_moves per iteration
-        // EPSR iterations: no convergence early-stop, no best-restoration
-        // (equilibrium S(Q) is needed for the EP update, not a biased best-chi2 snapshot)
-        let mut iter_params = RmcParams {
-            max_moves: epsr_moves,
-            max_step: params.max_step,
-            checkpoint_every: params.checkpoint_every,
-            seed: params.seed,
-            rdf_cutoff: params.rdf_cutoff,
-            rdf_nbins: params.rdf_nbins,
-            q_grid: params.q_grid.clone(),
-            lorch: params.lorch,
-            print_every: params.print_every,
-            target_acceptance: params.target_acceptance,
-            adjust_step_every: params.adjust_step_every,
-            anneal_start: params.anneal_start,
-            anneal_end: params.anneal_end,
-            anneal_steps: params.anneal_steps,
-            convergence_threshold: 0.0, // no early stopping in EPSR
-            convergence_window: params.convergence_window,
-            restore_best: false, // use equilibrium state for EP update
-        };
-
         let mut last_state: Option<rmc::RmcState> = resume_state;
 
         for iter in 0..epsr_iters {
             log_println!("\n{}", "=".repeat(60));
             log_println!("EPSR iteration {}/{}", iter + 1, epsr_iters);
             log_println!("{}", "=".repeat(60));
+
+            // First iteration: use full [rmc] settings (convergence, best-restoration,
+            // annealing) to get a well-converged starting structure.
+            // Subsequent iterations: equilibrium runs for EP update — no convergence
+            // early-stop, no best-restoration, fixed moves_per_iteration.
+            let mut iter_params = if iter == 0 {
+                log_println!("Using [rmc] settings for initial convergence");
+                params.clone()
+            } else {
+                RmcParams {
+                    max_moves: epsr_moves,
+                    max_step: params.max_step,
+                    checkpoint_every: params.checkpoint_every,
+                    seed: params.seed,
+                    rdf_cutoff: params.rdf_cutoff,
+                    rdf_nbins: params.rdf_nbins,
+                    q_grid: params.q_grid.clone(),
+                    lorch: params.lorch,
+                    print_every: params.print_every,
+                    target_acceptance: params.target_acceptance,
+                    adjust_step_every: params.adjust_step_every,
+                    anneal_start: params.anneal_end, // no annealing
+                    anneal_end: params.anneal_end,
+                    anneal_steps: 0,
+                    convergence_threshold: 0.0,
+                    convergence_window: params.convergence_window,
+                    restore_best: false,
+                }
+            };
 
             // Build combined potential = reference + EP
             let combined = epsr_state.build_combined_potential(
@@ -702,13 +708,6 @@ fn main() {
             // Re-seed to continue deterministically from previous iteration
             if let Some(ref prev) = last_state {
                 iter_params.seed = prev.seed.wrapping_add(prev.move_count);
-            }
-
-            // Only anneal on first iteration; reset step size each iteration
-            if iter > 0 {
-                iter_params.anneal_start = iter_params.anneal_end;
-                iter_params.anneal_steps = 0;
-                iter_params.max_step = params.max_step; // reset to initial value
             }
 
             let state = rmc::run_rmc(
