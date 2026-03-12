@@ -64,6 +64,32 @@ At temperature T, the acceptance probability for a move with delta_cost > 0 is:
 P = exp(-delta_cost / (2 * T))
 ```
 
-The factor of 2 in the denominator follows the RMC convention (McGreevy & Pusztai 1988). At T=1 (standard RMC), this samples configurations consistent with the data within experimental uncertainty.
+The factor of 2 in the denominator follows the RMC convention (McGreevy & Pusztai 1988).
 
-For optimization, use T < 1 (simulated annealing) or a cooling schedule. See [RMC Parameters](../config/rmc.md) for details.
+The default temperature is **T = 0.1**, which provides a good balance between optimization and exploration. At T = 0.1, the effective acceptance threshold is `exp(-delta / 0.2)`, so a cost increase of +0.2 has about a 37% chance of being accepted, while an increase of +1.0 drops to 0.7%.
+
+Higher temperatures (T ~ 1) are very permissive and will typically cause chi2 to rise rather than improve — they are only useful during the initial phase of simulated annealing to escape local minima. See [RMC Parameters](../config/rmc.md) for details on temperature and annealing configuration.
+
+## EPSR: Empirical Potential Structure Refinement
+
+When `[epsr]` is configured, an outer loop wraps the RMC refinement following Soper (1996). Instead of constraining the simulation to match S(Q) purely through chi2 acceptance, EPSR iteratively refines a perturbation potential (EP) so the simulation naturally produces the correct structure.
+
+### Algorithm
+
+Each outer iteration:
+
+1. **Equilibrate**: Run MC with `V_ref(r) + EP(r)` for N moves
+2. **Compute residual**: `ΔS(Q) = S_exp(Q) - S_sim(Q)` interpolated onto the model Q grid
+3. **Decompose**: Distribute the total residual to partial structure factors via X-ray weights:
+   `ΔS_ab(Q) = w_ab(Q) · ΔS(Q) / Σ_cd w_cd(Q)²`
+4. **Sine transform**: Convert each `ΔS_ab(Q)` to real-space `Δg_ab(r)`
+5. **Update EP**: `EP_ab(r) += feedback · kT · Δg_ab(r)` (HNC approximation)
+6. **Smooth**: Apply Gaussian convolution and zero below `min_r`
+
+### Advantages over pure RMC
+
+- **Thermodynamic consistency**: Structures are equilibrium states of a well-defined Hamiltonian
+- **Transferability**: The refined potential can be used for independent MD simulations
+- **Smoother convergence**: EP accumulates knowledge across iterations rather than fighting chi2 move-by-move
+
+See [EPSR Configuration](../config/epsr.md) for parameter reference.

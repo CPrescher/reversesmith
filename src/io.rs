@@ -340,6 +340,8 @@ pub fn read_checkpoint(path: &Path, species: &[String]) -> io::Result<(RmcState,
         chi2,
         max_step,
         seed,
+        partial_sq: None,
+        total_sq: None,
     };
 
     Ok((state, config))

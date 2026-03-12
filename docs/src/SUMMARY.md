@@ -12,6 +12,7 @@
     - [S(Q) Computation](./config/sq.md)
     - [Constraints](./config/constraints.md)
     - [Pair Potentials (Hybrid RMC)](./config/potentials.md)
+    - [EPSR](./config/epsr.md)
     - [Analysis](./config/analysis.md)
 - [Pair Potentials](./potentials.md)
 - [Structural Analysis](./analysis.md)

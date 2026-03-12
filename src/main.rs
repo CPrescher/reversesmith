@@ -6,6 +6,7 @@ use std::process;
 
 use rsmith::analyze;
 use rsmith::config::Config;
+use rsmith::epsr::{self, EpsrState};
 use rsmith::io;
 use rsmith::potential::PotentialSet;
 use rsmith::rdf;
@@ -585,27 +586,231 @@ fn main() {
     }
     log_println!();
 
-    let checkpoint_dir = output_dir.clone();
-    let checkpoint_fn: Option<Box<dyn Fn(&rmc::RmcState, &rsmith::atoms::Configuration)>> =
-        Some(Box::new(move |state, cfg| {
-            let path = checkpoint_dir.join("checkpoint.dat");
-            if let Err(e) = io::write_checkpoint(&path, state, cfg) {
-                log_eprintln!("Warning: checkpoint failed: {}", e);
-            } else {
-                log_println!("  Checkpoint saved at move {}", state.move_count);
-            }
-        }));
+    let state = if let Some(ref epsr_cfg) = cfg.epsr {
+        // --- EPSR outer loop ---
+        let epsr_iters = epsr_cfg.iterations.unwrap_or(10);
+        let epsr_feedback = epsr_cfg.feedback.unwrap_or(0.2);
+        let epsr_smooth = epsr_cfg.smooth_sigma.unwrap_or(0.02);
+        let epsr_kt = epsr_cfg.temperature.unwrap_or(0.025);
+        let epsr_min_r = epsr_cfg.min_r.unwrap_or(1.0);
+        let epsr_conv = epsr_cfg.convergence.unwrap_or(0.0);
+        let epsr_moves = epsr_cfg.moves_per_iteration.unwrap_or(params.max_moves);
 
-    let state = rmc::run_rmc(
-        &mut config,
-        &experiments,
-        &gr_datasets,
-        &constraints,
-        &params,
-        potential_set.as_ref(),
-        checkpoint_fn,
-        resume_state,
-    );
+        log_println!(
+            "EPSR mode: {} iterations, feedback = {:.3}, kT = {:.4} eV, smooth_sigma = {:.3} A",
+            epsr_iters,
+            epsr_feedback,
+            epsr_kt,
+            epsr_smooth
+        );
+        log_println!(
+            "  moves/iter = {}, min_r = {:.2} A, convergence = {:.1e}",
+            epsr_moves,
+            epsr_min_r,
+            epsr_conv
+        );
+
+        // Save reference potential set (before EP)
+        let reference_potential = potential_set.clone();
+
+        // Initialize EPSR state
+        let ep_dr = 0.01; // EP grid spacing (coarser than potential table)
+        let ep_cutoff = params.rdf_cutoff.min(
+            potential_set
+                .as_ref()
+                .map_or(params.rdf_cutoff, |p| p.cutoff),
+        );
+        let mut epsr_state = EpsrState::new(&config.species, ep_cutoff, ep_dr);
+
+        // Load previous EP tables if ep_restart is set
+        if let Some(ref restart_dir) = epsr_cfg.ep_restart {
+            let restart_path = resolve_path(&config_dir, restart_dir);
+            log_println!("  Loading EP restart from {:?}", restart_path);
+            match epsr_state.load_potentials(&restart_path) {
+                Ok(n) => {
+                    log_println!(
+                        "  Loaded {}/{} EP tables from previous run",
+                        n,
+                        epsr_state.n_pairs
+                    );
+                }
+                Err(e) => {
+                    log_eprintln!("Error loading EP restart: {}", e);
+                    process::exit(1);
+                }
+            }
+        }
+
+        // Compute X-ray weights once (species/concentrations don't change)
+        let xray_weights = EpsrState::compute_xray_weights(&config, &params.q_grid);
+
+        // Interpolate experimental S(Q) onto simulation Q grid (first S(Q) dataset)
+        let exp_on_grid: Option<Vec<f64>> = experiments
+            .iter()
+            .find(|e| matches!(e.kind, DataKind::Xray))
+            .map(|exp| epsr::interpolate_exp_to_grid(&exp.q, &exp.sq, &params.q_grid));
+
+        // Override max_moves per iteration
+        // EPSR iterations: no convergence early-stop, no best-restoration
+        // (equilibrium S(Q) is needed for the EP update, not a biased best-chi2 snapshot)
+        let mut iter_params = RmcParams {
+            max_moves: epsr_moves,
+            max_step: params.max_step,
+            checkpoint_every: params.checkpoint_every,
+            seed: params.seed,
+            rdf_cutoff: params.rdf_cutoff,
+            rdf_nbins: params.rdf_nbins,
+            q_grid: params.q_grid.clone(),
+            lorch: params.lorch,
+            print_every: params.print_every,
+            target_acceptance: params.target_acceptance,
+            adjust_step_every: params.adjust_step_every,
+            anneal_start: params.anneal_start,
+            anneal_end: params.anneal_end,
+            anneal_steps: params.anneal_steps,
+            convergence_threshold: 0.0, // no early stopping in EPSR
+            convergence_window: params.convergence_window,
+            restore_best: false, // use equilibrium state for EP update
+        };
+
+        let mut last_state: Option<rmc::RmcState> = resume_state;
+
+        for iter in 0..epsr_iters {
+            log_println!("\n{}", "=".repeat(60));
+            log_println!("EPSR iteration {}/{}", iter + 1, epsr_iters);
+            log_println!("{}", "=".repeat(60));
+
+            // Build combined potential = reference + EP
+            let combined = epsr_state.build_combined_potential(
+                reference_potential.as_ref(),
+                &config.species,
+                params.rdf_cutoff,
+            );
+
+            // Run MC with combined potential
+            let checkpoint_dir = output_dir.clone();
+            let checkpoint_fn: Option<Box<dyn Fn(&rmc::RmcState, &rsmith::atoms::Configuration)>> =
+                Some(Box::new(move |state, cfg| {
+                    let path = checkpoint_dir.join("checkpoint.dat");
+                    if let Err(e) = io::write_checkpoint(&path, state, cfg) {
+                        log_eprintln!("Warning: checkpoint failed: {}", e);
+                    } else {
+                        log_println!("  Checkpoint saved at move {}", state.move_count);
+                    }
+                }));
+
+            // Re-seed to continue deterministically from previous iteration
+            if let Some(ref prev) = last_state {
+                iter_params.seed = prev.seed.wrapping_add(prev.move_count);
+            }
+
+            // Only anneal on first iteration; reset step size each iteration
+            if iter > 0 {
+                iter_params.anneal_start = iter_params.anneal_end;
+                iter_params.anneal_steps = 0;
+                iter_params.max_step = params.max_step; // reset to initial value
+            }
+
+            let state = rmc::run_rmc(
+                &mut config,
+                &experiments,
+                &gr_datasets,
+                &constraints,
+                &iter_params,
+                Some(&combined),
+                checkpoint_fn,
+                None, // fresh start each EPSR iter (positions carry over in config)
+            );
+
+            let acceptance = 100.0 * state.accepted as f64 / state.move_count.max(1) as f64;
+
+            // Extract partials and compute EP update
+            if let (Some(ref partial_sq), Some(ref total_sq), Some(ref exp_grid)) =
+                (&state.partial_sq, &state.total_sq, &exp_on_grid)
+            {
+                let nq = params.q_grid.len();
+                let delta_partials = EpsrState::compute_residual_partials(
+                    partial_sq,
+                    total_sq,
+                    exp_grid,
+                    &xray_weights,
+                    epsr_state.n_pairs,
+                    nq,
+                );
+
+                let max_delta = epsr_state.update(
+                    &delta_partials,
+                    &params.q_grid,
+                    rho0,
+                    epsr_feedback,
+                    epsr_kt,
+                    epsr_smooth,
+                    epsr_min_r,
+                );
+
+                log_println!(
+                    "\nEPSR iter {}: chi2 = {:.6}, max |ΔEP| = {:.6} eV, acceptance = {:.1}%",
+                    iter + 1,
+                    state.chi2,
+                    max_delta,
+                    acceptance
+                );
+
+                // Write EP files and per-iteration structure
+                if let Err(e) = epsr_state.write_potentials(&output_dir) {
+                    log_eprintln!("Warning: failed to write EP files: {}", e);
+                }
+                let iter_xyz = output_dir.join(format!("refined_iter_{}.xyz", iter + 1));
+                if let Err(e) = io::write_xyz(&iter_xyz, &config) {
+                    log_eprintln!("Warning: failed to write iter structure: {}", e);
+                }
+
+                // Convergence check
+                if epsr_conv > 0.0 && max_delta < epsr_conv {
+                    log_println!(
+                        "EPSR converged: max |ΔEP| = {:.6} < {:.6} eV",
+                        max_delta,
+                        epsr_conv
+                    );
+                    last_state = Some(state);
+                    break;
+                }
+            } else {
+                log_println!(
+                    "\nEPSR iter {}: chi2 = {:.6}, acceptance = {:.1}% (no S(Q) data for EP update)",
+                    iter + 1, state.chi2, acceptance
+                );
+            }
+
+            last_state = Some(state);
+        }
+
+        log_println!("\nEPSR refinement complete.");
+        last_state.unwrap()
+    } else {
+        // --- Standard RMC (no EPSR) ---
+        let checkpoint_dir = output_dir.clone();
+        let checkpoint_fn: Option<Box<dyn Fn(&rmc::RmcState, &rsmith::atoms::Configuration)>> =
+            Some(Box::new(move |state, cfg| {
+                let path = checkpoint_dir.join("checkpoint.dat");
+                if let Err(e) = io::write_checkpoint(&path, state, cfg) {
+                    log_eprintln!("Warning: checkpoint failed: {}", e);
+                } else {
+                    log_println!("  Checkpoint saved at move {}", state.move_count);
+                }
+            }));
+
+        rmc::run_rmc(
+            &mut config,
+            &experiments,
+            &gr_datasets,
+            &constraints,
+            &params,
+            potential_set.as_ref(),
+            checkpoint_fn,
+            resume_state,
+        )
+    };
 
     // --- Save results ---
     let output_xyz = output_dir.join("refined.xyz");

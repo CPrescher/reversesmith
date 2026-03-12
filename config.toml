@@ -89,3 +89,14 @@ charges = { Ca = 1.2, Si = 2.4, O = -1.2 }
 [analysis.cutoffs]
 "Si-O" = 2.2
 "Ca-O" = 3.0
+
+# Uncomment to enable EPSR (Empirical Potential Structure Refinement)
+# [epsr]
+# iterations = 20
+# feedback = 0.2
+# smooth_sigma = 0.02
+# moves_per_iteration = 200_000
+# temperature = 0.025
+# min_r = 1.0
+# convergence = 1e-4
+# ep_restart = "../previous_run"  # optional: load EP from previous EPSR run

@@ -17,6 +17,7 @@ pub struct Config {
     pub constraints: Option<ConstraintsConfig>,
     pub analysis: Option<AnalysisConfig>,
     pub potential: Option<PotentialConfig>,
+    pub epsr: Option<EpsrConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -98,6 +99,32 @@ pub struct AnalysisConfig {
     pub cutoffs: Option<HashMap<String, f64>>,
     pub angle_triplets: Option<Vec<String>>,
     pub angle_bins: Option<usize>,
+}
+
+/// EPSR (Empirical Potential Structure Refinement) configuration.
+///
+/// When present, wraps the RMC inner loop in an outer EPSR iteration that
+/// refines a perturbation potential so the simulation naturally reproduces
+/// the experimental data (Soper, 1996).
+#[derive(Debug, Deserialize)]
+pub struct EpsrConfig {
+    /// Number of outer EPSR iterations (default: 10).
+    pub iterations: Option<usize>,
+    /// Feedback factor for EP update: EP += feedback * kT * Δg(r) (default: 0.2).
+    pub feedback: Option<f64>,
+    /// Gaussian smoothing width in Å for EP (default: 0.02).
+    pub smooth_sigma: Option<f64>,
+    /// MC moves per EPSR epoch. Overrides [rmc] max_moves during EPSR (default: from [rmc]).
+    pub moves_per_iteration: Option<u64>,
+    /// kT in eV for the EP update (default: 0.025, ~300K).
+    pub temperature: Option<f64>,
+    /// Zero EP below this distance in Å (default: 1.0).
+    pub min_r: Option<f64>,
+    /// Stop if max |ΔEP| < convergence (eV) (default: 0.0 = run all iterations).
+    pub convergence: Option<f64>,
+    /// Directory containing previous `epsr_ep_{pair}.dat` files to seed the EP.
+    /// When set, EP tables are loaded and accumulated on top (restart from previous run).
+    pub ep_restart: Option<String>,
 }
 
 /// Configuration for pair potentials (hybrid RMC).

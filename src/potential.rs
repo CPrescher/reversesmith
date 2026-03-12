@@ -20,6 +20,7 @@ const COULOMB_CONST: f64 = 14.3997;
 /// All analytical potentials (Buckingham, Pedone, Coulomb) are tabulated at
 /// construction time for consistent, fast evaluation. The potential is shifted
 /// so V(cutoff) = 0 to avoid energy discontinuities.
+#[derive(Clone)]
 pub struct PairPotential {
     pub pair_label: String,
     pub type_a: usize,
@@ -36,6 +37,7 @@ pub struct PairPotential {
 /// Built from a `[potential]` TOML config section. The `weight` field controls
 /// the energy contribution to the RMC cost function:
 /// `cost = chi2 + weight * E_total`.
+#[derive(Clone)]
 pub struct PotentialSet {
     pub potentials: Vec<PairPotential>,
     pub weight: f64,
@@ -205,6 +207,35 @@ impl PairPotential {
             n_bins,
             cutoff,
         })
+    }
+
+    /// Create a `PairPotential` from a pre-built table, with cutoff shift applied.
+    pub fn from_vec(
+        pair_label: String,
+        type_a: usize,
+        type_b: usize,
+        mut table: Vec<f64>,
+        cutoff: f64,
+        dr: f64,
+    ) -> Self {
+        let n_bins = table.len();
+        // Shift so V(cutoff) = 0
+        let v_cut = if n_bins > 0 { table[n_bins - 1] } else { 0.0 };
+        for v in &mut table {
+            *v -= v_cut;
+        }
+        if n_bins > 0 {
+            table[n_bins - 1] = 0.0;
+        }
+        PairPotential {
+            pair_label,
+            type_a,
+            type_b,
+            table,
+            dr,
+            n_bins,
+            cutoff,
+        }
     }
 
     /// Add another potential's table onto this one (element-wise).
@@ -390,6 +421,24 @@ impl PotentialSet {
             potential_index,
             n_types,
         })
+    }
+
+    /// Insert or additively combine a `PairPotential` into the set.
+    ///
+    /// If a potential already exists for this pair, the tables are summed.
+    /// Otherwise a new entry is created and the lookup table updated.
+    pub fn add_potential(&mut self, pot: PairPotential) {
+        let a = pot.type_a;
+        let b = pot.type_b;
+        let existing = self.potential_index[a * self.n_types + b];
+        if existing != usize::MAX {
+            self.potentials[existing].add_table(&pot);
+        } else {
+            let idx = self.potentials.len();
+            self.potential_index[a * self.n_types + b] = idx;
+            self.potential_index[b * self.n_types + a] = idx;
+            self.potentials.push(pot);
+        }
     }
 
     /// Compute the pair potential energy contribution of a single atom at a given position.

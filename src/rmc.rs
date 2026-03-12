@@ -64,6 +64,10 @@ pub struct RmcState {
     pub chi2: f64,
     pub max_step: f64,
     pub seed: u64,
+    /// Flat partial S_ab(Q) array: [n_pairs * nq]. Populated after run_rmc().
+    pub partial_sq: Option<Vec<f64>>,
+    /// Total (X-ray weighted) S(Q): [nq]. Populated after run_rmc().
+    pub total_sq: Option<Vec<f64>>,
 }
 
 /// Experimental dataset to fit against.
@@ -114,6 +118,8 @@ pub struct RmcParams {
     pub anneal_steps: u64,
     pub convergence_threshold: f64,
     pub convergence_window: u64,
+    /// If false, skip best-structure restoration at end of run (used by EPSR).
+    pub restore_best: bool,
 }
 
 impl Default for RmcParams {
@@ -133,11 +139,12 @@ impl Default for RmcParams {
             print_every: 1000,
             target_acceptance: 0.3,
             adjust_step_every: 5000,
-            anneal_start: 1.0,
-            anneal_end: 1.0,
+            anneal_start: 0.1,
+            anneal_end: 0.1,
             anneal_steps: 0, // 0 = use max_moves
             convergence_threshold: 0.0,
             convergence_window: 50_000,
+            restore_best: true,
         }
     }
 }
@@ -691,6 +698,8 @@ pub fn run_rmc(
             chi2: current_chi2, // always recomputed from checkpoint configuration
             max_step: rs.max_step,
             seed: rs.seed,
+            partial_sq: None,
+            total_sq: None,
         }
     } else {
         RmcState {
@@ -699,6 +708,8 @@ pub fn run_rmc(
             chi2: current_chi2,
             max_step: params.max_step,
             seed: params.seed,
+            partial_sq: None,
+            total_sq: None,
         }
     };
 
@@ -770,10 +781,16 @@ pub fn run_rmc(
     let mut best_positions: Vec<[f64; 3]> = config.atoms.iter().map(|a| a.position).collect();
     let mut best_move = 0u64;
 
-    // Convergence detection (offset by resume start)
+    // Convergence detection: start checking only after annealing completes
     let conv_active = params.convergence_threshold > 0.0;
     let mut conv_chi2 = current_chi2;
-    let mut conv_next_check = state.move_count + params.convergence_window;
+    let conv_start = if annealing {
+        state.move_count + anneal_n
+    } else {
+        state.move_count
+    };
+    let mut conv_next_check = conv_start + params.convergence_window;
+    let mut conv_baseline_set = !annealing; // need to reset baseline after annealing ends
 
     // Calibration: accumulate |delta_chi2| and |delta_E| to suggest weight
     let calibration_moves: u64 = if potential.is_some() { 1000 } else { 0 };
@@ -987,7 +1004,7 @@ pub fn run_rmc(
             let frac = (move_num as f64 / anneal_n as f64).min(1.0);
             params.anneal_start * (frac * anneal_log_ratio).exp()
         } else {
-            1.0
+            params.anneal_end
         };
         let delta_chi2 = new_chi2 - current_chi2;
         let delta_cost = delta_chi2 + energy_weight * delta_energy;
@@ -1116,33 +1133,33 @@ pub fn run_rmc(
             }
         }
 
-        // Convergence check (skip while annealing is still active)
-        if conv_active
-            && state.move_count >= conv_next_check
-            && temperature <= params.anneal_end * 1.01
-        {
-            let improvement = conv_chi2 - current_chi2;
-            if improvement < params.convergence_threshold {
-                log_println!(
-                    "\nConverged at move {}: chi2 improved by {:.6} over last {} moves (threshold: {:.6})",
-                    state.move_count, improvement, params.convergence_window, params.convergence_threshold
-                );
-                break;
+        // Convergence check (only after annealing phase completes)
+        if conv_active && state.move_count >= conv_next_check {
+            if temperature > params.anneal_end * 1.01 {
+                // Still in annealing: push check forward
+                conv_next_check += params.convergence_window;
+            } else if !conv_baseline_set {
+                // First check after annealing: set baseline, don't test yet
+                conv_chi2 = current_chi2;
+                conv_next_check += params.convergence_window;
+                conv_baseline_set = true;
+            } else {
+                let improvement = conv_chi2 - current_chi2;
+                if improvement < params.convergence_threshold {
+                    log_println!(
+                        "\nConverged at move {}: chi2 improved by {:.6} over last {} moves (threshold: {:.6})",
+                        state.move_count, improvement, params.convergence_window, params.convergence_threshold
+                    );
+                    break;
+                }
+                conv_chi2 = current_chi2;
+                conv_next_check += params.convergence_window;
             }
-            conv_chi2 = current_chi2;
-            conv_next_check += params.convergence_window;
-        } else if conv_active
-            && state.move_count >= conv_next_check
-            && temperature > params.anneal_end * 1.01
-        {
-            // Reset baseline during annealing so first post-anneal check has a fresh reference
-            conv_chi2 = current_chi2;
-            conv_next_check += params.convergence_window;
         }
     }
 
-    // Restore best structure
-    if best_chi2 < state.chi2 {
+    // Restore best structure (skip in EPSR mode to preserve equilibrium state)
+    if params.restore_best && best_chi2 < state.chi2 {
         log_println!(
             "\nRestoring best structure from move {} (chi2 = {:.6})",
             best_move,
@@ -1152,6 +1169,42 @@ pub fn run_rmc(
             atom.position = best_positions[i];
         }
         state.chi2 = best_chi2;
+
+        // Recompute S(Q) from restored structure
+        let hist_map = compute_histograms(config, nbins, params.rdf_cutoff);
+        flat_hist.fill(0.0);
+        for (&p, bins) in &hist_map {
+            let start = p * nbins;
+            flat_hist[start..start + nbins].copy_from_slice(bins);
+        }
+        partial_sq.fill(0.0);
+        for p in 0..n_pairs {
+            let hist_base = p * nbins;
+            let norm_base = p * nbins;
+            let sq_base = p * nq;
+            let lf = like_factor[p];
+            for i in 0..nbins {
+                let g = lf * flat_hist[hist_base + i] * inv_norm[norm_base + i];
+                let contrib = rw[i] * (g - 1.0);
+                if contrib.abs() < 1e-30 {
+                    continue;
+                }
+                let sin_row = i * nq;
+                for k in 0..nq {
+                    partial_sq[sq_base + k] += contrib * sin_table[sin_row + k];
+                }
+            }
+            for k in 0..nq {
+                partial_sq[sq_base + k] = 1.0 + prefactor_sq * partial_sq[sq_base + k] * inv_q[k];
+            }
+        }
+        for k in 0..nq {
+            let mut s = 0.0;
+            for p in 0..n_pairs {
+                s += xray_w[p * nq + k] * partial_sq[p * nq + k];
+            }
+            total_sq[k] = s;
+        }
     }
 
     log_println!("\nRMC refinement complete.");
@@ -1163,6 +1216,10 @@ pub fn run_rmc(
         state.move_count,
         100.0 * state.accepted as f64 / state.move_count.max(1) as f64
     );
+
+    // Store final partial and total S(Q) for EPSR outer loop
+    state.partial_sq = Some(partial_sq);
+    state.total_sq = Some(total_sq);
 
     state
 }
