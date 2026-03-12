@@ -6,6 +6,7 @@ use rand::{Rng, SeedableRng};
 use crate::atoms::Configuration;
 use crate::cells::CellList;
 use crate::constraints::{Constraints, PrecomputedConstraints};
+use crate::czt::CztSineTransform;
 use crate::log_println;
 use crate::potential::PotentialSet;
 use crate::rdf::compute_histograms;
@@ -412,17 +413,11 @@ pub fn run_rmc(
     let r_grid: Vec<f64> = (0..nbins).map(|i| (i as f64 + 0.5) * dr).collect();
     let r_max = r_grid[nbins - 1];
 
-    // sin(Q_k * r_i), row-major [nbins][nq], stored as f32 to halve memory bandwidth.
-    // The table is ~5 MB in f32 vs ~10 MB in f64; this can fit in L2 cache,
-    // reducing cache misses in the bandwidth-limited S(Q) delta inner loop.
-    // Accumulation remains in f64 for full precision.
-    let mut sin_table = vec![0.0f32; nbins * nq];
-    for i in 0..nbins {
-        let row = i * nq;
-        for k in 0..nq {
-            sin_table[row + k] = (params.q_grid[k] * r_grid[i]).sin() as f32;
-        }
-    }
+    // CZT (Chirp-Z Transform) for O(L log L) sine transform via Bluestein's algorithm.
+    // Replaces the O(nbins * nq) sin_table lookup with FFT-based convolution.
+    // Working set (~128 KB) fits in L1 cache vs sin_table (~5 MB) spilling to L2/DRAM.
+    let mut czt = CztSineTransform::new(&params.q_grid, &r_grid);
+    let mut dense_buf = vec![0.0f64; nbins]; // reusable input buffer for CZT
 
     // Lorch window
     let lorch_w: Vec<f64> = (0..nbins)
@@ -546,15 +541,9 @@ pub fn run_rmc(
 
         for i in 0..nbins {
             let g = lf * flat_hist[hist_base + i] * inv_norm[norm_base + i];
-            let contrib = rw[i] * (g - 1.0); // r * W * (g - 1)
-            if contrib.abs() < 1e-30 {
-                continue;
-            }
-            let sin_row = i * nq;
-            for k in 0..nq {
-                partial_sq[sq_base + k] += contrib * sin_table[sin_row + k] as f64;
-            }
+            dense_buf[i] = rw[i] * (g - 1.0);
         }
+        czt.transform(&dense_buf, &mut partial_sq[sq_base..sq_base + nq]);
 
         // Apply prefactor and add 1
         for k in 0..nq {
@@ -639,7 +628,12 @@ pub fn run_rmc(
         gr_cached.push(vec![0.0; n_fit]);
         gr_scratch.push(vec![0.0; n_fit]);
         gr_fit_exp_gr.push(fit_indices.iter().map(|&i| gd.gr[i]).collect());
-        gr_fit_exp_sigma2.push(fit_indices.iter().map(|&i| gd.sigma[i] * gd.sigma[i]).collect());
+        gr_fit_exp_sigma2.push(
+            fit_indices
+                .iter()
+                .map(|&i| gd.sigma[i] * gd.sigma[i])
+                .collect(),
+        );
         gr_n_fit.push(n_fit);
     }
 
@@ -892,18 +886,21 @@ pub fn run_rmc(
             let sq_base = p * nq;
             let lf = like_factor[p];
 
+            let mut has_nonzero = false;
             for i in 0..nbins {
                 let dh = new_hist_buf[hist_base + i] - old_hist_buf[hist_base + i];
-                if dh == 0.0 {
-                    continue;
-                }
-                let dg = lf * dh * inv_norm[norm_base + i];
-                let contrib = rw[i] * dg;
-                let sin_row = i * nq;
-                for k in 0..nq {
-                    delta_partial_sq[sq_base + k] += contrib * sin_table[sin_row + k] as f64;
+                if dh != 0.0 {
+                    has_nonzero = true;
+                    dense_buf[i] = rw[i] * lf * dh * inv_norm[norm_base + i];
+                } else {
+                    dense_buf[i] = 0.0;
                 }
             }
+            if !has_nonzero {
+                continue;
+            }
+
+            czt.transform(&dense_buf, &mut delta_partial_sq[sq_base..sq_base + nq]);
 
             // Apply prefactor
             for k in 0..nq {
@@ -1189,15 +1186,9 @@ pub fn run_rmc(
             let lf = like_factor[p];
             for i in 0..nbins {
                 let g = lf * flat_hist[hist_base + i] * inv_norm[norm_base + i];
-                let contrib = rw[i] * (g - 1.0);
-                if contrib.abs() < 1e-30 {
-                    continue;
-                }
-                let sin_row = i * nq;
-                for k in 0..nq {
-                    partial_sq[sq_base + k] += contrib * sin_table[sin_row + k] as f64;
-                }
+                dense_buf[i] = rw[i] * (g - 1.0);
             }
+            czt.transform(&dense_buf, &mut partial_sq[sq_base..sq_base + nq]);
             for k in 0..nq {
                 partial_sq[sq_base + k] = 1.0 + prefactor_sq * partial_sq[sq_base + k] * inv_q[k];
             }

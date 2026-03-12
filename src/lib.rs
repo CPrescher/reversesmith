@@ -9,6 +9,7 @@ pub mod atoms;
 pub mod cells;
 pub mod config;
 pub mod constraints;
+pub mod czt;
 pub mod epsr;
 pub mod io;
 pub mod potential;

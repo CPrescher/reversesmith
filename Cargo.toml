@@ -14,3 +14,4 @@ categories = ["science", "simulation"]
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+rustfft = "6"

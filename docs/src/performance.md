@@ -75,6 +75,36 @@ was consistently slower. The original two-phase approach (accumulate with raw si
 then apply prefactors in a separate pass) appears to optimize better under LLVM — likely
 because the separate passes are individually simpler and more amenable to auto-vectorization.
 
+### Implemented: Chirp-Z Transform (CZT) via Bluestein's algorithm
+
+**Result: ~25% faster for S(Q)-only, ~16% faster for full configs.**
+
+Replaced the O(nbins × nq) sin table lookup with an FFT-based Chirp-Z Transform. The S(Q)
+delta computation is a discrete sine transform with non-conjugate Q and r grids, which maps
+naturally to Bluestein's algorithm: pre-chirp the input, zero-pad to length L (next power of
+2 ≥ nbins + nq − 1 = 4096), FFT, pointwise multiply with a precomputed kernel, IFFT,
+post-chirp and extract imaginary parts.
+
+The key advantage is cache locality: the entire CZT working set (~128 KB) fits in L1 cache,
+while the sin table (~5 MB in f32) spills to L2/DRAM. Despite the FFT overhead, the
+cache-friendly access pattern wins decisively.
+
+Benchmark (1560-atom CaSiO3, 50K moves):
+- S(Q)-only: 25.6s → 19.2s (−25%)
+- Full config (S(Q) + g(r) + Pedone potential): 39.4s → 33.1s (−16%)
+- Chi2 identical (f64 throughout, no precision loss)
+
+This also eliminates the 5 MB sin table allocation.
+
+### Superseded: f32 sin table (now replaced by CZT)
+
+**Result was: ~9% faster than f64 sin table.**
+
+Stored sin(Q_k * r_i) as f32 instead of f64 to halve memory bandwidth in the S(Q) delta
+inner loop. This reduced the sin table from 10 MB to 5 MB and gave a measurable speedup on
+the memory-bandwidth-limited SAXPY loop. However, this approach was superseded by the CZT,
+which eliminates the sin table entirely.
+
 ### Attempted and reverted: Goertzel/Clenshaw recurrence (no sin table)
 
 **Result: 5.5× slower.**
@@ -115,15 +145,10 @@ samples. Precomputing a neighbor table adds complexity with no measurable benefi
 
 ### Bottleneck analysis
 
-The S(Q) delta computation (the SAXPY inner loop over Q-points for each nonzero RDF bin) is
-**memory-bandwidth-limited**. The sin table (nbins × nq × 8 bytes) typically exceeds L2
-cache (e.g., 2500 × 500 × 8 = 10 MB). Each move accesses ~6 MB of sin table data (one 4 KB
-row per nonzero bin × ~1500 bins for large-cutoff systems). Hardware prefetching mitigates
-this for sequential access, but the fundamental constraint is DRAM bandwidth, not compute.
-
-This means the dominant per-move cost scales with `rdf_nbins × nq × sizeof(f64)` — reducing
-either `rdf_nbins` (via smaller `rdf_cutoff`) or `nq` is the most effective way to speed up
-the refinement.
+With the CZT, the S(Q) delta computation is now **compute-bound** (FFTs in L1 cache) rather
+than memory-bandwidth-limited. The per-move cost scales as O(L log L) where L is the FFT
+length (next power of 2 ≥ nbins + nq). For typical parameters (nbins=2500, nq=500), L=4096.
+The dominant remaining costs are the histogram computation and g(r) inverse FT update.
 
 ## Tips
 

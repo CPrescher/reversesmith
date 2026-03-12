@@ -31,7 +31,11 @@ format = "xyz"
 #[test]
 fn minimal_config_is_valid() {
     let result = load_toml(MINIMAL_CONFIG);
-    assert!(result.is_ok(), "Minimal config should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Minimal config should parse: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -46,8 +50,14 @@ typo = true
 [rmc]
 "#;
     let err = load_toml(toml).unwrap_err();
-    assert!(err.contains("unknown field"), "Expected unknown field error, got: {err}");
-    assert!(err.contains("typo"), "Error should mention the typo field, got: {err}");
+    assert!(
+        err.contains("unknown field"),
+        "Expected unknown field error, got: {err}"
+    );
+    assert!(
+        err.contains("typo"),
+        "Error should mention the typo field, got: {err}"
+    );
 }
 
 #[test]
@@ -63,8 +73,14 @@ format = "xyz"
 max_mooves = 100
 "#;
     let err = load_toml(toml).unwrap_err();
-    assert!(err.contains("unknown field"), "Expected unknown field error, got: {err}");
-    assert!(err.contains("max_mooves"), "Error should mention the typo, got: {err}");
+    assert!(
+        err.contains("unknown field"),
+        "Expected unknown field error, got: {err}"
+    );
+    assert!(
+        err.contains("max_mooves"),
+        "Error should mention the typo, got: {err}"
+    );
 }
 
 #[test]
@@ -82,8 +98,14 @@ format = "xyz"
 feedbak = 0.5
 "#;
     let err = load_toml(toml).unwrap_err();
-    assert!(err.contains("unknown field"), "Expected unknown field error, got: {err}");
-    assert!(err.contains("feedbak"), "Error should mention the typo, got: {err}");
+    assert!(
+        err.contains("unknown field"),
+        "Expected unknown field error, got: {err}"
+    );
+    assert!(
+        err.contains("feedbak"),
+        "Error should mention the typo, got: {err}"
+    );
 }
 
 #[test]
@@ -101,8 +123,14 @@ format = "xyz"
 weght = 2.0
 "#;
     let err = load_toml(toml).unwrap_err();
-    assert!(err.contains("unknown field"), "Expected unknown field error, got: {err}");
-    assert!(err.contains("weght"), "Error should mention the typo, got: {err}");
+    assert!(
+        err.contains("unknown field"),
+        "Expected unknown field error, got: {err}"
+    );
+    assert!(
+        err.contains("weght"),
+        "Error should mention the typo, got: {err}"
+    );
 }
 
 #[test]
@@ -120,8 +148,14 @@ format = "xyz"
 qmaxx = 20.0
 "#;
     let err = load_toml(toml).unwrap_err();
-    assert!(err.contains("unknown field"), "Expected unknown field error, got: {err}");
-    assert!(err.contains("qmaxx"), "Error should mention the typo, got: {err}");
+    assert!(
+        err.contains("unknown field"),
+        "Expected unknown field error, got: {err}"
+    );
+    assert!(
+        err.contains("qmaxx"),
+        "Error should mention the typo, got: {err}"
+    );
 }
 
 #[test]
@@ -139,8 +173,14 @@ format = "xyz"
 min_distanc = {}
 "#;
     let err = load_toml(toml).unwrap_err();
-    assert!(err.contains("unknown field"), "Expected unknown field error, got: {err}");
-    assert!(err.contains("min_distanc"), "Error should mention the typo, got: {err}");
+    assert!(
+        err.contains("unknown field"),
+        "Expected unknown field error, got: {err}"
+    );
+    assert!(
+        err.contains("min_distanc"),
+        "Error should mention the typo, got: {err}"
+    );
 }
 
 #[test]
@@ -158,8 +198,14 @@ weigth = 1.0
 [rmc]
 "#;
     let err = load_toml(toml).unwrap_err();
-    assert!(err.contains("unknown field"), "Expected unknown field error, got: {err}");
-    assert!(err.contains("weigth"), "Error should mention the typo, got: {err}");
+    assert!(
+        err.contains("unknown field"),
+        "Expected unknown field error, got: {err}"
+    );
+    assert!(
+        err.contains("weigth"),
+        "Error should mention the typo, got: {err}"
+    );
 }
 
 #[test]
@@ -177,8 +223,14 @@ format = "xyz"
 max_moves = 100
 "#;
     let err = load_toml(toml).unwrap_err();
-    assert!(err.contains("unknown field"), "Expected unknown field error, got: {err}");
-    assert!(err.contains("rmcc"), "Error should mention the typo, got: {err}");
+    assert!(
+        err.contains("unknown field"),
+        "Expected unknown field error, got: {err}"
+    );
+    assert!(
+        err.contains("rmcc"),
+        "Error should mention the typo, got: {err}"
+    );
 }
 
 #[test]
@@ -203,7 +255,11 @@ convergence = 0.0001
 ep_restart = "../prev"
 "#;
     let result = load_toml(toml);
-    assert!(result.is_ok(), "Valid EPSR config should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Valid EPSR config should parse: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -229,5 +285,9 @@ r0 = 2.1
 C0 = 1.0
 "#;
     let result = load_toml(toml);
-    assert!(result.is_ok(), "Valid Pedone config should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Valid Pedone config should parse: {:?}",
+        result.err()
+    );
 }
