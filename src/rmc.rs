@@ -153,48 +153,98 @@ impl Default for RmcParams {
 
 pub type StatusCallback = Box<dyn Fn(u64, u64, f64, f64, f64)>;
 
-/// Single-threaded atom histogram using cell list for O(N_neighbors) scaling.
-/// Writes into pre-allocated buffer `hist` (must be zeroed by caller).
+/// Compute histogram delta from a single atom move in one pass.
+/// For each neighbor: compute old and new distances, subtract old bin, add new bin.
+/// Iterates the union of neighbor cells for both positions, accessing each neighbor once
+/// when cells overlap (the common case for small displacements).
+/// `delta_hist` must be zeroed by caller.
 #[inline]
-fn atom_histogram_st(
+fn atom_histogram_delta(
     config: &Configuration,
     atom_idx: usize,
-    pos: &[f64; 3],
+    old_pos: &[f64; 3],
+    new_pos: &[f64; 3],
     nbins: usize,
     cutoff2: f64,
     inv_dr: f64,
     n_species: usize,
-    hist: &mut [f64],
+    delta_hist: &mut [f64],
     cell_list: &CellList,
-    pos_cell: usize,
+    old_cell: usize,
+    new_cell: usize,
 ) {
     let ti = config.atoms[atom_idx].type_id;
     let box_lengths = &config.box_lengths;
+    let inv_box = [
+        1.0 / box_lengths[0],
+        1.0 / box_lengths[1],
+        1.0 / box_lengths[2],
+    ];
 
-    let neighbor_cells = cell_list.neighbor_cells(pos_cell);
-    for &nc in &neighbor_cells {
-        for j in cell_list.atoms_in_cell(nc) {
+    // Build union of neighbor cells with flags: (cell_idx, in_old, in_new)
+    let old_cells = cell_list.neighbor_cells(old_cell);
+    let new_cells = cell_list.neighbor_cells(new_cell);
+    let mut union_cells = [(0usize, false, false); 54];
+    let mut n_union = 0;
+
+    for &c in &old_cells {
+        union_cells[n_union] = (c, true, false);
+        n_union += 1;
+    }
+    for &c in &new_cells {
+        let mut found = false;
+        for entry in union_cells[..n_union].iter_mut() {
+            if entry.0 == c {
+                entry.2 = true;
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            union_cells[n_union] = (c, false, true);
+            n_union += 1;
+        }
+    }
+
+    for i in 0..n_union {
+        let (cell_idx, in_old, in_new) = union_cells[i];
+        for j in cell_list.atoms_in_cell(cell_idx) {
             if j == atom_idx {
                 continue;
             }
 
             let pj = &config.atoms[j].position;
-            let mut r2 = 0.0f64;
-            for d in 0..3 {
-                let mut delta = pj[d] - pos[d];
-                let l = box_lengths[d];
-                delta -= l * (delta / l).round();
-                r2 += delta * delta;
+            let tj = config.atoms[j].type_id;
+            let (a, b) = if ti <= tj { (ti, tj) } else { (tj, ti) };
+            let pair_base = (a * n_species - a * (a + 1) / 2 + b) * nbins;
+
+            if in_old {
+                let mut r2 = 0.0f64;
+                for d in 0..3 {
+                    let mut delta = pj[d] - old_pos[d];
+                    delta -= box_lengths[d] * (delta * inv_box[d]).round();
+                    r2 += delta * delta;
+                }
+                if r2 < cutoff2 {
+                    let bin = (r2.sqrt() * inv_dr) as usize;
+                    if bin < nbins {
+                        delta_hist[pair_base + bin] -= 1.0;
+                    }
+                }
             }
 
-            if r2 < cutoff2 {
-                let r = r2.sqrt();
-                let bin = (r * inv_dr) as usize;
-                if bin < nbins {
-                    let tj = config.atoms[j].type_id;
-                    let (a, b) = if ti <= tj { (ti, tj) } else { (tj, ti) };
-                    let pair_idx = a * n_species - a * (a + 1) / 2 + b;
-                    hist[pair_idx * nbins + bin] += 1.0;
+            if in_new {
+                let mut r2 = 0.0f64;
+                for d in 0..3 {
+                    let mut delta = pj[d] - new_pos[d];
+                    delta -= box_lengths[d] * (delta * inv_box[d]).round();
+                    r2 += delta * delta;
+                }
+                if r2 < cutoff2 {
+                    let bin = (r2.sqrt() * inv_dr) as usize;
+                    if bin < nbins {
+                        delta_hist[pair_base + bin] += 1.0;
+                    }
                 }
             }
         }
@@ -718,8 +768,7 @@ pub fn run_rmc(
     // Scratch buffers for incremental updates
     let mut delta_partial_sq = vec![0.0f64; n_pairs * nq];
     let mut new_total_sq = vec![0.0f64; nq];
-    let mut old_hist_buf = vec![0.0f64; n_pairs * nbins];
-    let mut new_hist_buf = vec![0.0f64; n_pairs * nbins];
+    let mut hist_delta_buf = vec![0.0f64; n_pairs * nbins];
     let mut delta_sq_buf = vec![0.0f64; nq];
 
     // Precompute constraint lookup table (eliminates string allocs in hot loop)
@@ -842,39 +891,26 @@ pub fn run_rmc(
         }
 
         // --- Incremental histogram + S(Q) update ---
-        // Compute old histogram contributions using cell list
+        // Single-pass: compute histogram delta directly from old/new distances
         let old_pos_cell = cell_list.cell_of[atom_idx];
-        old_hist_buf.fill(0.0);
-        atom_histogram_st(
+        hist_delta_buf.fill(0.0);
+        atom_histogram_delta(
             config,
             atom_idx,
             &old_pos,
-            nbins,
-            cutoff2,
-            inv_dr,
-            n_types,
-            &mut old_hist_buf,
-            &cell_list,
-            old_pos_cell,
-        );
-
-        // Move atom temporarily
-        config.atoms[atom_idx].position = new_pos;
-
-        // Compute new histogram contributions
-        new_hist_buf.fill(0.0);
-        atom_histogram_st(
-            config,
-            atom_idx,
             &new_pos,
             nbins,
             cutoff2,
             inv_dr,
             n_types,
-            &mut new_hist_buf,
+            &mut hist_delta_buf,
             &cell_list,
+            old_pos_cell,
             new_pos_cell,
         );
+
+        // Move atom temporarily (needed for potential energy computation below)
+        config.atoms[atom_idx].position = new_pos;
 
         // Compute ΔS_ab(Q) from histogram delta
         // ΔS_ab(Q_k) = (4πρ₀*dr/Q_k) * Σ_i rw_i * Δg_ab(r_i) * sin(Q_k*r_i)
@@ -888,7 +924,7 @@ pub fn run_rmc(
 
             let mut has_nonzero = false;
             for i in 0..nbins {
-                let dh = new_hist_buf[hist_base + i] - old_hist_buf[hist_base + i];
+                let dh = hist_delta_buf[hist_base + i];
                 if dh != 0.0 {
                     has_nonzero = true;
                     dense_buf[i] = rw[i] * lf * dh * inv_norm[norm_base + i];
@@ -1023,7 +1059,7 @@ pub fn run_rmc(
             current_energy += delta_energy;
             // Commit: update histograms, partial S(Q), total S(Q)
             for i in 0..n_pairs * nbins {
-                flat_hist[i] += new_hist_buf[i] - old_hist_buf[i];
+                flat_hist[i] += hist_delta_buf[i];
             }
             for i in 0..n_pairs * nq {
                 partial_sq[i] += delta_partial_sq[i];
