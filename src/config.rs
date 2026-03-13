@@ -30,6 +30,8 @@ pub struct SystemConfig {
     /// Target mass density in g/cm^3.  When set, the box and atom positions
     /// are rescaled isotropically before any computation begins.
     pub density: Option<f64>,
+    /// Write a VASP POSCAR file alongside the refined XYZ output (default: false).
+    pub output_poscar: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

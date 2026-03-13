@@ -96,6 +96,9 @@ fn main() {
         match structure_path.extension().and_then(|e| e.to_str()) {
             Some("xyz") => "xyz",
             Some("data") | Some("lmp") => "lammps",
+            Some("poscar") | Some("vasp") => "poscar",
+            _ if structure_path.file_name().and_then(|f| f.to_str())
+                .map_or(false, |n| n == "POSCAR" || n == "CONTCAR" || n.starts_with("POSCAR") || n.starts_with("CONTCAR")) => "poscar",
             _ => cfg.system.format.as_str(),
         }
     } else {
@@ -112,6 +115,10 @@ fn main() {
         }
         "xyz" => io::read_xyz(&structure_path).unwrap_or_else(|e| {
             log_eprintln!("Error reading XYZ: {}", e);
+            process::exit(1);
+        }),
+        "poscar" => io::read_poscar(&structure_path).unwrap_or_else(|e| {
+            log_eprintln!("Error reading POSCAR: {}", e);
             process::exit(1);
         }),
         _ => {
@@ -815,6 +822,12 @@ fn main() {
     let output_xyz = output_dir.join("refined.xyz");
     log_println!("\nSaving refined structure to {:?}", output_xyz);
     io::write_xyz(&output_xyz, &config).unwrap();
+
+    if cfg.system.output_poscar.unwrap_or(false) {
+        let output_poscar = output_dir.join("refined_POSCAR");
+        log_println!("Saving refined structure to {:?}", output_poscar);
+        io::write_poscar(&output_poscar, &config, "rsmith refined structure").unwrap();
+    }
 
     // Compute and save final S(Q)
     let rdf_dr = params.rdf_cutoff / params.rdf_nbins as f64;
