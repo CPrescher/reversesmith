@@ -88,9 +88,14 @@ fn main() {
         process::exit(1);
     });
 
-    // Init logging
+    // Init logging (use separate log file for --analyze to avoid overwriting RMC log)
     rsmith::logging::set_quiet(quiet_mode);
-    rsmith::logging::init_log_file_in(&output_dir);
+    let log_name = if analyze_mode {
+        "rsmith_analyze.log"
+    } else {
+        "rsmith.log"
+    };
+    rsmith::logging::init_log_file_in(&output_dir, log_name);
 
     let cfg = Config::load(config_path).unwrap_or_else(|e| {
         log_eprintln!("Error loading config: {}", e);

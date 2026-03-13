@@ -27,6 +27,8 @@ Refined structure (after refinement completes):
 
 ## `--analyze`
 
+Analysis uses a separate log file (`rsmith_analyze.log`) to avoid overwriting the RMC refinement log.
+
 Without explicit path (dual mode):
 
 | File | Description |
@@ -42,3 +44,4 @@ With explicit path:
 |------|-------------|
 | `analysis_analysis_cn.dat` | CN histograms |
 | `analysis_analysis_angles.dat` | Angle distributions |
+| `rsmith_analyze.log` | Log of the analysis run |

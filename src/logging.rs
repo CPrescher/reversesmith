@@ -18,10 +18,10 @@ pub fn is_quiet() -> bool {
     QUIET.load(Ordering::Relaxed)
 }
 
-/// Create/overwrite `rsmith.log` in the given directory.
+/// Create/overwrite a log file in the given directory.
 /// Panics if the file cannot be created (fail fast).
-pub fn init_log_file_in(dir: &Path) {
-    let path = dir.join("rsmith.log");
+pub fn init_log_file_in(dir: &Path, name: &str) {
+    let path = dir.join(name);
     let file = File::create(&path)
         .unwrap_or_else(|e| panic!("Failed to create {}: {}", path.display(), e));
     let writer = BufWriter::new(file);
@@ -43,7 +43,7 @@ pub fn init_log_file_in(dir: &Path) {
 /// Create/overwrite `rsmith.log` in the current working directory.
 /// Panics if the file cannot be created (fail fast).
 pub fn init_log_file() {
-    init_log_file_in(Path::new("."));
+    init_log_file_in(Path::new("."), "rsmith.log");
 }
 
 /// Flush the log buffer. Call at the end of main().
