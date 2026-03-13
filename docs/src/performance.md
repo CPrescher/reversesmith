@@ -173,5 +173,4 @@ The dominant remaining costs are the histogram computation and g(r) inverse FT u
 
 - Use `cargo build --release` -- debug builds are ~10x slower.
 - Set `rdf_cutoff` and potential `cutoff` no larger than needed. For quick convergence tests, start with 11--15 A; for publication-quality fits, use 20+ A.
-- Use `--compute-sq-only` to check S(Q) quality at different `rdf_cutoff` values before committing to a long refinement.
 - Run multiple independent replicas with different seeds (trivially parallel) and pick the best result.

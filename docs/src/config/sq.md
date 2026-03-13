@@ -58,7 +58,7 @@ Truncating the integral at a finite `rmax = rdf_cutoff` is equivalent to multipl
 | 20--25 A | Excellent S(Q) quality including FSDP | When low-Q accuracy is critical |
 | > L/2 | Invalid -- exceeds minimum image convention | Never |
 
-where L is the shortest box dimension. Use `--compute-sq-only` to check S(Q) quality before committing to a refinement run.
+where L is the shortest box dimension.
 
 ### Comparison with LAMMPS
 

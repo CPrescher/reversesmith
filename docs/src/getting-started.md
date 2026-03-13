@@ -17,9 +17,6 @@ The binary is at `target/release/rsmith`.
 # Run RMC refinement
 rsmith config.toml
 
-# Compute S(Q) from a structure (no refinement)
-rsmith config.toml --compute-sq-only
-
 # Analyze coordination and bond angles
 rsmith config.toml --analyze
 

@@ -16,7 +16,7 @@ W(r) = sin(pi*r/r_max) / (pi*r/r_max)
 
 This suppresses truncation ripples in S(Q) caused by the finite RDF cutoff.
 
-For the initial computation and `--compute-sq-only` mode, a DST-II (Discrete Sine Transform Type II) via FFT is used for efficiency, with 8x zero-padding for accurate interpolation onto the requested Q grid.
+For the initial computation, a DST-II (Discrete Sine Transform Type II) via FFT is used for efficiency, with 8x zero-padding for accurate interpolation onto the requested Q grid.
 
 During RMC, the same formula is evaluated by direct summation using precomputed sin(Q*r) tables, enabling incremental updates.
 

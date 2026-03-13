@@ -36,7 +36,6 @@ fn main() {
     if args.len() < 2 {
         eprintln!("Usage: rsmith <config.toml> [OPTIONS]");
         eprintln!("Options:");
-        eprintln!("  --compute-sq-only          Compute S(Q) and exit");
         eprintln!("  --analyze [structure.xyz]   Run structural analysis");
         eprintln!("  --output-dir DIR            Write output to DIR instead of config directory");
         eprintln!("  --seed N                    Override RNG seed (default: random)");
@@ -46,7 +45,6 @@ fn main() {
     }
 
     let config_path = Path::new(&args[1]);
-    let compute_sq_only = args.iter().any(|a| a == "--compute-sq-only");
     let analyze_mode = args.iter().any(|a| a == "--analyze");
     let quiet_mode = args.iter().any(|a| a == "--quiet");
     let resume_mode = args.iter().any(|a| a == "--resume");
@@ -280,13 +278,6 @@ fn main() {
                 run_analysis(&refined, &cfg, &output_dir, "refined");
             }
         }
-        rsmith::logging::flush_log_file();
-        return;
-    }
-
-    // --- Compute S(Q) mode ---
-    if compute_sq_only {
-        compute_sq_and_exit(&config, &params, rho0, &config_dir, &output_dir, &cfg);
         rsmith::logging::flush_log_file();
         return;
     }
@@ -1019,231 +1010,6 @@ fn main() {
     rsmith::logging::flush_log_file();
 }
 
-/// Compute S(Q) from the initial structure and exit (no RMC).
-fn compute_sq_and_exit(
-    config: &rsmith::atoms::Configuration,
-    params: &RmcParams,
-    rho0: f64,
-    config_dir: &Path,
-    output_dir: &Path,
-    cfg: &Config,
-) {
-    log_println!("\nComputing partial RDFs...");
-    let rdfs = rdf::compute_partial_rdfs(config, params.rdf_nbins, params.rdf_cutoff);
-
-    // Print pair labels
-    let n_types = config.species.len();
-    for a in 0..n_types {
-        for b in a..n_types {
-            let pair_idx = config.pair_index(a, b);
-            let gr = &rdfs.partials[&pair_idx];
-            let max_val = gr.iter().cloned().fold(0.0f64, f64::max);
-            let max_pos = rdfs.r[gr
-                .iter()
-                .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-                .unwrap()
-                .0];
-            log_println!(
-                "  {}-{}: max g(r) = {:.2} at r = {:.2} A",
-                config.species[a],
-                config.species[b],
-                max_val,
-                max_pos
-            );
-        }
-    }
-
-    log_println!("\nComputing partial S(Q)...");
-    let partial_sq =
-        sq::compute_all_partial_sq(&rdfs.r, &rdfs.partials, rho0, &params.q_grid, params.lorch);
-
-    // Compute and save total S(Q) for each data type
-    if cfg.data.xray_sq.is_some() || cfg.data.neutron_sq.is_none() {
-        log_println!("Computing total X-ray S(Q)...");
-        let raw = xray::compute_xray_sq(config, &partial_sq, &params.q_grid);
-        let conv = cfg
-            .data
-            .xray_sq
-            .as_ref()
-            .map(|c| parse_convention(c.convention.as_deref()))
-            .unwrap_or(SqConvention::Sq);
-        let out = conv.transform_array(&raw, &params.q_grid);
-        let path = output_dir.join("computed_xray_sq.dat");
-        log_println!("Saving computed X-ray S(Q) to {:?}", path);
-        io::write_sq(&path, &params.q_grid, &out).unwrap();
-    }
-    let sx = if let Some(ref ncfg) = cfg.data.neutron_sq {
-        log_println!("Computing total neutron S(Q)...");
-        let raw = neutron::compute_sq(config, &partial_sq, &params.q_grid);
-        let conv = parse_convention(ncfg.convention.as_deref());
-        let sn = conv.transform_array(&raw, &params.q_grid);
-        let path = output_dir.join("computed_neutron_sq.dat");
-        log_println!("Saving computed neutron S(Q) to {:?}", path);
-        io::write_sq(&path, &params.q_grid, &sn).unwrap();
-        sn
-    } else {
-        xray::compute_xray_sq(config, &partial_sq, &params.q_grid)
-    };
-
-    // Backward compatibility: computed_sq.dat uses primary type
-    let output_sq = output_dir.join("computed_sq.dat");
-    log_println!("Saving computed S(Q) to {:?}", output_sq);
-    io::write_sq(&output_sq, &params.q_grid, &sx).unwrap();
-
-    // Also save partial g(r) for validation
-    let output_gr = output_dir.join("computed_gr.dat");
-    {
-        let mut file = std::fs::File::create(&output_gr).unwrap();
-        use std::io::Write;
-        write!(file, "# r").unwrap();
-        for a in 0..n_types {
-            for b in a..n_types {
-                write!(file, " g_{}{}", config.species[a], config.species[b]).unwrap();
-            }
-        }
-        writeln!(file).unwrap();
-        for bin in 0..rdfs.nbins {
-            write!(file, "{:.6}", rdfs.r[bin]).unwrap();
-            for a in 0..n_types {
-                for b in a..n_types {
-                    let pair_idx = config.pair_index(a, b);
-                    write!(file, " {:.6}", rdfs.partials[&pair_idx][bin]).unwrap();
-                }
-            }
-            writeln!(file).unwrap();
-        }
-    }
-    log_println!("Saving partial g(r) to {:?}", output_gr);
-
-    // Compute and save total g(r) via inverse FT (with Lorch+Qmax from g(r) config)
-    // For the FT, we always need S(Q) in Faber-Ziman convention (around 1)
-    let sq_for_gr_csq = if cfg.data.neutron_sq.is_some() {
-        neutron::compute_sq(config, &partial_sq, &params.q_grid)
-    } else {
-        xray::compute_xray_sq(config, &partial_sq, &params.q_grid)
-    };
-    {
-        let qmax_gr = cfg
-            .data
-            .xray_gr
-            .as_ref()
-            .and_then(|gc| gc.qmax)
-            .unwrap_or_else(|| *params.q_grid.last().unwrap_or(&20.0));
-        let use_lorch = cfg
-            .data
-            .xray_gr
-            .as_ref()
-            .and_then(|gc| gc.lorch)
-            .unwrap_or(true);
-        let dq = if params.q_grid.len() > 1 {
-            params.q_grid[1] - params.q_grid[0]
-        } else {
-            1.0
-        };
-        let n_r_out = params.rdf_nbins;
-        let dr_out = params.rdf_cutoff / n_r_out as f64;
-        let r_out: Vec<f64> = (0..n_r_out).map(|i| (i as f64 + 0.5) * dr_out).collect();
-        let total_gr: Vec<f64> = r_out
-            .iter()
-            .map(|&ri| {
-                if ri < 1e-10 {
-                    return 1.0;
-                }
-                let pref = dq / (2.0 * std::f64::consts::PI * std::f64::consts::PI * rho0 * ri);
-                let mut val = 1.0;
-                for (k, &qk) in params.q_grid.iter().enumerate() {
-                    if qk > qmax_gr {
-                        break;
-                    }
-                    let window = if use_lorch {
-                        let arg = std::f64::consts::PI * qk / qmax_gr;
-                        if arg > 1e-10 {
-                            arg.sin() / arg
-                        } else {
-                            1.0
-                        }
-                    } else {
-                        1.0
-                    };
-                    val += pref * qk * window * (sq_for_gr_csq[k] - 1.0) * (qk * ri).sin();
-                }
-                val
-            })
-            .collect();
-        let output_total_gr = output_dir.join("computed_total_gr.dat");
-        log_println!("Saving total X-ray g(r) to {:?}", output_total_gr);
-        io::write_gr(&output_total_gr, &r_out, &total_gr).unwrap();
-    }
-
-    // Compare with experimental if available
-    if let Some(ref xray_cfg) = cfg.data.xray_sq {
-        let path = resolve_path(config_dir, &xray_cfg.file);
-        if path.exists() {
-            let (q_exp, sq_exp) = io::read_sq_data(&path).unwrap();
-            let mut sigma_vec = match xray_cfg.sigma {
-                Some(val) => vec![val; sq_exp.len()],
-                None => rmc::estimate_sigma(&sq_exp, 10),
-            };
-            let alpha = xray_cfg.sigma_alpha.unwrap_or(0.0);
-            if alpha > 0.0 {
-                for (i, s) in sigma_vec.iter_mut().enumerate() {
-                    *s *= 1.0 + alpha * q_exp[i];
-                }
-            }
-            let mut chi2 = 0.0;
-            let mut count = 0;
-            for (i, &qe) in q_exp.iter().enumerate() {
-                if qe >= params.q_grid[0] && qe <= *params.q_grid.last().unwrap() {
-                    let sq_calc = interp(&params.q_grid, &sx, qe);
-                    let diff = sq_calc - sq_exp[i];
-                    chi2 += diff * diff / (sigma_vec[i] * sigma_vec[i]);
-                    count += 1;
-                }
-            }
-            log_println!(
-                "\nChi2 vs experimental X-ray S(Q): {:.2} ({} points, per-point: {:.6})",
-                chi2,
-                count,
-                chi2 / count.max(1) as f64
-            );
-        }
-    }
-    if let Some(ref neutron_cfg) = cfg.data.neutron_sq {
-        let path = resolve_path(config_dir, &neutron_cfg.file);
-        if path.exists() {
-            let (q_exp, sq_exp) = io::read_sq_data(&path).unwrap();
-            let mut sigma_vec = match neutron_cfg.sigma {
-                Some(val) => vec![val; sq_exp.len()],
-                None => rmc::estimate_sigma(&sq_exp, 10),
-            };
-            let alpha = neutron_cfg.sigma_alpha.unwrap_or(0.0);
-            if alpha > 0.0 {
-                for (i, s) in sigma_vec.iter_mut().enumerate() {
-                    *s *= 1.0 + alpha * q_exp[i];
-                }
-            }
-            // sx already has convention offset applied, compare directly
-            let mut chi2 = 0.0;
-            let mut count = 0;
-            for (i, &qe) in q_exp.iter().enumerate() {
-                if qe >= params.q_grid[0] && qe <= *params.q_grid.last().unwrap() {
-                    let sq_calc = interp(&params.q_grid, &sx, qe);
-                    let diff = sq_calc - sq_exp[i];
-                    chi2 += diff * diff / (sigma_vec[i] * sigma_vec[i]);
-                    count += 1;
-                }
-            }
-            log_println!(
-                "\nChi2 vs experimental neutron S(Q): {:.2} ({} points, per-point: {:.6})",
-                chi2,
-                count,
-                chi2 / count.max(1) as f64
-            );
-        }
-    }
-}
-
 fn run_analysis(
     config: &rsmith::atoms::Configuration,
     cfg: &Config,
@@ -1298,27 +1064,6 @@ fn run_analysis(
         });
         log_println!("Wrote angle histograms to {:?}", angle_path);
     }
-}
-
-fn interp(x: &[f64], y: &[f64], xi: f64) -> f64 {
-    if xi <= x[0] {
-        return y[0];
-    }
-    if xi >= x[x.len() - 1] {
-        return y[y.len() - 1];
-    }
-    let mut lo = 0;
-    let mut hi = x.len() - 1;
-    while hi - lo > 1 {
-        let mid = (lo + hi) / 2;
-        if x[mid] <= xi {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
-    }
-    let t = (xi - x[lo]) / (x[hi] - x[lo]);
-    y[lo] + t * (y[hi] - y[lo])
 }
 
 fn resolve_path(base: &Path, relative: &str) -> PathBuf {

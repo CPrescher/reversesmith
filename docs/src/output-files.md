@@ -23,14 +23,6 @@ Refined structure (after refinement completes):
 | `checkpoint.dat` | Periodic checkpoint; use `--resume` to continue from it |
 | `rsmith.log` | Full log of the run |
 
-## `--compute-sq-only`
-
-| File | Description |
-|------|-------------|
-| `computed_sq.dat` | Total X-ray S(Q) of the input structure |
-| `computed_gr.dat` | All partial g(r) functions |
-| `computed_total_gr.dat` | Total X-ray g(r) via inverse FT |
-
 ## `--analyze`
 
 Without explicit path (dual mode):

@@ -138,14 +138,10 @@ angle_triplets = ["O-Si-O", "Si-O-Si", "O-Ca-O", "Ca-O-Si"]
 ## Workflow
 
 ```bash
-# 1. Check S(Q) quality -- compare initial S(Q) with experiment
-#    If the first peak (FSDP) is underestimated, increase rdf_cutoff
-rsmith config.toml --compute-sq-only
-
-# 2. Run refinement
+# 1. Run refinement
 rsmith config.toml
 
-# 3. Validate the result
+# 2. Validate the result
 rsmith config.toml --analyze
 ```
 
