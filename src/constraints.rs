@@ -120,6 +120,25 @@ impl PrecomputedConstraints {
     pub fn min_dist_sq_for(&self, type_a: usize, type_b: usize) -> f64 {
         self.min_dist_sq[type_a * self.n_types + type_b]
     }
+
+    /// Maximum cutoff needed for constraint checking.
+    /// This is max(max_min_distance, 2 * max_coordination_cutoff),
+    /// since coordination checks need to find type_a atoms within 2*cutoff.
+    /// Returns 0.0 if no constraints are set.
+    pub fn constraint_cutoff(&self) -> f64 {
+        let max_min_d = self
+            .min_dist_sq
+            .iter()
+            .copied()
+            .fold(0.0f64, f64::max)
+            .sqrt();
+        let max_coord = self
+            .coordination
+            .iter()
+            .map(|c| c.cutoff2.sqrt() * 2.0)
+            .fold(0.0f64, f64::max);
+        max_min_d.max(max_coord)
+    }
 }
 
 /// Check min distances using precomputed table (no allocations).

@@ -2,6 +2,24 @@
 
 All notable changes to rsmith will be documented in this file.
 
+## [1.1.1] - 2026-03-13
+
+### Performance
+- **Chirp-Z Transform (CZT)**: replaced O(N_bins × N_Q) sin table lookup with FFT-based
+  Bluestein's algorithm. Working set fits in L1 cache (~128 KB) vs sin table spilling to
+  L2 (~5 MB). ~25% faster for S(Q)-only, ~16% faster for full configs.
+- **Single-pass histogram delta**: combined two cell-list traversals (old/new positions)
+  into one pass that computes both distances per neighbor. ~13% faster for S(Q)-only,
+  ~7% faster for full configs.
+- **Fine constraint cell list**: build a second cell list with cutoff matching the actual
+  constraint distances (~4 Å) instead of reusing the RDF cell list (~21 Å). Reduces
+  constraint checking from iterating all atoms to only nearby atoms. ~51% faster for
+  S(Q)-only, ~35% faster for full configs.
+
+### Added
+- New `src/czt.rs` module implementing the Chirp-Z Transform via Bluestein's algorithm
+- `rustfft` dependency for FFT computation
+
 ## [1.1.0] - 2026-03-12
 
 ### Added

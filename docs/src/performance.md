@@ -143,6 +143,25 @@ is well-predicted by the CPU.
 Profiling confirmed that `CellList::neighbor_cells()` accounts for fewer than 0.02% of
 samples. Precomputing a neighbor table adds complexity with no measurable benefit.
 
+### Implemented: Fine cell list for constraint checking
+
+**Result: ~51% faster for S(Q)-only, ~35% faster for full configs.**
+
+The constraint checking functions (`check_min_distances_cell`, `check_coordination_cell`) used
+the same cell list as the RDF histogram, built with `rdf_cutoff` (e.g., 21 Å). For a ~44 Å
+box, this gives `nc=3` per dimension (cell size 14.7 Å), so `neighbor_cells()` returns all
+27 cells = the entire box. Every constraint check iterated all 10,000 atoms, even though
+min_distance constraints only need ~2 Å and coordination constraints need ~4.4 Å radius.
+
+The fix: build a second, finer cell list with `cutoff = max(max_min_distance, 2 * max_coordination_cutoff)`.
+For typical CaSiO3 constraints (max_min_dist=2.0 Å, coord_cutoff=2.2 Å), this gives
+cutoff=4.4 Å, nc=10, 1000 cells. Each constraint check now iterates ~27/1000 of the atoms
+(~270 atoms in 27 neighbor cells) instead of all 10,000.
+
+Benchmark (10,000-atom CaSiO3, 50K moves):
+- S(Q)-only: 16.9s → 8.3s (−51%)
+- Full config (S(Q) + g(r) + Pedone potential): 30.3s → 19.6s (−35%)
+
 ### Bottleneck analysis
 
 With the CZT, the S(Q) delta computation is now **compute-bound** (FFTs in L1 cache) rather

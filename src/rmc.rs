@@ -787,6 +787,24 @@ pub fn run_rmc(
         cell_list.cell_size[0]
     );
 
+    // Build finer cell list for constraint checking (cutoff ~4 A vs ~21 A for RDF)
+    let constr_cutoff = pc.constraint_cutoff();
+    let mut constr_cell_list = if constr_cutoff > 0.0 {
+        let cl = CellList::new(&positions, &config.box_lengths, constr_cutoff);
+        log_println!(
+            "Constraint cell list: {}x{}x{} = {} cells (cutoff: {:.2} A, cell size: {:.2} A)",
+            cl.nc[0],
+            cl.nc[1],
+            cl.nc[2],
+            cl.n_cells,
+            constr_cutoff,
+            cl.cell_size[0]
+        );
+        Some(cl)
+    } else {
+        None
+    };
+
     // Potential energy initialization
     let energy_weight = potential.map_or(0.0, |p| p.weight);
     let mut current_energy = if let Some(pot) = potential {
@@ -862,7 +880,37 @@ pub fn run_rmc(
             new_pos[d] -= l * (new_pos[d] / l).floor();
         }
 
-        // Determine cell for new position (for cell-list lookups)
+        // Check constraints using fine cell list (much fewer atoms to iterate)
+        if let Some(ref ccl) = constr_cell_list {
+            let new_pos_constr_cell = {
+                let cx = ((new_pos[0] / config.box_lengths[0]).fract() * ccl.nc[0] as f64).floor()
+                    as usize;
+                let cy = ((new_pos[1] / config.box_lengths[1]).fract() * ccl.nc[1] as f64).floor()
+                    as usize;
+                let cz = ((new_pos[2] / config.box_lengths[2]).fract() * ccl.nc[2] as f64).floor()
+                    as usize;
+                let cx = cx.min(ccl.nc[0] - 1);
+                let cy = cy.min(ccl.nc[1] - 1);
+                let cz = cz.min(ccl.nc[2] - 1);
+                cz * ccl.nc[0] * ccl.nc[1] + cy * ccl.nc[0] + cx
+            };
+            if !check_min_distances_cell(config, atom_idx, &new_pos, &pc, ccl, new_pos_constr_cell)
+            {
+                recent_total += 1;
+                state.move_count += 1;
+                continue;
+            }
+            if !pc.coordination.is_empty()
+                && !check_coordination_cell(config, atom_idx, &new_pos, &pc, ccl)
+            {
+                recent_total += 1;
+                state.move_count += 1;
+                continue;
+            }
+        }
+
+        // --- Incremental histogram + S(Q) update ---
+        // Determine cell for new position in RDF cell list
         let new_pos_cell = {
             let cx = ((new_pos[0] / config.box_lengths[0]).fract() * cell_list.nc[0] as f64).floor()
                 as usize;
@@ -875,22 +923,6 @@ pub fn run_rmc(
             let cz = cz.min(cell_list.nc[2] - 1);
             cz * cell_list.nc[0] * cell_list.nc[1] + cy * cell_list.nc[0] + cx
         };
-
-        // Check constraints using cell list (O(N_neighbors) instead of O(N))
-        if !check_min_distances_cell(config, atom_idx, &new_pos, &pc, &cell_list, new_pos_cell) {
-            recent_total += 1;
-            state.move_count += 1;
-            continue;
-        }
-        if !pc.coordination.is_empty()
-            && !check_coordination_cell(config, atom_idx, &new_pos, &pc, &cell_list)
-        {
-            recent_total += 1;
-            state.move_count += 1;
-            continue;
-        }
-
-        // --- Incremental histogram + S(Q) update ---
         // Single-pass: compute histogram delta directly from old/new distances
         let old_pos_cell = cell_list.cell_of[atom_idx];
         hist_delta_buf.fill(0.0);
@@ -1069,8 +1101,11 @@ pub fn run_rmc(
             for (di, _) in gr_data.iter().enumerate() {
                 std::mem::swap(&mut gr_cached[di], &mut gr_scratch[di]);
             }
-            // Update cell list for accepted move
+            // Update cell lists for accepted move
             cell_list.move_atom(atom_idx, &new_pos);
+            if let Some(ref mut ccl) = constr_cell_list {
+                ccl.move_atom(atom_idx, &new_pos);
+            }
             state.accepted += 1;
             recent_accepted += 1;
 
