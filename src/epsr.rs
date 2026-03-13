@@ -8,6 +8,7 @@ use std::f64::consts::PI;
 use std::path::Path;
 
 use crate::atoms::Configuration;
+use crate::neutron::scattering_length as neutron_scattering_length;
 use crate::potential::{PairPotential, PotentialSet};
 use crate::xray::form_factor;
 
@@ -134,6 +135,38 @@ impl EpsrState {
                     let dab = if a == b { 1.0 } else { 2.0 };
                     weights[pair_idx * nq + k] =
                         dab * conc[a] * conc[b] * ff[a][k] * ff[b][k] / f_avg_sq;
+                }
+            }
+        }
+        weights
+    }
+
+    /// Compute Faber-Ziman neutron weights w_ab(Q) (Q-independent).
+    ///
+    /// w_ab = (2-δ_ab) * c_a * c_b * b_a * b_b / <b>²
+    pub fn compute_neutron_weights(config: &Configuration, nq: usize) -> Vec<f64> {
+        let n_types = config.species.len();
+        let n_pairs = n_types * (n_types + 1) / 2;
+        let conc: Vec<f64> = (0..n_types).map(|t| config.concentration(t)).collect();
+        let b: Vec<f64> = config
+            .species
+            .iter()
+            .map(|s| neutron_scattering_length(s))
+            .collect();
+        let b_avg: f64 = (0..n_types).map(|a| conc[a] * b[a]).sum();
+        let b_avg_sq = b_avg * b_avg;
+
+        let mut weights = vec![0.0f64; n_pairs * nq];
+        if b_avg_sq < 1e-30 {
+            return weights;
+        }
+        for a in 0..n_types {
+            for b_idx in a..n_types {
+                let pair_idx = pair_index(a, b_idx, n_types);
+                let dab = if a == b_idx { 1.0 } else { 2.0 };
+                let w = dab * conc[a] * conc[b_idx] * b[a] * b[b_idx] / b_avg_sq;
+                for k in 0..nq {
+                    weights[pair_idx * nq + k] = w;
                 }
             }
         }

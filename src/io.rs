@@ -214,7 +214,10 @@ pub fn read_poscar(path: &Path) -> io::Result<Configuration> {
     // Line 1: comment (ignored)
     // Line 2: scale factor
     let scale: f64 = lines[1].trim().parse().map_err(|e| {
-        io::Error::new(io::ErrorKind::InvalidData, format!("Bad scale factor: {}", e))
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Bad scale factor: {}", e),
+        )
     })?;
 
     // Lines 3-5: lattice vectors (only orthorhombic supported)
@@ -282,11 +285,7 @@ pub fn read_poscar(path: &Path) -> io::Result<Configuration> {
         }
         // Line 8: Selective dynamics (optional) or Direct/Cartesian
         let mut coord_line = 7;
-        if lines[coord_line]
-            .trim()
-            .to_lowercase()
-            .starts_with('s')
-        {
+        if lines[coord_line].trim().to_lowercase().starts_with('s') {
             coord_line = 8; // skip "Selective dynamics"
         }
         (species, counts, coord_line)

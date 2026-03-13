@@ -8,12 +8,28 @@ use rsmith::analyze;
 use rsmith::config::Config;
 use rsmith::epsr::{self, EpsrState};
 use rsmith::io;
+use rsmith::neutron;
 use rsmith::potential::PotentialSet;
 use rsmith::rdf;
-use rsmith::rmc::{self, DataKind, ExperimentalData, ExperimentalGrData, RmcParams};
+use rsmith::rmc::{self, DataKind, ExperimentalData, ExperimentalGrData, RmcParams, SqConvention};
 use rsmith::sq;
 use rsmith::xray;
 use rsmith::{log_eprintln, log_println};
+
+fn parse_convention(s: Option<&str>) -> SqConvention {
+    match s {
+        Some("iq") => SqConvention::Iq,
+        Some("fq") => SqConvention::Fq,
+        Some("sq") | None => SqConvention::Sq,
+        Some(other) => {
+            eprintln!(
+                "Warning: unknown convention '{}', using 'sq'. Valid: sq, iq, fq",
+                other
+            );
+            SqConvention::Sq
+        }
+    }
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -97,8 +113,18 @@ fn main() {
             Some("xyz") => "xyz",
             Some("data") | Some("lmp") => "lammps",
             Some("poscar") | Some("vasp") => "poscar",
-            _ if structure_path.file_name().and_then(|f| f.to_str())
-                .map_or(false, |n| n == "POSCAR" || n == "CONTCAR" || n.starts_with("POSCAR") || n.starts_with("CONTCAR")) => "poscar",
+            _ if structure_path
+                .file_name()
+                .and_then(|f| f.to_str())
+                .is_some_and(|n| {
+                    n == "POSCAR"
+                        || n == "CONTCAR"
+                        || n.starts_with("POSCAR")
+                        || n.starts_with("CONTCAR")
+                }) =>
+            {
+                "poscar"
+            }
             _ => cfg.system.format.as_str(),
         }
     } else {
@@ -313,6 +339,10 @@ fn main() {
             fit_min,
             fit_max
         );
+        let convention = parse_convention(xray_cfg.convention.as_deref());
+        if convention != SqConvention::Sq {
+            log_println!("  Convention: {:?}", convention);
+        }
         experiments.push(ExperimentalData {
             q,
             sq,
@@ -321,6 +351,7 @@ fn main() {
             kind: DataKind::Xray,
             fit_min,
             fit_max,
+            convention,
         });
     }
 
@@ -361,6 +392,10 @@ fn main() {
         let weight = neutron_cfg.weight.unwrap_or(1.0);
         let fit_min = neutron_cfg.fit_min.unwrap_or(0.0);
         let fit_max = neutron_cfg.fit_max.unwrap_or(f64::INFINITY);
+        let convention = parse_convention(neutron_cfg.convention.as_deref());
+        if convention != SqConvention::Sq {
+            log_println!("  Convention: {:?}", convention);
+        }
         experiments.push(ExperimentalData {
             q,
             sq,
@@ -369,6 +404,7 @@ fn main() {
             kind: DataKind::Neutron,
             fit_min,
             fit_max,
+            convention,
         });
     }
 
@@ -488,11 +524,23 @@ fn main() {
             .collect();
         let partial_sq =
             sq::compute_all_partial_sq(&r_grid, &partials_gr, rho0, &params.q_grid, params.lorch);
-        let sx = xray::compute_xray_sq(&config, &partial_sq, &params.q_grid);
-
-        let sq_path = output_dir.join("start_sq.dat");
-        io::write_sq(&sq_path, &params.q_grid, &sx).unwrap();
-        log_println!("  Saved starting S(Q) to {:?}", sq_path);
+        // Write starting S(Q) for each data type, applying convention offset
+        for exp in experiments.iter() {
+            let (raw_sq, label) = match exp.kind {
+                DataKind::Xray => (
+                    xray::compute_xray_sq(&config, &partial_sq, &params.q_grid),
+                    "xray",
+                ),
+                DataKind::Neutron => (
+                    neutron::compute_sq(&config, &partial_sq, &params.q_grid),
+                    "neutron",
+                ),
+            };
+            let out_sq = exp.convention.transform_array(&raw_sq, &params.q_grid);
+            let path = output_dir.join(format!("start_{}_sq.dat", label));
+            io::write_sq(&path, &params.q_grid, &out_sq).unwrap();
+            log_println!("  Saved starting {} S(Q) to {:?}", label, path);
+        }
 
         // Save starting partial g(r)
         let gr_path = output_dir.join("start_gr.dat");
@@ -520,8 +568,17 @@ fn main() {
         }
         log_println!("  Saved starting partial g(r) to {:?}", gr_path);
 
-        // Save starting total X-ray g(r) via inverse FT
+        // Save starting total g(r) via inverse FT
         if !gr_datasets.is_empty() {
+            // Raw S(Q) in Faber-Ziman convention for FT
+            let has_neutron_ft = experiments
+                .iter()
+                .any(|e| matches!(e.kind, DataKind::Neutron));
+            let sq_for_ft = if has_neutron_ft {
+                neutron::compute_sq(&config, &partial_sq, &params.q_grid)
+            } else {
+                xray::compute_xray_sq(&config, &partial_sq, &params.q_grid)
+            };
             let gd0 = &gr_datasets[0];
             let qmax_gr = gd0.qmax;
             let use_lorch = gd0.lorch;
@@ -552,7 +609,7 @@ fn main() {
                         } else {
                             1.0
                         };
-                        val += pref * qk * window * (sx[k] - 1.0) * (qk * ri).sin();
+                        val += pref * qk * window * (sq_for_ft[k] - 1.0) * (qk * ri).sin();
                     }
                     val
                 })
@@ -648,14 +705,35 @@ fn main() {
             }
         }
 
-        // Compute X-ray weights once (species/concentrations don't change)
-        let xray_weights = EpsrState::compute_xray_weights(&config, &params.q_grid);
-
-        // Interpolate experimental S(Q) onto simulation Q grid (first S(Q) dataset)
-        let exp_on_grid: Option<Vec<f64>> = experiments
+        // Find first S(Q) experiment for EPSR EP update (prefer X-ray, fall back to neutron)
+        let epsr_exp = experiments
             .iter()
             .find(|e| matches!(e.kind, DataKind::Xray))
-            .map(|exp| epsr::interpolate_exp_to_grid(&exp.q, &exp.sq, &params.q_grid));
+            .or_else(|| {
+                experiments
+                    .iter()
+                    .find(|e| matches!(e.kind, DataKind::Neutron))
+            });
+
+        // Compute weights matching the experiment type
+        let epsr_weights = match epsr_exp {
+            Some(e) if matches!(e.kind, DataKind::Xray) => {
+                log_println!("  EPSR EP update using X-ray data");
+                EpsrState::compute_xray_weights(&config, &params.q_grid)
+            }
+            Some(e) if matches!(e.kind, DataKind::Neutron) => {
+                log_println!("  EPSR EP update using neutron data");
+                EpsrState::compute_neutron_weights(&config, params.q_grid.len())
+            }
+            _ => {
+                log_println!("  Warning: no S(Q) data for EPSR EP update");
+                vec![]
+            }
+        };
+
+        // Interpolate experimental S(Q) onto simulation Q grid
+        let exp_on_grid: Option<Vec<f64>> =
+            epsr_exp.map(|exp| epsr::interpolate_exp_to_grid(&exp.q, &exp.sq, &params.q_grid));
 
         let mut last_state: Option<rmc::RmcState> = resume_state;
 
@@ -739,7 +817,7 @@ fn main() {
                     partial_sq,
                     total_sq,
                     exp_grid,
-                    &xray_weights,
+                    &epsr_weights,
                     epsr_state.n_pairs,
                     nq,
                 );
@@ -838,11 +916,24 @@ fn main() {
         .collect();
     let partial_sq =
         sq::compute_all_partial_sq(&r_grid, &partials_gr, rho0, &params.q_grid, params.lorch);
-    let sx = xray::compute_xray_sq(&config, &partial_sq, &params.q_grid);
 
-    let output_sq = output_dir.join("refined_sq.dat");
-    log_println!("Saving refined S(Q) to {:?}", output_sq);
-    io::write_sq(&output_sq, &params.q_grid, &sx).unwrap();
+    // Write refined S(Q) for each data type, applying convention offset
+    for exp in experiments.iter() {
+        let (raw_sq, label) = match exp.kind {
+            DataKind::Xray => (
+                xray::compute_xray_sq(&config, &partial_sq, &params.q_grid),
+                "xray",
+            ),
+            DataKind::Neutron => (
+                neutron::compute_sq(&config, &partial_sq, &params.q_grid),
+                "neutron",
+            ),
+        };
+        let out_sq = exp.convention.transform_array(&raw_sq, &params.q_grid);
+        let path = output_dir.join(format!("refined_{}_sq.dat", label));
+        log_println!("Saving refined {} S(Q) to {:?}", label, path);
+        io::write_sq(&path, &params.q_grid, &out_sq).unwrap();
+    }
 
     // Save refined partial g(r)
     let refined_gr_path = output_dir.join("refined_gr.dat");
@@ -870,8 +961,17 @@ fn main() {
     }
     log_println!("Saving refined partial g(r) to {:?}", refined_gr_path);
 
-    // Save refined total X-ray g(r) via inverse FT of S_X(Q), using same Lorch+Qmax as RMC
+    // Save refined total g(r) via inverse FT of S(Q), using same Lorch+Qmax as RMC
     if !gr_datasets.is_empty() {
+        // Use primary experiment's weighting for the g(r) FT
+        let has_neutron_gr = experiments
+            .iter()
+            .any(|e| matches!(e.kind, DataKind::Neutron));
+        let sq_for_gr = if has_neutron_gr {
+            neutron::compute_sq(&config, &partial_sq, &params.q_grid)
+        } else {
+            xray::compute_xray_sq(&config, &partial_sq, &params.q_grid)
+        };
         let gd0 = &gr_datasets[0];
         let qmax_gr = gd0.qmax;
         let use_lorch = gd0.lorch;
@@ -905,13 +1005,13 @@ fn main() {
                     } else {
                         1.0
                     };
-                    val += pref * qk * window * (sx[k] - 1.0) * (qk * ri).sin();
+                    val += pref * qk * window * (sq_for_gr[k] - 1.0) * (qk * ri).sin();
                 }
                 val
             })
             .collect();
         let output_gr = output_dir.join("refined_total_gr.dat");
-        log_println!("Saving refined total X-ray g(r) to {:?}", output_gr);
+        log_println!("Saving refined total g(r) to {:?}", output_gr);
         io::write_gr(&output_gr, &r_out, &total_gr).unwrap();
     }
 
@@ -958,9 +1058,35 @@ fn compute_sq_and_exit(
     let partial_sq =
         sq::compute_all_partial_sq(&rdfs.r, &rdfs.partials, rho0, &params.q_grid, params.lorch);
 
-    log_println!("Computing total X-ray S(Q)...");
-    let sx = xray::compute_xray_sq(config, &partial_sq, &params.q_grid);
+    // Compute and save total S(Q) for each data type
+    if cfg.data.xray_sq.is_some() || cfg.data.neutron_sq.is_none() {
+        log_println!("Computing total X-ray S(Q)...");
+        let raw = xray::compute_xray_sq(config, &partial_sq, &params.q_grid);
+        let conv = cfg
+            .data
+            .xray_sq
+            .as_ref()
+            .map(|c| parse_convention(c.convention.as_deref()))
+            .unwrap_or(SqConvention::Sq);
+        let out = conv.transform_array(&raw, &params.q_grid);
+        let path = output_dir.join("computed_xray_sq.dat");
+        log_println!("Saving computed X-ray S(Q) to {:?}", path);
+        io::write_sq(&path, &params.q_grid, &out).unwrap();
+    }
+    let sx = if let Some(ref ncfg) = cfg.data.neutron_sq {
+        log_println!("Computing total neutron S(Q)...");
+        let raw = neutron::compute_sq(config, &partial_sq, &params.q_grid);
+        let conv = parse_convention(ncfg.convention.as_deref());
+        let sn = conv.transform_array(&raw, &params.q_grid);
+        let path = output_dir.join("computed_neutron_sq.dat");
+        log_println!("Saving computed neutron S(Q) to {:?}", path);
+        io::write_sq(&path, &params.q_grid, &sn).unwrap();
+        sn
+    } else {
+        xray::compute_xray_sq(config, &partial_sq, &params.q_grid)
+    };
 
+    // Backward compatibility: computed_sq.dat uses primary type
     let output_sq = output_dir.join("computed_sq.dat");
     log_println!("Saving computed S(Q) to {:?}", output_sq);
     io::write_sq(&output_sq, &params.q_grid, &sx).unwrap();
@@ -990,7 +1116,13 @@ fn compute_sq_and_exit(
     }
     log_println!("Saving partial g(r) to {:?}", output_gr);
 
-    // Compute and save total X-ray g(r) via inverse FT (with Lorch+Qmax from g(r) config)
+    // Compute and save total g(r) via inverse FT (with Lorch+Qmax from g(r) config)
+    // For the FT, we always need S(Q) in Faber-Ziman convention (around 1)
+    let sq_for_gr_csq = if cfg.data.neutron_sq.is_some() {
+        neutron::compute_sq(config, &partial_sq, &params.q_grid)
+    } else {
+        xray::compute_xray_sq(config, &partial_sq, &params.q_grid)
+    };
     {
         let qmax_gr = cfg
             .data
@@ -1034,7 +1166,7 @@ fn compute_sq_and_exit(
                     } else {
                         1.0
                     };
-                    val += pref * qk * window * (sx[k] - 1.0) * (qk * ri).sin();
+                    val += pref * qk * window * (sq_for_gr_csq[k] - 1.0) * (qk * ri).sin();
                 }
                 val
             })
@@ -1071,6 +1203,39 @@ fn compute_sq_and_exit(
             }
             log_println!(
                 "\nChi2 vs experimental X-ray S(Q): {:.2} ({} points, per-point: {:.6})",
+                chi2,
+                count,
+                chi2 / count.max(1) as f64
+            );
+        }
+    }
+    if let Some(ref neutron_cfg) = cfg.data.neutron_sq {
+        let path = resolve_path(config_dir, &neutron_cfg.file);
+        if path.exists() {
+            let (q_exp, sq_exp) = io::read_sq_data(&path).unwrap();
+            let mut sigma_vec = match neutron_cfg.sigma {
+                Some(val) => vec![val; sq_exp.len()],
+                None => rmc::estimate_sigma(&sq_exp, 10),
+            };
+            let alpha = neutron_cfg.sigma_alpha.unwrap_or(0.0);
+            if alpha > 0.0 {
+                for (i, s) in sigma_vec.iter_mut().enumerate() {
+                    *s *= 1.0 + alpha * q_exp[i];
+                }
+            }
+            // sx already has convention offset applied, compare directly
+            let mut chi2 = 0.0;
+            let mut count = 0;
+            for (i, &qe) in q_exp.iter().enumerate() {
+                if qe >= params.q_grid[0] && qe <= *params.q_grid.last().unwrap() {
+                    let sq_calc = interp(&params.q_grid, &sx, qe);
+                    let diff = sq_calc - sq_exp[i];
+                    chi2 += diff * diff / (sigma_vec[i] * sigma_vec[i]);
+                    count += 1;
+                }
+            }
+            log_println!(
+                "\nChi2 vs experimental neutron S(Q): {:.2} ({} points, per-point: {:.6})",
                 chi2,
                 count,
                 chi2 / count.max(1) as f64

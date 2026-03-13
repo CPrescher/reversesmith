@@ -12,6 +12,7 @@ pub mod constraints;
 pub mod czt;
 pub mod epsr;
 pub mod io;
+pub mod neutron;
 pub mod potential;
 pub mod rdf;
 pub mod rmc;

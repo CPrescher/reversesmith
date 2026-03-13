@@ -8,6 +8,7 @@ use crate::cells::CellList;
 use crate::constraints::{Constraints, PrecomputedConstraints};
 use crate::czt::CztSineTransform;
 use crate::log_println;
+use crate::neutron::scattering_length as neutron_scattering_length;
 use crate::potential::PotentialSet;
 use crate::rdf::compute_histograms;
 use crate::xray::form_factor;
@@ -80,6 +81,39 @@ pub struct ExperimentalData {
     pub kind: DataKind,
     pub fit_min: f64,
     pub fit_max: f64,
+    /// Data convention: determines how computed S(Q) is transformed before comparison.
+    pub convention: SqConvention,
+}
+
+/// Convention for experimental S(Q) data.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SqConvention {
+    /// S(Q) — Faber-Ziman total structure factor (oscillates around 1).
+    Sq,
+    /// i(Q) = S(Q) - 1 — interference function (oscillates around 0).
+    Iq,
+    /// F(Q) = Q * (S(Q) - 1) — reduced interference function.
+    Fq,
+}
+
+impl SqConvention {
+    /// Transform a computed S(Q) value to match the experimental convention.
+    #[inline(always)]
+    pub fn transform(self, sq_calc: f64, q: f64) -> f64 {
+        match self {
+            SqConvention::Sq => sq_calc,
+            SqConvention::Iq => sq_calc - 1.0,
+            SqConvention::Fq => q * (sq_calc - 1.0),
+        }
+    }
+
+    /// Inverse transform: convert output S(Q) data to match this convention.
+    pub fn transform_array(self, sq: &[f64], q: &[f64]) -> Vec<f64> {
+        sq.iter()
+            .zip(q.iter())
+            .map(|(&s, &qi)| self.transform(s, qi))
+            .collect()
+    }
 }
 
 pub enum DataKind {
@@ -511,7 +545,8 @@ pub fn run_rmc(
         }
     }
 
-    // X-ray weights: w_ab(Q_k)
+    // Per-experiment Faber-Ziman weights: w_ab(Q_k)
+    // X-ray: Q-dependent form factors; Neutron: Q-independent scattering lengths
     let conc: Vec<f64> = (0..n_types).map(|t| config.concentration(t)).collect();
     let form_factors: Vec<Vec<f64>> = config
         .species
@@ -519,21 +554,51 @@ pub fn run_rmc(
         .map(|s| form_factor(s, &params.q_grid))
         .collect();
 
-    let mut xray_w = vec![0.0f64; n_pairs * nq];
-    for k in 0..nq {
-        let f_avg: f64 = (0..n_types).map(|a| conc[a] * form_factors[a][k]).sum();
-        let f_avg_sq = f_avg * f_avg;
-        if f_avg_sq < 1e-30 {
-            continue;
-        }
-        for a in 0..n_types {
-            for b in a..n_types {
-                let pair_idx = config.pair_index(a, b);
-                let dab = if a == b { 1.0 } else { 2.0 };
-                xray_w[pair_idx * nq + k] =
-                    dab * conc[a] * conc[b] * form_factors[a][k] * form_factors[b][k] / f_avg_sq;
+    let n_exp = experiments.len();
+    let mut exp_w: Vec<Vec<f64>> = Vec::with_capacity(n_exp);
+
+    for exp in experiments.iter() {
+        let mut w = vec![0.0f64; n_pairs * nq];
+        match exp.kind {
+            DataKind::Xray => {
+                for k in 0..nq {
+                    let f_avg: f64 = (0..n_types).map(|a| conc[a] * form_factors[a][k]).sum();
+                    let f_avg_sq = f_avg * f_avg;
+                    if f_avg_sq < 1e-30 {
+                        continue;
+                    }
+                    for a in 0..n_types {
+                        for b in a..n_types {
+                            let pair_idx = config.pair_index(a, b);
+                            let dab = if a == b { 1.0 } else { 2.0 };
+                            w[pair_idx * nq + k] =
+                                dab * conc[a] * conc[b] * form_factors[a][k] * form_factors[b][k]
+                                    / f_avg_sq;
+                        }
+                    }
+                }
+            }
+            DataKind::Neutron => {
+                let b: Vec<f64> = config
+                    .species
+                    .iter()
+                    .map(|s| neutron_scattering_length(s))
+                    .collect();
+                let b_avg: f64 = (0..n_types).map(|a| conc[a] * b[a]).sum();
+                let b_avg_sq = b_avg * b_avg;
+                for a in 0..n_types {
+                    for b_idx in a..n_types {
+                        let pair_idx = config.pair_index(a, b_idx);
+                        let dab = if a == b_idx { 1.0 } else { 2.0 };
+                        let wt = dab * conc[a] * conc[b_idx] * b[a] * b[b_idx] / b_avg_sq;
+                        for k in 0..nq {
+                            w[pair_idx * nq + k] = wt;
+                        }
+                    }
+                }
             }
         }
+        exp_w.push(w);
     }
 
     // Precompute experimental interpolation indices
@@ -601,21 +666,29 @@ pub fn run_rmc(
         }
     }
 
-    // Compute initial total X-ray S(Q) and chi2
-    let mut total_sq = vec![0.0f64; nq];
-    for k in 0..nq {
-        let mut s = 0.0;
-        for p in 0..n_pairs {
-            s += xray_w[p * nq + k] * partial_sq[p * nq + k];
-        }
-        total_sq[k] = s;
-    }
+    // Compute initial per-experiment total S(Q) and chi2
+    let mut exp_total_sq: Vec<Vec<f64>> = (0..n_exp)
+        .map(|ei| {
+            let mut tsq = vec![0.0f64; nq];
+            for k in 0..nq {
+                let mut s = 0.0;
+                for p in 0..n_pairs {
+                    s += exp_w[ei][p * nq + k] * partial_sq[p * nq + k];
+                }
+                tsq[k] = s;
+            }
+            tsq
+        })
+        .collect();
 
     let mut sq_chi2_current = 0.0;
     for (ei, exp) in experiments.iter().enumerate() {
+        let conv = exp.convention;
         let mut chi2 = 0.0;
         for &(lo, t, i) in &exp_interp[ei] {
-            let sq_calc = total_sq[lo] + t * (total_sq[lo + 1] - total_sq[lo]);
+            let sq_interp =
+                exp_total_sq[ei][lo] + t * (exp_total_sq[ei][lo + 1] - exp_total_sq[ei][lo]);
+            let sq_calc = conv.transform(sq_interp, exp.q[i]);
             let diff = sq_calc - exp.sq[i];
             chi2 += (diff * diff) / (exp.sigma[i] * exp.sigma[i]);
         }
@@ -728,6 +801,9 @@ pub fn run_rmc(
         }
     }
 
+    // Primary total S(Q) for g(r) inverse FT (use experiment 0's weights)
+    let primary_exp = 0.min(n_exp.saturating_sub(1));
+
     // Compute initial model g(r) from initial total_sq via CZT
     let mut gr_chi2_current = 0.0;
     for (di, gd) in gr_data.iter().enumerate() {
@@ -735,7 +811,7 @@ pub fn run_rmc(
         let nq_eff = gr_nq_eff[di];
         // Prepare CZT input: q_weight[k] * (total_sq[k] - 1.0)
         for k in 0..nq_eff {
-            gr_czt_buf[di][k] = gr_q_weights[di][k] * (total_sq[k] - 1.0);
+            gr_czt_buf[di][k] = gr_q_weights[di][k] * (exp_total_sq[primary_exp][k] - 1.0);
         }
         gr_czts[di].transform(&gr_czt_buf[di], &mut gr_cached[di]);
         // Apply per-r prefactor and add 1.0 baseline
@@ -796,7 +872,7 @@ pub fn run_rmc(
 
     // Scratch buffers for incremental updates
     let mut delta_partial_sq = vec![0.0f64; n_pairs * nq];
-    let mut new_total_sq = vec![0.0f64; nq];
+    let mut exp_new_total_sq: Vec<Vec<f64>> = (0..n_exp).map(|_| vec![0.0f64; nq]).collect();
     let mut hist_delta_buf = vec![0.0f64; n_pairs * nbins];
     let mut delta_sq_buf = vec![0.0f64; nq];
 
@@ -1005,22 +1081,23 @@ pub fn run_rmc(
             }
         }
 
-        // Compute new total S_X(Q) = Σ w_ab * (S_ab + ΔS_ab)
-        for k in 0..nq {
-            let mut s = 0.0;
-            for p in 0..n_pairs {
-                let idx = p * nq + k;
-                s += xray_w[idx] * (partial_sq[idx] + delta_partial_sq[idx]);
-            }
-            new_total_sq[k] = s;
-        }
-
-        // Compute new S(Q) chi2
+        // Compute per-experiment new total S(Q) and chi2
         let mut new_sq_chi2 = 0.0;
         for (ei, exp) in experiments.iter().enumerate() {
+            for k in 0..nq {
+                let mut s = 0.0;
+                for p in 0..n_pairs {
+                    let idx = p * nq + k;
+                    s += exp_w[ei][idx] * (partial_sq[idx] + delta_partial_sq[idx]);
+                }
+                exp_new_total_sq[ei][k] = s;
+            }
+            let conv = exp.convention;
             let mut chi2 = 0.0;
             for &(lo, t, i) in &exp_interp[ei] {
-                let sq_calc = new_total_sq[lo] + t * (new_total_sq[lo + 1] - new_total_sq[lo]);
+                let sq_interp = exp_new_total_sq[ei][lo]
+                    + t * (exp_new_total_sq[ei][lo + 1] - exp_new_total_sq[ei][lo]);
+                let sq_calc = conv.transform(sq_interp, exp.q[i]);
                 let diff = sq_calc - exp.sq[i];
                 chi2 += (diff * diff) / (exp.sigma[i] * exp.sigma[i]);
             }
@@ -1031,7 +1108,7 @@ pub fn run_rmc(
         let mut new_gr_chi2 = 0.0;
         if has_gr {
             for k in 0..nq {
-                delta_sq_buf[k] = new_total_sq[k] - total_sq[k];
+                delta_sq_buf[k] = exp_new_total_sq[primary_exp][k] - exp_total_sq[primary_exp][k];
             }
             for (di, gd) in gr_data.iter().enumerate() {
                 let n_fit = gr_n_fit[di];
@@ -1127,7 +1204,9 @@ pub fn run_rmc(
             for i in 0..n_pairs * nq {
                 partial_sq[i] += delta_partial_sq[i];
             }
-            total_sq.copy_from_slice(&new_total_sq);
+            for ei in 0..n_exp {
+                exp_total_sq[ei].copy_from_slice(&exp_new_total_sq[ei]);
+            }
             // Commit g(r) updates
             for (di, _) in gr_data.iter().enumerate() {
                 std::mem::swap(&mut gr_cached[di], &mut gr_scratch[di]);
@@ -1295,12 +1374,14 @@ pub fn run_rmc(
                 partial_sq[sq_base + k] = 1.0 + prefactor_sq * partial_sq[sq_base + k] * inv_q[k];
             }
         }
-        for k in 0..nq {
-            let mut s = 0.0;
-            for p in 0..n_pairs {
-                s += xray_w[p * nq + k] * partial_sq[p * nq + k];
+        for ei in 0..n_exp {
+            for k in 0..nq {
+                let mut s = 0.0;
+                for p in 0..n_pairs {
+                    s += exp_w[ei][p * nq + k] * partial_sq[p * nq + k];
+                }
+                exp_total_sq[ei][k] = s;
             }
-            total_sq[k] = s;
         }
     }
 
@@ -1315,8 +1396,13 @@ pub fn run_rmc(
     );
 
     // Store final partial and total S(Q) for EPSR outer loop
+    // Use primary experiment's total S(Q) (experiment 0)
     state.partial_sq = Some(partial_sq);
-    state.total_sq = Some(total_sq);
+    state.total_sq = if n_exp > 0 {
+        Some(exp_total_sq.into_iter().next().unwrap())
+    } else {
+        None
+    };
 
     state
 }

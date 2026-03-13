@@ -58,6 +58,11 @@ pub struct DatasetConfig {
     pub qmax: Option<f64>,
     /// Apply Lorch modification in Q-space for g(r) inverse FT (default: true).
     pub lorch: Option<bool>,
+    /// Data convention: "sq" for S(Q) (Faber-Ziman, oscillates around 1),
+    /// "iq" for i(Q) = S(Q) - 1 (interference function, oscillates around 0),
+    /// "fq" for F(Q) = Q*(S(Q) - 1) (reduced interference function).
+    /// Default: "sq".
+    pub convention: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
