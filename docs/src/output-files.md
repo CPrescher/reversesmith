@@ -8,7 +8,8 @@ Starting structure (computed before refinement begins):
 
 | File | Description |
 |------|-------------|
-| `start_sq.dat` | Total X-ray S(Q) of the starting structure |
+| `start_xray_sq.dat` | Total X-ray S(Q) of the starting structure |
+| `start_neutron_sq.dat` | Total neutron S(Q) (only when `[data.neutron_sq]` is configured) |
 | `start_gr.dat` | All partial g(r) functions of the starting structure |
 | `start_total_gr.dat` | Total X-ray g(r) via inverse FT (when g(r) data is configured) |
 
@@ -17,7 +18,8 @@ Refined structure (after refinement completes):
 | File | Description |
 |------|-------------|
 | `refined.xyz` | Refined atomic structure (extended XYZ with lattice) |
-| `refined_sq.dat` | Final computed total X-ray S(Q) |
+| `refined_xray_sq.dat` | Final computed total X-ray S(Q) |
+| `refined_neutron_sq.dat` | Final computed total neutron S(Q) (only when `[data.neutron_sq]` is configured) |
 | `refined_gr.dat` | All partial g(r) functions of the refined structure |
 | `refined_total_gr.dat` | Final computed total X-ray g(r) via inverse FT |
 | `checkpoint.dat` | Periodic checkpoint; use `--resume` to continue from it |

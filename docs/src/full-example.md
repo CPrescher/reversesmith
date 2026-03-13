@@ -37,6 +37,12 @@ fit_max = 7.0
 qmax = 17.97
 lorch = true
 
+# Neutron S(Q) can be fitted simultaneously (optional)
+# [data.neutron_sq]
+# file = "CaSiO3_neutron.sq"
+# weight = 1.0
+# sigma_alpha = 0.05
+
 # =============================================================
 # RMC parameters
 # =============================================================

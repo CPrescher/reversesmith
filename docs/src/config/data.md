@@ -85,7 +85,7 @@ This option only applies to S(Q) datasets (`xray_sq`, `neutron_sq`) and is ignor
 
 ## g(r) consistency
 
-The model g(r) is computed by inverse Fourier transform of the model's total X-ray S(Q). The `qmax` and `lorch` parameters **must match** those used to derive the experimental g(r) from experimental S(Q). Otherwise peak heights will be inconsistent -- the model g(r) may have sharper or broader peaks than the experimental g(r), creating a systematic bias.
+The model g(r) is computed by inverse Fourier transform of the corresponding total S(Q) (X-ray weighted for `xray_gr`). The `qmax` and `lorch` parameters **must match** those used to derive the experimental g(r) from experimental S(Q). Otherwise peak heights will be inconsistent -- the model g(r) may have sharper or broader peaks than the experimental g(r), creating a systematic bias.
 
 ## Balancing S(Q) and g(r)
 

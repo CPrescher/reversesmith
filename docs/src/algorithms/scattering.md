@@ -42,9 +42,20 @@ Neutron weighting uses Q-independent coherent scattering lengths b_a instead of 
 S_N(Q) = sum_{a<=b} (2 - delta_ab) * c_a * c_b * b_a * b_b / <b>^2 * S_ab(Q)
 ```
 
+Since the scattering lengths are Q-independent, the neutron weights are constant vectors (unlike X-ray weights which vary with Q through the form factors).
+
+## Simultaneous X-ray and neutron fitting
+
+X-ray and neutron S(Q) can be fitted simultaneously. Each dataset gets its own weight vector and total S(Q), computed from the same partial structure factors but with different weighting:
+
+- X-ray: Q-dependent form factor weights (see above)
+- Neutron: Q-independent scattering length weights
+
+Both contribute independently to the total chi2, with their own `weight`, `sigma`, and `fit_min`/`fit_max`. This is particularly powerful because X-ray and neutron contrast differently for different atom pairs -- for example, in oxide glasses, oxygen is nearly invisible to X-rays but has a large neutron cross-section.
+
 ## g(r) from S(Q) (inverse transform)
 
-The model g(r) for comparison with experimental data is computed by inverse Fourier transform of the total X-ray S(Q):
+The model g(r) for comparison with experimental data is computed by inverse Fourier transform of the corresponding total S(Q) (X-ray or neutron weighted):
 
 ```
 g_X(r) = 1 + (dQ / (2*pi^2 * rho0 * r)) * sum_k Q_k * W(Q_k) * (S_X(Q_k) - 1) * sin(Q_k * r)
@@ -108,4 +119,4 @@ The model and experimental g(r) must be derived using identical transform parame
 - **Lorch window**: whether and how it is applied
 - **Number density rho0**: computed from the model structure
 
-Mismatched parameters cause systematic differences in peak heights, biasing the refinement. Set `qmax` and `lorch` on `[data.xray_gr]` to match the values used to produce the experimental g(r).
+Mismatched parameters cause systematic differences in peak heights, biasing the refinement. Set `qmax` and `lorch` on `[data.xray_gr]` (or `[data.neutron_gr]` when available) to match the values used to produce the experimental g(r).

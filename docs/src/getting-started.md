@@ -101,9 +101,9 @@ rsmith config.toml
 ```
 
 This refines `glass.data` against `experimental.sq` and writes:
-- `start_sq.dat` / `start_gr.dat` -- S(Q) and partial g(r) of the starting structure
+- `start_xray_sq.dat` / `start_gr.dat` -- total X-ray S(Q) and partial g(r) of the starting structure
 - `refined.xyz` -- refined structure
-- `refined_sq.dat` / `refined_gr.dat` -- S(Q) and partial g(r) of the refined structure
+- `refined_xray_sq.dat` / `refined_gr.dat` -- total X-ray S(Q) and partial g(r) of the refined structure
 
 ## Input File Formats
 
