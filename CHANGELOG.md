@@ -2,6 +2,18 @@
 
 All notable changes to rsmith will be documented in this file.
 
+## [1.1.2] - 2026-03-13
+
+### Performance
+- **CZT for g(r) inverse FT**: replaced the dense FT matrix multiply (n_r × n_Q FMAs)
+  with a CZT sine transform for the Q → r inverse Fourier transform used in g(r) fitting.
+  ~38% faster for full configs (S(Q)-only unaffected).
+
+### Fixed
+- CZT post-chirp phase formula generalized to handle input grids not starting at dR/2
+  (bin-center convention). The previous formula was correct for S(Q) but incorrect for
+  the g(r) inverse transform where the Q-grid starts at 0.
+
 ## [1.1.1] - 2026-03-13
 
 ### Performance
