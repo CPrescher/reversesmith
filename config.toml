@@ -1,46 +1,136 @@
-[system]
-structure = "../run04/CaSiO3_glass.data"
-format = "lammps"
+# =============================================================================
+# rsmith — full configuration reference
+# =============================================================================
+# All parameters shown with their default values (where applicable).
+# Required fields are marked [REQUIRED]. Optional sections can be omitted
+# entirely if not needed.
 
+# =============================================================================
+# [system] — Input structure (REQUIRED)
+# =============================================================================
+[system]
+# Path to structure file (relative to this config file).                   [REQUIRED]
+structure = "../run04/CaSiO3_glass.data"
+# File format: "lammps" or "xyz".                                          [REQUIRED]
+format = "lammps"
+# Target mass density in g/cm³. When set, box and atom positions are
+# rescaled isotropically before computation begins. Omit to keep as-is.
+# density = 2.9
+# Write a VASP POSCAR file alongside the refined XYZ output.              (default: false)
+# output_poscar = false
+
+# Type mapping: maps integer atom types to element names.
+# Required for LAMMPS format; ignored for XYZ (types read from file).
 [system.types]
 1 = "Ca"
 2 = "Si"
 3 = "O"
 
-[data]
+# =============================================================================
+# [data] — Experimental datasets (at least one required)
+# =============================================================================
+# Three dataset types are available:
+#   [data.xray_sq]    — X-ray structure factor S(Q)
+#   [data.neutron_sq] — Neutron structure factor S(Q)
+#   [data.xray_gr]    — X-ray pair distribution function g(r)
+# All three share the same fields. At least one must be specified.
+
 [data.xray_sq]
+# Path to two-column file: Q (1/Å), S(Q).                                 [REQUIRED]
 file = "../CaSiO3_ambient_sample.sq"
+# Relative weight in total chi².                                           (default: 1.0)
 weight = 1.0
-# sigma omitted: auto-estimated from data noise
-sigma_alpha = 0.05       # Relax fit at high Q: sigma *= 1 + 0.05*Q
+# Per-point uncertainty in S(Q) units.                                     (default: auto-estimated from data noise)
+# sigma = 0.01
+# Linear Q-dependent scaling of sigma: sigma(Q) *= 1 + sigma_alpha * Q.
+# Useful to relax the fit at high Q where data is noisier.                 (default: 0.0)
+sigma_alpha = 0.05
+# Lower bound of fitting range in Q.                                       (default: 0.0)
 fit_min = 1.2
+# Upper bound of fitting range in Q.                                       (default: infinity)
+# fit_max = 18.0
+# Data convention:                                                         (default: "sq")
+#   "sq" — S(Q) Faber-Ziman (oscillates around 1)
+#   "iq" — i(Q) = S(Q) - 1 (oscillates around 0)
+#   "fq" — F(Q) = Q * (S(Q) - 1)
+# convention = "sq"
+
+# [data.neutron_sq]
+# Same fields as [data.xray_sq]. Uses coherent neutron scattering lengths.
+# file = "neutron.sq"
+# weight = 1.0
 
 [data.xray_gr]
+# Path to two-column file: r (Å), g(r).                                   [REQUIRED]
 file = "../CaSiO3_ambient_sample.gr"
+# Relative weight in total chi².                                           (default: 1.0)
 weight = 0.3
-# sigma omitted: auto-estimated from data noise
+# Per-point uncertainty in g(r) units.                                     (default: auto-estimated)
+# sigma = 0.02
+# Fitting range bounds in r (Å).                                          (default: 0.0 / infinity)
+# fit_min = 0.0
 fit_max = 7
+# Qmax for the inverse Fourier transform.                                  (default: from S(Q) data Qmax)
+# qmax = 18.0
+# Apply Lorch window function in Q-space.                                  (default: true)
+# lorch = true
 
+# =============================================================================
+# [rmc] — Monte Carlo refinement settings (REQUIRED)
+# =============================================================================
 [rmc]
+# Total MC moves to attempt.                                               (default: 1_000_000)
 max_moves = 1_000_000
+# Initial maximum atomic displacement per Cartesian dimension (Å).
+# Adapted during the run to match target_acceptance.                       (default: 0.1)
 max_step = 0.1
+# Write checkpoint file every N moves.                                     (default: 50_000)
 checkpoint_every = 50_000
+# RNG seed for reproducibility. Omit for random seed from system entropy.  (default: random)
 seed = 420
+# Print status line every N moves.                                         (default: 1_000)
 print_every = 1000
+# Target acceptance ratio for automatic step-size adaptation.              (default: 0.3)
+# target_acceptance = 0.3
+# Adjust step size every N moves to approach target_acceptance.            (default: 5_000)
+# adjust_step_every = 5_000
+
+# Simulated annealing: exponential cooling from anneal_start to anneal_end
+# over anneal_steps moves.
+# Temperature controls acceptance: P = exp(-delta_cost / (2T)).
+# When anneal_start == anneal_end (or both omitted): constant temperature. (default: 0.1 / 0.1 / max_moves)
 anneal_start = 2.0
 anneal_end = 0.1
 anneal_steps = 10_000
+
+# Early stopping: stop if chi² improves less than threshold over the
+# convergence window. Set to 0 to disable.                                 (default: 0.0)
 convergence_threshold = 1e-4
+# Window in moves over which to measure chi² improvement.                  (default: 50_000)
 convergence_window = 50_000
 
+# =============================================================================
+# [sq] — S(Q) computation grid and RDF settings (optional)
+# =============================================================================
 [sq]
+# Q-grid range and resolution for computing model S(Q).                    (default: 0.3 / 20.0 / 500)
 qmin = 0
 qmax = 20.0
 nq = 500
+# Lorch modification function in r-space to suppress truncation ripples.   (default: true)
 lorch = true
+# Maximum r for RDF histograms (Å). Must be < L/2 (half shortest box dim).
+# Critical for S(Q) quality: 15–20 Å is typical, >20 Å for excellent FSDP. (default: 10.0)
 rdf_cutoff = 25.0
+# Number of RDF histogram bins. Bin width = rdf_cutoff / rdf_nbins.        (default: 500)
 rdf_nbins = 2500
 
+# =============================================================================
+# [constraints] — Distance and coordination constraints (optional)
+# =============================================================================
+
+# Minimum interatomic distances (Å). Moves violating these are rejected.
+# Pair order does not matter ("Ca-O" and "O-Ca" are equivalent).
 [constraints.min_distance]
 "Ca-O" = 1.8
 "Si-O" = 1.2
@@ -49,23 +139,39 @@ rdf_nbins = 2500
 "Ca-Ca" = 2.3
 "Si-Si" = 2.3
 
+# Coordination number constraints. Multiple blocks allowed.
+# After each accepted move, CN is checked; the move is rejected if violated.
 [[constraints.coordination]]
+# Species pair: counts second species around first (e.g., O around Si).    [REQUIRED]
 pair = "Si-O"
+# Allowed CN range.                                                        [REQUIRED]
 min = 3
 max = 6
+# Neighbour search radius (Å).                                            [REQUIRED]
 cutoff = 2.2
 
+# =============================================================================
+# [potential] — Pair potentials for hybrid RMC (optional)
+# =============================================================================
+# Enables energy-driven refinement alongside chi² fitting.
+# Multiple potential types can be combined per pair:
+#   - Analytical forms (Buckingham, Pedone, Coulomb) are summed
+#   - Tabulated potentials replace all analytical forms for that pair
 [potential]
+# Energy weight in the cost function: cost = chi² + weight * E.
+# Larger values bias toward energetically favorable structures.            (default: 0.001)
 weight = 2
+# Global cutoff for all pair potentials (Å). Must not exceed [sq].rdf_cutoff. (default: rdf_cutoff)
 cutoff = 10.0
 
-# Pedone 2006 short-range: V(r) = D0*[1-exp(-α(r-r0))]² - D0 + C0/r¹²
+# --- Pedone (2006) potential ---
+# V(r) = D0 * [1 - exp(-alpha * (r - r0))]² - D0 + C0/r¹²
 [[potential.pedone]]
 pair = "Ca-O"
-D0 = 0.030211
-alpha = 2.241334
-r0 = 2.923245
-C0 = 5.0
+D0 = 0.030211        # Well depth (eV)
+alpha = 2.241334      # Morse width parameter (1/Å)
+r0 = 2.923245         # Equilibrium distance (Å)
+C0 = 5.0              # r⁻¹² repulsion coefficient (eV·Å¹²)
 
 [[potential.pedone]]
 pair = "Si-O"
@@ -81,22 +187,74 @@ alpha = 1.379316
 r0 = 3.618701
 C0 = 22.0
 
-# Coulomb DSF (matching LAMMPS coul/dsf 0.25 15.0)
-[potential.coulomb]
-alpha = 0.25
-charges = { Ca = 1.2, Si = 2.4, O = -1.2 }
+# --- Buckingham potential (alternative to Pedone) ---
+# V(r) = A * exp(-r / rho) - C / r⁶
+# [[potential.buckingham]]
+# pair = "Si-O"
+# A = 18003.7572        # Repulsive pre-exponential (eV)
+# rho = 0.205205        # Repulsive length scale (Å)
+# C = 133.5381          # Attractive dispersion coefficient (eV·Å⁶)
 
+# --- Coulomb DSF (Damped Shifted Force) ---
+# Matches LAMMPS pair_style coul/dsf. Automatically generates pair
+# potentials for all species pairs with nonzero charge products.
+[potential.coulomb]
+alpha = 0.25                                  # DSF damping parameter (1/Å)
+charges = { Ca = 1.2, Si = 2.4, O = -1.2 }   # Per-species charges (e)
+
+# --- Tabulated potential ---
+# Two-column file (r in Å, V in eV). Interpolated and shifted so V(cutoff) = 0.
+# Replaces any analytical form for the same pair.
+# [[potential.tabulated]]
+# pair = "Si-O"
+# file = "SiO_potential.dat"
+
+# =============================================================================
+# [analysis] — Coordination number and bond angle analysis (optional)
+# =============================================================================
+# Used in --analyze mode. Cutoffs also serve as fallback for constraints
+# if [constraints.coordination] is not specified.
+[analysis]
+# Pair cutoffs (Å) for CN counting and angle computation.
+# If omitted, falls back to [constraints.coordination] cutoffs.
 [analysis.cutoffs]
 "Si-O" = 2.2
 "Ca-O" = 3.0
+# Number of bins for angle histograms (0–180°).                            (default: 180)
+# angle_bins = 180
+# Filter: only compute these angle triplets (e.g., ["O-Si-O", "Si-O-Si"]).
+# Uses canonical form with sorted end-species. Omit for all triplets.
+# angle_triplets = ["O-Si-O", "Si-O-Si"]
 
-# Uncomment to enable EPSR (Empirical Potential Structure Refinement)
+# =============================================================================
+# [epsr] — Empirical Potential Structure Refinement (optional)
+# =============================================================================
+# Outer loop that iteratively builds a perturbation potential (EP) so the
+# MC simulation naturally reproduces the experimental S(Q).
+# Requires at least one S(Q) dataset (xray_sq or neutron_sq).
+#
+# First iteration uses full [rmc] settings (annealing, convergence, best-
+# structure restoration). Subsequent iterations run in equilibrium mode:
+# no annealing, no early stopping, no best-restoration — the chi² reported
+# is the equilibrium value, not the best fluctuation.
+
 # [epsr]
+# Number of outer EPSR iterations.                                         (default: 10)
 # iterations = 20
+# Feedback factor: EP += feedback * kT * Δg(r). Values 0.1–0.3 typical.   (default: 0.2)
 # feedback = 0.2
+# Gaussian smoothing width (Å) applied to EP after each update.           (default: 0.02)
 # smooth_sigma = 0.02
-# moves_per_iteration = 200_000
+# MC moves per EPSR epoch. Overrides [rmc] max_moves for iter 2+.         (default: from [rmc] max_moves)
+# moves_per_iteration = 50_000
+# kT in eV for EP update.                                                  (default: 0.025 ≈ 300 K)
 # temperature = 0.025
+# Zero EP below this distance (Å) to avoid unphysical short-range forces. (default: 1.0)
 # min_r = 1.0
-# convergence = 1e-4
-# ep_restart = "../previous_run"  # optional: load EP from previous EPSR run
+# Relative convergence: stop if max|ΔEP|/max|EP| < threshold for
+# convergence_window consecutive iterations. 0 = run all iterations.       (default: 0.0)
+# convergence = 0.05
+# Consecutive iterations required below threshold before stopping.         (default: 3)
+# convergence_window = 3
+# Load EP tables from a previous EPSR run to continue refinement.
+# ep_restart = "../previous_run"
