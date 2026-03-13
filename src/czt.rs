@@ -53,11 +53,14 @@ impl CztSineTransform {
             })
             .collect();
 
-        // Post-chirp phase: θ_k = α * k * (k + 1) / 2
+        // Post-chirp phase: θ_k = k * dQ * R0 + α * k² / 2
+        // where R0 = r_grid[0]. This generalizes beyond the bin-center convention.
         // Y[k] = Im(exp(j*θ) * c[k]) = cos(θ)*c_im + sin(θ)*c_re
+        let r0 = r_grid[0];
         let post_chirp: Vec<(f64, f64)> = (0..nq)
             .map(|k| {
-                let phase = alpha * k as f64 * (k as f64 + 1.0) / 2.0;
+                let kf = k as f64;
+                let phase = kf * dq * r0 + alpha * kf * kf / 2.0;
                 (phase.cos(), phase.sin())
             })
             .collect();

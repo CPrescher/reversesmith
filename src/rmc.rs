@@ -630,15 +630,22 @@ pub fn run_rmc(
         1.0
     };
 
-    // For each g(r) dataset: build FT matrix ONLY for fit-range r-points.
-    // This avoids computing g(r) at r-points outside the fit range, which
-    // would otherwise dominate runtime (n_r × nq FMAs per move).
-    let mut gr_ft_matrices: Vec<Vec<f64>> = Vec::new();
+    // For each g(r) dataset: build CZT for inverse FT (Q → r) and precompute
+    // per-Q input weights and per-r output scaling.
+    //
+    // The transform is: delta_gr[i] = prefactor[i] * Σ_k q_weight[k] * delta_sq[k] * sin(q_k * r_i)
+    // where prefactor[i] = dq / (2π²ρ₀r_i) and q_weight[k] = q_k * window(q_k).
+    // The sine sum is computed via CZT with roles swapped: Q is the "input" axis, r is the "output" axis.
+    let mut gr_czts: Vec<CztSineTransform> = Vec::new();
+    let mut gr_q_weights: Vec<Vec<f64>> = Vec::new(); // [nq_eff] per dataset
+    let mut gr_r_prefactors: Vec<Vec<f64>> = Vec::new(); // [n_fit] per dataset
+    let mut gr_nq_eff: Vec<usize> = Vec::new();
     let mut gr_cached: Vec<Vec<f64>> = Vec::new();
     let mut gr_scratch: Vec<Vec<f64>> = Vec::new();
     let mut gr_fit_exp_gr: Vec<Vec<f64>> = Vec::new();
     let mut gr_fit_exp_sigma2: Vec<Vec<f64>> = Vec::new();
     let mut gr_n_fit: Vec<usize> = Vec::new();
+    let mut gr_czt_buf: Vec<Vec<f64>> = Vec::new(); // scratch for CZT input
 
     for gd in gr_data.iter() {
         let fit_indices: Vec<usize> = (0..gd.r.len())
@@ -648,19 +655,15 @@ pub fn run_rmc(
 
         let qmax_gr = gd.qmax;
         let use_lorch = gd.lorch;
-        let mut matrix = vec![0.0f64; n_fit * nq];
-        for (fi, &orig_i) in fit_indices.iter().enumerate() {
-            let ri = gd.r[orig_i];
-            if ri < 1e-10 {
-                continue;
-            }
-            let row = fi * nq;
-            let prefactor = dq / (2.0 * PI * PI * rho0 * ri);
-            for k in 0..nq {
-                let qk = params.q_grid[k];
-                if qk > qmax_gr {
-                    break;
-                }
+
+        // Effective Q-points: only those up to qmax_gr
+        let nq_eff = params.q_grid.iter().filter(|&&q| q <= qmax_gr).count();
+        let q_grid_eff: Vec<f64> = params.q_grid[..nq_eff].to_vec();
+
+        // Per-Q weights: q_k * window(q_k)
+        let q_weights: Vec<f64> = q_grid_eff
+            .iter()
+            .map(|&qk| {
                 let window = if use_lorch {
                     let arg = PI * qk / qmax_gr;
                     if arg > 1e-10 {
@@ -671,10 +674,35 @@ pub fn run_rmc(
                 } else {
                     1.0
                 };
-                matrix[row + k] = prefactor * qk * window * (qk * ri).sin();
-            }
-        }
-        gr_ft_matrices.push(matrix);
+                qk * window
+            })
+            .collect();
+
+        // Per-r prefactors: dq / (2π²ρ₀r_i)
+        let r_prefactors: Vec<f64> = fit_indices
+            .iter()
+            .map(|&orig_i| {
+                let ri = gd.r[orig_i];
+                if ri < 1e-10 {
+                    0.0
+                } else {
+                    dq / (2.0 * PI * PI * rho0 * ri)
+                }
+            })
+            .collect();
+
+        // Fit-range r-grid (must be uniformly spaced for CZT)
+        let r_fit: Vec<f64> = fit_indices.iter().map(|&i| gd.r[i]).collect();
+
+        // CZT: input is Q-indexed (nq_eff), output is r-indexed (n_fit)
+        // swap roles: "q_grid" = r_fit, "r_grid" = Q_grid_eff
+        let gr_czt = CztSineTransform::new(&r_fit, &q_grid_eff);
+
+        gr_czts.push(gr_czt);
+        gr_q_weights.push(q_weights);
+        gr_r_prefactors.push(r_prefactors);
+        gr_nq_eff.push(nq_eff);
+        gr_czt_buf.push(vec![0.0f64; nq_eff]);
         gr_cached.push(vec![0.0; n_fit]);
         gr_scratch.push(vec![0.0; n_fit]);
         gr_fit_exp_gr.push(fit_indices.iter().map(|&i| gd.gr[i]).collect());
@@ -700,18 +728,19 @@ pub fn run_rmc(
         }
     }
 
-    // Compute initial model g(r) from initial total_sq (fit-range only)
+    // Compute initial model g(r) from initial total_sq via CZT
     let mut gr_chi2_current = 0.0;
     for (di, gd) in gr_data.iter().enumerate() {
         let n_fit = gr_n_fit[di];
-        let matrix = &gr_ft_matrices[di];
+        let nq_eff = gr_nq_eff[di];
+        // Prepare CZT input: q_weight[k] * (total_sq[k] - 1.0)
+        for k in 0..nq_eff {
+            gr_czt_buf[di][k] = gr_q_weights[di][k] * (total_sq[k] - 1.0);
+        }
+        gr_czts[di].transform(&gr_czt_buf[di], &mut gr_cached[di]);
+        // Apply per-r prefactor and add 1.0 baseline
         for i in 0..n_fit {
-            let row = i * nq;
-            let mut val = 1.0;
-            for k in 0..nq {
-                val += matrix[row + k] * (total_sq[k] - 1.0);
-            }
-            gr_cached[di][i] = val;
+            gr_cached[di][i] = 1.0 + gr_r_prefactors[di][i] * gr_cached[di][i];
         }
         let mut chi2 = 0.0;
         for i in 0..n_fit {
@@ -998,7 +1027,7 @@ pub fn run_rmc(
             new_sq_chi2 += exp.weight * chi2;
         }
 
-        // Compute new g(r) incrementally (fit-range only) and its chi2
+        // Compute new g(r) incrementally via CZT and its chi2
         let mut new_gr_chi2 = 0.0;
         if has_gr {
             for k in 0..nq {
@@ -1006,14 +1035,16 @@ pub fn run_rmc(
             }
             for (di, gd) in gr_data.iter().enumerate() {
                 let n_fit = gr_n_fit[di];
-                let matrix = &gr_ft_matrices[di];
+                let nq_eff = gr_nq_eff[di];
+                // Prepare CZT input: q_weight[k] * delta_sq[k]
+                for k in 0..nq_eff {
+                    gr_czt_buf[di][k] = gr_q_weights[di][k] * delta_sq_buf[k];
+                }
+                gr_czts[di].transform(&gr_czt_buf[di], &mut gr_scratch[di]);
+                // Apply per-r prefactor and add cached baseline
                 for i in 0..n_fit {
-                    let row = i * nq;
-                    let mut delta = 0.0;
-                    for k in 0..nq {
-                        delta += matrix[row + k] * delta_sq_buf[k];
-                    }
-                    gr_scratch[di][i] = gr_cached[di][i] + delta;
+                    gr_scratch[di][i] =
+                        gr_cached[di][i] + gr_r_prefactors[di][i] * gr_scratch[di][i];
                 }
                 let mut chi2 = 0.0;
                 for i in 0..n_fit {
