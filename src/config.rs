@@ -137,8 +137,12 @@ pub struct EpsrConfig {
     pub temperature: Option<f64>,
     /// Zero EP below this distance in Å (default: 1.0).
     pub min_r: Option<f64>,
-    /// Stop if max |ΔEP| < convergence (eV) (default: 0.0 = run all iterations).
+    /// Stop if relative EP change (max |ΔEP| / max |EP|) falls below this for
+    /// `convergence_window` consecutive iterations (default: 0.0 = run all iterations).
     pub convergence: Option<f64>,
+    /// Number of consecutive iterations that must satisfy the convergence criterion
+    /// before stopping (default: 3).
+    pub convergence_window: Option<usize>,
     /// Directory containing previous `epsr_ep_{pair}.dat` files to seed the EP.
     /// When set, EP tables are loaded and accumulated on top (restart from previous run).
     pub ep_restart: Option<String>,

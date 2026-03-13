@@ -14,7 +14,8 @@ This produces thermodynamically consistent structures — configurations that ar
 | `moves_per_iteration` | integer | from `[rmc]` | MC moves per EPSR epoch |
 | `temperature` | float | 0.025 | kT in eV for EP update (~300K) |
 | `min_r` | float | 1.0 | Zero EP below this distance (Å) |
-| `convergence` | float | 0.0 | Stop if max |ΔEP| falls below this (eV). 0 = run all iterations |
+| `convergence` | float | 0.0 | Stop if relative EP change (max |ΔEP| / max |EP|) falls below this for `convergence_window` consecutive iterations. 0 = run all iterations |
+| `convergence_window` | integer | 3 | Number of consecutive iterations that must satisfy the convergence criterion before stopping |
 | `ep_restart` | string | — | Directory containing previous `epsr_ep_{pair}.dat` files to seed the EP |
 
 ## Example
@@ -27,7 +28,8 @@ smooth_sigma = 0.02
 moves_per_iteration = 200_000
 temperature = 0.025
 min_r = 1.0
-convergence = 1e-4
+convergence = 0.05
+convergence_window = 3
 ```
 
 ## Algorithm

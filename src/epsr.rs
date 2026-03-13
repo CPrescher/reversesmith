@@ -253,7 +253,8 @@ impl EpsrState {
     /// Apply the EP update: EP_ab(r) += feedback * kT * Δg_ab(r),
     /// Gaussian smooth, zero below min_r.
     ///
-    /// Returns max |delta| across all pairs for convergence checking.
+    /// Returns `(max_delta, max_ep)`: the max |ΔEP| across all pairs and the
+    /// max |EP| after accumulation, for convergence checking.
     pub fn update(
         &mut self,
         delta_partials_sq: &[f64],
@@ -263,7 +264,7 @@ impl EpsrState {
         kt: f64,
         smooth_sigma: f64,
         min_r: f64,
-    ) -> f64 {
+    ) -> (f64, f64) {
         let nq = q_grid.len();
         let r_grid: Vec<f64> = (0..self.n_bins).map(|i| i as f64 * self.dr).collect();
         let mut max_delta = 0.0f64;
@@ -312,7 +313,14 @@ impl EpsrState {
             }
         }
 
-        max_delta
+        // Compute max |EP| across all pairs after accumulation
+        let max_ep = self
+            .ep_tables
+            .iter()
+            .flat_map(|t| t.iter())
+            .fold(0.0f64, |m, &v| m.max(v.abs()));
+
+        (max_delta, max_ep)
     }
 
     /// Build a combined PotentialSet = reference + EP tables.

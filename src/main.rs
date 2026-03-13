@@ -654,6 +654,7 @@ fn main() {
         let epsr_kt = epsr_cfg.temperature.unwrap_or(0.025);
         let epsr_min_r = epsr_cfg.min_r.unwrap_or(1.0);
         let epsr_conv = epsr_cfg.convergence.unwrap_or(0.0);
+        let epsr_conv_window = epsr_cfg.convergence_window.unwrap_or(3);
         let epsr_moves = epsr_cfg.moves_per_iteration.unwrap_or(params.max_moves);
 
         log_println!(
@@ -663,12 +664,21 @@ fn main() {
             epsr_kt,
             epsr_smooth
         );
-        log_println!(
-            "  moves/iter = {}, min_r = {:.2} A, convergence = {:.1e}",
-            epsr_moves,
-            epsr_min_r,
-            epsr_conv
-        );
+        if epsr_conv > 0.0 {
+            log_println!(
+                "  moves/iter = {}, min_r = {:.2} A, convergence = {:.1e} (relative, window = {})",
+                epsr_moves,
+                epsr_min_r,
+                epsr_conv,
+                epsr_conv_window
+            );
+        } else {
+            log_println!(
+                "  moves/iter = {}, min_r = {:.2} A, convergence = off",
+                epsr_moves,
+                epsr_min_r
+            );
+        }
 
         // Save reference potential set (before EP)
         let reference_potential = potential_set.clone();
@@ -732,6 +742,7 @@ fn main() {
             epsr_exp.map(|exp| epsr::interpolate_exp_to_grid(&exp.q, &exp.sq, &params.q_grid));
 
         let mut last_state: Option<rmc::RmcState> = resume_state;
+        let mut conv_streak: usize = 0;
 
         for iter in 0..epsr_iters {
             log_println!("\n{}", "=".repeat(60));
@@ -818,7 +829,7 @@ fn main() {
                     nq,
                 );
 
-                let max_delta = epsr_state.update(
+                let (max_delta, max_ep) = epsr_state.update(
                     &delta_partials,
                     &params.q_grid,
                     rho0,
@@ -828,11 +839,19 @@ fn main() {
                     epsr_min_r,
                 );
 
+                let rel_change = if max_ep > 1e-30 {
+                    max_delta / max_ep
+                } else {
+                    f64::INFINITY
+                };
+
                 log_println!(
-                    "\nEPSR iter {}: chi2 = {:.6}, max |ΔEP| = {:.6} eV, acceptance = {:.1}%",
+                    "\nEPSR iter {}: chi2 = {:.6}, max |ΔEP| = {:.6} eV, max |EP| = {:.6} eV, rel = {:.4}, acceptance = {:.1}%",
                     iter + 1,
                     state.chi2,
                     max_delta,
+                    max_ep,
+                    rel_change,
                     acceptance
                 );
 
@@ -845,15 +864,36 @@ fn main() {
                     log_eprintln!("Warning: failed to write iter structure: {}", e);
                 }
 
-                // Convergence check
-                if epsr_conv > 0.0 && max_delta < epsr_conv {
-                    log_println!(
-                        "EPSR converged: max |ΔEP| = {:.6} < {:.6} eV",
-                        max_delta,
-                        epsr_conv
-                    );
-                    last_state = Some(state);
-                    break;
+                // Convergence check: relative change below threshold for N consecutive iterations
+                if epsr_conv > 0.0 {
+                    if rel_change < epsr_conv {
+                        conv_streak += 1;
+                        log_println!(
+                            "  Convergence: rel change {:.4} < {:.1e} ({}/{})",
+                            rel_change,
+                            epsr_conv,
+                            conv_streak,
+                            epsr_conv_window
+                        );
+                        if conv_streak >= epsr_conv_window {
+                            log_println!(
+                                "EPSR converged: relative EP change < {:.1e} for {} consecutive iterations",
+                                epsr_conv,
+                                epsr_conv_window
+                            );
+                            last_state = Some(state);
+                            break;
+                        }
+                    } else {
+                        if conv_streak > 0 {
+                            log_println!(
+                                "  Convergence: rel change {:.4} >= {:.1e} — streak reset",
+                                rel_change,
+                                epsr_conv
+                            );
+                        }
+                        conv_streak = 0;
+                    }
                 }
             } else {
                 log_println!(
