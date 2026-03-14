@@ -60,7 +60,7 @@ Each run gets a random seed (logged in its `rsmith.log`) and writes all output t
 
 ```bash
 for i in $(seq 1 8); do
-    rsmith config.toml --analyze run$(printf '%02d' $i)/refined.xyz
+    rsmith config.toml --analyze run$(printf '%02d' $i)/refined.xyz --output-dir run$(printf '%02d' $i)
 done
 ```
 

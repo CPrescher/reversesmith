@@ -358,6 +358,15 @@ pub fn write_cn_histograms(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut file = File::create(path)?;
 
+    // Summary statistics
+    for cn in results {
+        writeln!(
+            file,
+            "# {}: mean = {:.3}, std = {:.3}, min = {}, max = {}, cutoff = {:.2} A",
+            cn.pair_label, cn.mean, cn.std_dev, cn.min, cn.max, cn.cutoff
+        )?;
+    }
+
     // Header
     write!(file, "# CN")?;
     for cn in results {

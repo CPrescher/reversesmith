@@ -43,6 +43,7 @@ fn main() {
         eprintln!("  --seed N                    Override RNG seed (default: random)");
         eprintln!("  --quiet                     Suppress terminal output (log file only)");
         eprintln!("  --resume                    Resume RMC from checkpoint.dat");
+        eprintln!("  --density RHO               Override target density (g/cm^3)");
         process::exit(1);
     }
 
@@ -55,6 +56,13 @@ fn main() {
     let cli_seed: Option<u64> = args
         .iter()
         .position(|a| a == "--seed")
+        .and_then(|pos| args.get(pos + 1))
+        .and_then(|s| s.parse().ok());
+
+    // --density RHO
+    let cli_density: Option<f64> = args
+        .iter()
+        .position(|a| a == "--density")
         .and_then(|pos| args.get(pos + 1))
         .and_then(|s| s.parse().ok());
 
@@ -72,6 +80,41 @@ fn main() {
         .and_then(|pos| args.get(pos + 1))
         .filter(|a| !a.starts_with("--"))
         .cloned();
+
+    // Check for unrecognized flags
+    let known_flags = [
+        "--analyze",
+        "--output-dir",
+        "--seed",
+        "--quiet",
+        "--resume",
+        "--density",
+    ];
+    let known_with_value = ["--output-dir", "--seed", "--density"];
+    let mut skip_next = false;
+    for arg in args.iter().skip(2) {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        if arg.starts_with("--") {
+            if !known_flags.contains(&arg.as_str()) {
+                eprintln!("Error: unrecognized option '{}'", arg);
+                process::exit(1);
+            }
+            if known_with_value.contains(&arg.as_str()) {
+                skip_next = true;
+            }
+        }
+    }
+    // Also skip the value after --analyze if it's not a flag
+    if let Some(pos) = args.iter().position(|a| a == "--analyze") {
+        if let Some(next) = args.get(pos + 1) {
+            if !next.starts_with("--") {
+                // This is the analyze structure path, already handled
+            }
+        }
+    }
 
     // Resolve paths relative to config file location
     let config_dir = config_path
@@ -176,8 +219,9 @@ fn main() {
         config.number_density()
     );
 
-    // --- Optional density rescaling ---
-    if let Some(target_density) = cfg.system.density {
+    // --- Optional density rescaling (CLI --density overrides config) ---
+    let target_density = cli_density.or(cfg.system.density);
+    if let Some(target_density) = target_density {
         let current_density = config.mass_density();
         let scale = (current_density / target_density).cbrt();
         log_println!(
