@@ -125,6 +125,9 @@ pub struct AnalysisConfig {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EpsrConfig {
+    /// EPSR mode: "hybrid" (chi2 + energy MC, default) or "pure" (energy-only MC
+    /// with S(Q) computed after each epoch — the original Soper algorithm).
+    pub mode: Option<String>,
     /// Number of outer EPSR iterations (default: 10).
     pub iterations: Option<usize>,
     /// Feedback factor for EP update: EP += feedback * kT * Δg(r) (default: 0.2).

@@ -489,6 +489,68 @@ impl PotentialSet {
         energy
     }
 
+    /// Compute energy delta for moving an atom from old_pos to new_pos.
+    /// Single pass over neighbors when old and new cells share the same neighbor set.
+    pub fn energy_delta_atom(
+        &self,
+        config: &Configuration,
+        atom_idx: usize,
+        old_pos: &[f64; 3],
+        new_pos: &[f64; 3],
+        cell_list: &CellList,
+        old_cell: usize,
+        new_cell: usize,
+    ) -> f64 {
+        // If cells differ, the neighbor sets may differ — fall back to two calls
+        if old_cell != new_cell {
+            let old_e = self.energy_of_atom(config, atom_idx, old_pos, cell_list, old_cell);
+            let new_e = self.energy_of_atom(config, atom_idx, new_pos, cell_list, new_cell);
+            return new_e - old_e;
+        }
+
+        let ti = config.atoms[atom_idx].type_id;
+        let box_lengths = &config.box_lengths;
+        let cutoff2 = self.cutoff * self.cutoff;
+        let n_types = self.n_types;
+
+        let mut delta = 0.0f64;
+        let neighbor_cells = cell_list.neighbor_cells(old_cell);
+        for &nc in &neighbor_cells {
+            for j in cell_list.atoms_in_cell(nc) {
+                if j == atom_idx {
+                    continue;
+                }
+
+                let tj = config.atoms[j].type_id;
+                let pot_idx = self.potential_index[ti * n_types + tj];
+                if pot_idx == usize::MAX {
+                    continue;
+                }
+
+                let pj = &config.atoms[j].position;
+
+                // Old distance
+                let mut r2_old = 0.0f64;
+                let mut r2_new = 0.0f64;
+                for d in 0..3 {
+                    let l = box_lengths[d];
+                    let mut d_old = pj[d] - old_pos[d];
+                    d_old -= l * (d_old / l).round();
+                    r2_old += d_old * d_old;
+                    let mut d_new = pj[d] - new_pos[d];
+                    d_new -= l * (d_new / l).round();
+                    r2_new += d_new * d_new;
+                }
+
+                let pot = &self.potentials[pot_idx];
+                let e_new = if r2_new < cutoff2 { pot.evaluate(r2_new.sqrt()) } else { 0.0 };
+                let e_old = if r2_old < cutoff2 { pot.evaluate(r2_old.sqrt()) } else { 0.0 };
+                delta += e_new - e_old;
+            }
+        }
+        delta
+    }
+
     /// Compute total pair potential energy of the configuration.
     /// Each pair is counted once (i < j).
     pub fn total_energy(&self, config: &Configuration, cell_list: &CellList) -> f64 {

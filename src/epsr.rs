@@ -190,7 +190,9 @@ impl EpsrState {
         let mut delta_partials = vec![0.0f64; n_pairs * nq];
 
         for k in 0..nq {
-            let delta_s = total_sq_exp[k] - total_sq_sim[k];
+            // Sign: sim - exp (matches EPSR25 convention where the fitted
+            // residual is added to the EP to drive the simulation toward experiment)
+            let delta_s = total_sq_sim[k] - total_sq_exp[k];
 
             // Sum of squared weights at this Q
             let mut w2_sum = 0.0f64;

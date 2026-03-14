@@ -13,6 +13,15 @@ use crate::potential::PotentialSet;
 use crate::rdf::compute_histograms;
 use crate::xray::form_factor;
 
+/// EPSR mode selection.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum EpsrMode {
+    /// Hybrid RMC+potential: chi2 + weighted energy in MC acceptance (default).
+    Hybrid,
+    /// Pure EPSR (Soper algorithm): energy-only MC, S(Q) computed after each epoch.
+    Pure,
+}
+
 /// Estimate per-point sigma from data using windowed second finite differences.
 ///
 /// The second difference `d2[i] = y[i+1] - 2*y[i] + y[i-1]` removes smooth
@@ -1156,21 +1165,26 @@ pub fn run_rmc(
                 } else {
                     0.0
                 };
+                log_println!();
+                log_println!("Potential weight calibration ({} moves):", calib_count);
+                log_println!("  avg |delta_chi2| per move = {:.6}", avg_dchi2);
+                log_println!("  avg |delta_E| per move    = {:.6} eV", avg_de);
                 log_println!(
-                    "Calibration ({} moves): avg |delta_chi2| = {:.6}, avg |delta_E| = {:.6} eV",
-                    calib_count,
-                    avg_dchi2,
-                    avg_de
+                    "  Current [potential] weight = {:.6}",
+                    energy_weight
                 );
                 log_println!(
-                    "  Current weight = {:.6}, suggested weight for equal balance = {:.6}",
-                    energy_weight,
+                    "  Suggested weight (chi2 ≈ energy influence) = {:.6}",
                     suggested
                 );
-                log_println!(
-                    "  Ratio current/suggested = {:.4}",
-                    energy_weight / suggested.max(1e-30)
-                );
+                let ratio = energy_weight / suggested.max(1e-30);
+                if ratio < 0.5 {
+                    log_println!("  → Energy is under-weighted ({:.1}x below balance). Structure may deviate far from the potential energy surface.", ratio);
+                } else if ratio > 2.0 {
+                    log_println!("  → Energy is over-weighted ({:.1}x above balance). Fit to experimental data may be poor.", ratio);
+                } else {
+                    log_println!("  → Weight is near balance ({:.2}x).", ratio);
+                }
             }
         }
 
@@ -1403,6 +1417,215 @@ pub fn run_rmc(
     } else {
         None
     };
+
+    state
+}
+
+/// Run energy-only Metropolis Monte Carlo (pure EPSR mode).
+///
+/// Unlike `run_rmc`, this does NOT compute S(Q) during the MC loop.
+/// Moves are accepted/rejected based solely on potential energy change,
+/// using standard Boltzmann acceptance: P = min(1, exp(-ΔE/kT)).
+/// S(Q) should be computed externally after this function returns.
+pub fn run_energy_mc(
+    config: &mut Configuration,
+    constraints: &Constraints,
+    params: &RmcParams,
+    potential: &PotentialSet,
+    checkpoint_fn: Option<Box<dyn Fn(&RmcState, &Configuration)>>,
+    kt: f64,
+) -> RmcState {
+    let mut rng = StdRng::seed_from_u64(params.seed);
+    let n_atoms = config.atoms.len();
+
+    // Build cell list for neighbor lookups (use potential cutoff only — no RDF in energy MC)
+    let positions: Vec<[f64; 3]> = config.atoms.iter().map(|a| a.position).collect();
+    let cell_cutoff = potential.cutoff;
+    let mut cell_list = CellList::new(&positions, &config.box_lengths, cell_cutoff);
+    log_println!(
+        "Energy MC cell list: {}x{}x{} = {} cells (cutoff: {:.2} A)",
+        cell_list.nc[0],
+        cell_list.nc[1],
+        cell_list.nc[2],
+        cell_list.n_cells,
+        cell_cutoff
+    );
+
+    // Constraint cell list
+    let pc = PrecomputedConstraints::from_constraints(constraints, config);
+    let constr_cutoff = pc.constraint_cutoff();
+    let mut constr_cell_list = if constr_cutoff > 0.0 {
+        let cl = CellList::new(&positions, &config.box_lengths, constr_cutoff);
+        log_println!(
+            "Constraint cell list: {}x{}x{} = {} cells (cutoff: {:.2} A)",
+            cl.nc[0],
+            cl.nc[1],
+            cl.nc[2],
+            cl.n_cells,
+            constr_cutoff
+        );
+        Some(cl)
+    } else {
+        None
+    };
+
+    // Initial energy
+    let mut current_energy = potential.total_energy(config, &cell_list);
+    log_println!(
+        "Initial potential energy = {:.6} eV, kT = {:.6} eV",
+        current_energy,
+        kt
+    );
+
+    let inv_kt = if kt > 1e-30 { 1.0 / kt } else { 1e30 };
+
+    let mut state = RmcState {
+        move_count: 0,
+        max_step: params.max_step,
+        accepted: 0,
+        chi2: 0.0, // not used in energy-only mode
+        seed: params.seed,
+        partial_sq: None,
+        total_sq: None,
+    };
+
+    let mut recent_accepted = 0u64;
+    let mut recent_total = 0u64;
+
+    // === Main energy-only MC loop ===
+    for move_num in 0..params.max_moves {
+        let atom_idx = rng.gen_range(0..n_atoms);
+
+        let dx: f64 = rng.gen_range(-state.max_step..state.max_step);
+        let dy: f64 = rng.gen_range(-state.max_step..state.max_step);
+        let dz: f64 = rng.gen_range(-state.max_step..state.max_step);
+
+        let old_pos = config.atoms[atom_idx].position;
+        let mut new_pos = [old_pos[0] + dx, old_pos[1] + dy, old_pos[2] + dz];
+        for d in 0..3 {
+            let l = config.box_lengths[d];
+            new_pos[d] -= l * (new_pos[d] / l).floor();
+        }
+
+        // Check constraints
+        if let Some(ref ccl) = constr_cell_list {
+            let new_pos_constr_cell = {
+                let cx = ((new_pos[0] / config.box_lengths[0]).fract() * ccl.nc[0] as f64).floor()
+                    as usize;
+                let cy = ((new_pos[1] / config.box_lengths[1]).fract() * ccl.nc[1] as f64).floor()
+                    as usize;
+                let cz = ((new_pos[2] / config.box_lengths[2]).fract() * ccl.nc[2] as f64).floor()
+                    as usize;
+                let cx = cx.min(ccl.nc[0] - 1);
+                let cy = cy.min(ccl.nc[1] - 1);
+                let cz = cz.min(ccl.nc[2] - 1);
+                cz * ccl.nc[0] * ccl.nc[1] + cy * ccl.nc[0] + cx
+            };
+            if !check_min_distances_cell(config, atom_idx, &new_pos, &pc, ccl, new_pos_constr_cell)
+            {
+                recent_total += 1;
+                state.move_count += 1;
+                continue;
+            }
+            if !pc.coordination.is_empty()
+                && !check_coordination_cell(config, atom_idx, &new_pos, &pc, ccl)
+            {
+                recent_total += 1;
+                state.move_count += 1;
+                continue;
+            }
+        }
+
+        // Compute energy delta
+        let old_pos_cell = cell_list.cell_of[atom_idx];
+        let new_pos_cell = {
+            let cx = ((new_pos[0] / config.box_lengths[0]).fract() * cell_list.nc[0] as f64)
+                .floor() as usize;
+            let cy = ((new_pos[1] / config.box_lengths[1]).fract() * cell_list.nc[1] as f64)
+                .floor() as usize;
+            let cz = ((new_pos[2] / config.box_lengths[2]).fract() * cell_list.nc[2] as f64)
+                .floor() as usize;
+            let cx = cx.min(cell_list.nc[0] - 1);
+            let cy = cy.min(cell_list.nc[1] - 1);
+            let cz = cz.min(cell_list.nc[2] - 1);
+            cz * cell_list.nc[0] * cell_list.nc[1] + cy * cell_list.nc[0] + cx
+        };
+
+        // Compute energy delta (single pass when atom stays in same cell)
+        let delta_energy = potential.energy_delta_atom(
+            config, atom_idx, &old_pos, &new_pos, &cell_list, old_pos_cell, new_pos_cell,
+        );
+        config.atoms[atom_idx].position = new_pos;
+
+        // Boltzmann acceptance: P = min(1, exp(-ΔE/kT))
+        let accept = if delta_energy < 0.0 {
+            true
+        } else {
+            let prob = (-delta_energy * inv_kt).exp();
+            rng.gen::<f64>() < prob
+        };
+
+        if accept {
+            current_energy += delta_energy;
+            cell_list.move_atom(atom_idx, &new_pos);
+            if let Some(ref mut ccl) = constr_cell_list {
+                ccl.move_atom(atom_idx, &new_pos);
+            }
+            state.accepted += 1;
+            recent_accepted += 1;
+        } else {
+            config.atoms[atom_idx].position = old_pos;
+        }
+
+        state.move_count = move_num + 1;
+        recent_total += 1;
+
+        // Print status
+        if state.move_count % params.print_every == 0 {
+            let ratio = if recent_total > 0 {
+                recent_accepted as f64 / recent_total as f64
+            } else {
+                0.0
+            };
+            log_println!(
+                "Move {}/{}: E = {:.4} eV, accept = {:.3} (recent {:.3}), step = {:.4} A",
+                state.move_count,
+                params.max_moves,
+                current_energy,
+                state.accepted as f64 / state.move_count.max(1) as f64,
+                ratio,
+                state.max_step
+            );
+        }
+
+        // Adaptive step size
+        if state.move_count % params.adjust_step_every == 0 && recent_total > 0 {
+            let ratio = recent_accepted as f64 / recent_total as f64;
+            if ratio > params.target_acceptance + 0.05 {
+                state.max_step *= 1.05;
+            } else if ratio < params.target_acceptance - 0.05 {
+                state.max_step *= 0.95;
+            }
+            state.max_step = state.max_step.clamp(0.001, 2.0);
+            recent_accepted = 0;
+            recent_total = 0;
+        }
+
+        // Checkpoint
+        if state.move_count % params.checkpoint_every == 0 {
+            if let Some(ref f) = checkpoint_fn {
+                f(&state, config);
+            }
+        }
+    }
+
+    let acceptance = 100.0 * state.accepted as f64 / state.move_count.max(1) as f64;
+    log_println!(
+        "\nEnergy MC complete: {} moves, E = {:.4} eV, accepted {:.1}%",
+        state.move_count,
+        current_energy,
+        acceptance
+    );
 
     state
 }

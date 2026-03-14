@@ -119,12 +119,16 @@ for section_key, data_type, exp_path, convention in datasets:
     sq_start_path = find_sq_file(output_dir, "start", data_type)
     sq_refined_path = find_sq_file(output_dir, "refined", data_type)
 
+    q_max_exp = sq_exp[:, 0].max()
+
     if sq_start_path:
         sq_start = np.loadtxt(sq_start_path, comments="#")
-        ax.plot(sq_start[:, 0], sq_start[:, 1], "b-", lw=1.2, label="Starting config")
+        mask = sq_start[:, 0] <= q_max_exp
+        ax.plot(sq_start[mask, 0], sq_start[mask, 1], "b-", lw=1.2, label="Starting config")
     if sq_refined_path:
         sq_ref = np.loadtxt(sq_refined_path, comments="#")
-        ax.plot(sq_ref[:, 0], sq_ref[:, 1], "g-", lw=1.5, label="RMC refined")
+        mask = sq_ref[:, 0] <= q_max_exp
+        ax.plot(sq_ref[mask, 0], sq_ref[mask, 1], "g-", lw=1.5, label="RMC refined")
     ax.plot(sq_exp[:, 0], sq_exp[:, 1], "r-", lw=1.5, alpha=0.8, label="Experiment")
 
     # Convention-dependent baseline
@@ -141,7 +145,7 @@ for section_key, data_type, exp_path, convention in datasets:
         ylabel = "S(Q)"
 
     label_nice = "X-ray" if data_type == "xray" else "Neutron"
-    ax.set(xlabel="Q (1/\u00c5)", ylabel=ylabel, xlim=(0.3, None))
+    ax.set(xlabel="Q (1/\u00c5)", ylabel=ylabel, xlim=(0.3, q_max_exp))
     ax.set_title(f"{label_nice} structure factor")
     ax.legend()
 
@@ -153,14 +157,28 @@ if has_gr_exp:
     gr_exp_data = np.loadtxt(os.path.join(config_dir, config["data"]["xray_gr"]["file"]))
     r_gr = np.linspace(0.0, 10.0, 1000)
 
+    # Use experimental S(Q) Q range for FT to avoid truncation artifacts
     sq_start_path = find_sq_file(output_dir, "start", "xray")
     sq_refined_path = find_sq_file(output_dir, "refined", "xray")
+    # Find experimental S(Q) Q_max to truncate computed S(Q) before FT
+    xray_sq_cfg = config.get("data", {}).get("xray_sq")
+    if xray_sq_cfg:
+        sq_exp_for_qmax = np.loadtxt(os.path.join(config_dir, xray_sq_cfg["file"]))
+        q_cut = sq_exp_for_qmax[:, 0].max()
+    else:
+        q_cut = None
     if sq_start_path:
         sq_s = np.loadtxt(sq_start_path, comments="#")
+        if q_cut is not None:
+            m = sq_s[:, 0] <= q_cut
+            sq_s = sq_s[m]
         gx_start = compute_weighted_gr(sq_s[:, 0], sq_s[:, 1], rho0, r_gr)
         ax.plot(r_gr, gx_start, "b-", lw=1.2, label="Starting config")
     if sq_refined_path:
         sq_r = np.loadtxt(sq_refined_path, comments="#")
+        if q_cut is not None:
+            m = sq_r[:, 0] <= q_cut
+            sq_r = sq_r[m]
         gx_ref = compute_weighted_gr(sq_r[:, 0], sq_r[:, 1], rho0, r_gr)
         ax.plot(r_gr, gx_ref, "g-", lw=1.5, label="RMC refined")
     ax.plot(gr_exp_data[:, 0], gr_exp_data[:, 1], "r-", lw=1.5, alpha=0.8, label="Experiment")

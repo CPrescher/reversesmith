@@ -11,7 +11,7 @@ use rsmith::io;
 use rsmith::neutron;
 use rsmith::potential::PotentialSet;
 use rsmith::rdf;
-use rsmith::rmc::{self, DataKind, ExperimentalData, ExperimentalGrData, RmcParams, SqConvention};
+use rsmith::rmc::{self, DataKind, EpsrMode, ExperimentalData, ExperimentalGrData, RmcParams, SqConvention};
 use rsmith::sq;
 use rsmith::xray;
 use rsmith::{log_eprintln, log_println};
@@ -648,6 +648,17 @@ fn main() {
 
     let state = if let Some(ref epsr_cfg) = cfg.epsr {
         // --- EPSR outer loop ---
+        let epsr_mode = match epsr_cfg.mode.as_deref() {
+            Some("pure") => EpsrMode::Pure,
+            Some("hybrid") | None => EpsrMode::Hybrid,
+            Some(other) => {
+                eprintln!(
+                    "Warning: unknown EPSR mode '{}', using 'hybrid'. Valid: hybrid, pure",
+                    other
+                );
+                EpsrMode::Hybrid
+            }
+        };
         let epsr_iters = epsr_cfg.iterations.unwrap_or(10);
         let epsr_feedback = epsr_cfg.feedback.unwrap_or(0.2);
         let epsr_smooth = epsr_cfg.smooth_sigma.unwrap_or(0.02);
@@ -657,8 +668,10 @@ fn main() {
         let epsr_conv_window = epsr_cfg.convergence_window.unwrap_or(3);
         let epsr_moves = epsr_cfg.moves_per_iteration.unwrap_or(params.max_moves);
 
+        let mode_str = if epsr_mode == EpsrMode::Pure { "pure" } else { "hybrid" };
         log_println!(
-            "EPSR mode: {} iterations, feedback = {:.3}, kT = {:.4} eV, smooth_sigma = {:.3} A",
+            "EPSR mode: {} ({} iterations, feedback = {:.3}, kT = {:.4} eV, smooth_sigma = {:.3} A)",
+            mode_str,
             epsr_iters,
             epsr_feedback,
             epsr_kt,
@@ -745,15 +758,16 @@ fn main() {
         let mut conv_streak: usize = 0;
 
         for iter in 0..epsr_iters {
+            let iter_start = std::time::Instant::now();
             log_println!("\n{}", "=".repeat(60));
             log_println!("EPSR iteration {}/{}", iter + 1, epsr_iters);
             log_println!("{}", "=".repeat(60));
 
-            // First iteration: use full [rmc] settings (convergence, best-restoration,
-            // annealing) to get a well-converged starting structure.
-            // Subsequent iterations: equilibrium runs for EP update — no convergence
-            // early-stop, no best-restoration, fixed moves_per_iteration.
-            let mut iter_params = if iter == 0 {
+            // Hybrid mode: first iteration uses full [rmc] settings (convergence,
+            // best-restoration, annealing) to get a well-converged starting structure.
+            // Subsequent iterations use equilibrium runs with moves_per_iteration.
+            // Pure mode: all iterations use the same energy-only MC parameters.
+            let mut iter_params = if epsr_mode == EpsrMode::Hybrid && iter == 0 {
                 log_println!("Using [rmc] settings for initial convergence");
                 params.clone()
             } else {
@@ -802,22 +816,107 @@ fn main() {
                 iter_params.seed = prev.seed.wrapping_add(prev.move_count);
             }
 
-            let state = rmc::run_rmc(
-                &mut config,
-                &experiments,
-                &gr_datasets,
-                &constraints,
-                &iter_params,
-                Some(&combined),
-                checkpoint_fn,
-                None, // fresh start each EPSR iter (positions carry over in config)
-            );
+            // Carry over step size from previous iteration (pure mode)
+            if let Some(ref prev) = last_state {
+                if epsr_mode == EpsrMode::Pure {
+                    iter_params.max_step = prev.max_step;
+                }
+            }
 
+            // Branch: pure EPSR uses energy-only MC, hybrid uses chi2+energy RMC
+            let (state, partial_sq_flat, total_sq_vec) = if epsr_mode == EpsrMode::Pure {
+                let state = rmc::run_energy_mc(
+                    &mut config,
+                    &constraints,
+                    &iter_params,
+                    &combined,
+                    checkpoint_fn,
+                    epsr_kt,
+                );
+
+                // Compute S(Q) from scratch after energy-only MC
+                let nq = params.q_grid.len();
+                let rdf_dr = params.rdf_cutoff / params.rdf_nbins as f64;
+                let histograms =
+                    rdf::compute_histograms(&config, params.rdf_nbins, params.rdf_cutoff);
+                let partials_gr =
+                    rdf::normalise_histograms(&histograms, &config, params.rdf_nbins, rdf_dr);
+                let r_grid: Vec<f64> = (0..params.rdf_nbins)
+                    .map(|i| (i as f64 + 0.5) * rdf_dr)
+                    .collect();
+                let partial_sq_map = sq::compute_all_partial_sq(
+                    &r_grid,
+                    &partials_gr,
+                    rho0,
+                    &params.q_grid,
+                    params.lorch,
+                );
+
+                // Flatten HashMap into flat [n_pairs * nq] array
+                let n_types = config.species.len();
+                let mut flat_partial = vec![0.0f64; epsr_state.n_pairs * nq];
+                for a in 0..n_types {
+                    for b in a..n_types {
+                        let pair_idx = config.pair_index(a, b);
+                        if let Some(sq_vals) = partial_sq_map.get(&pair_idx) {
+                            let base = pair_idx * nq;
+                            flat_partial[base..base + nq].copy_from_slice(sq_vals);
+                        }
+                    }
+                }
+
+                // Compute total weighted S(Q) for the primary experiment
+                let total_sq: Option<Vec<f64>> = epsr_exp.map(|exp| {
+                    let (raw_sq, _label) = match exp.kind {
+                        DataKind::Xray => (
+                            xray::compute_xray_sq(&config, &partial_sq_map, &params.q_grid),
+                            "xray",
+                        ),
+                        DataKind::Neutron => (
+                            neutron::compute_sq(&config, &partial_sq_map, &params.q_grid),
+                            "neutron",
+                        ),
+                    };
+                    raw_sq
+                });
+
+                // Compute chi2 for logging
+                let chi2 = if let (Some(ref tsq), Some(ref egrid)) = (&total_sq, &exp_on_grid) {
+                    let mut c = 0.0f64;
+                    for k in 0..nq {
+                        let diff = tsq[k] - egrid[k];
+                        c += diff * diff;
+                    }
+                    c
+                } else {
+                    0.0
+                };
+                log_println!("  Post-MC S(Q) chi2 = {:.6}", chi2);
+
+                (state, Some(flat_partial), total_sq)
+            } else {
+                // Hybrid mode: standard run_rmc with chi2+energy
+                let state = rmc::run_rmc(
+                    &mut config,
+                    &experiments,
+                    &gr_datasets,
+                    &constraints,
+                    &iter_params,
+                    Some(&combined),
+                    checkpoint_fn,
+                    None,
+                );
+                let psq = state.partial_sq.clone();
+                let tsq = state.total_sq.clone();
+                (state, psq, tsq)
+            };
+
+            let mc_elapsed = iter_start.elapsed();
             let acceptance = 100.0 * state.accepted as f64 / state.move_count.max(1) as f64;
 
             // Extract partials and compute EP update
             if let (Some(ref partial_sq), Some(ref total_sq), Some(ref exp_grid)) =
-                (&state.partial_sq, &state.total_sq, &exp_on_grid)
+                (&partial_sq_flat, &total_sq_vec, &exp_on_grid)
             {
                 let nq = params.q_grid.len();
                 let delta_partials = EpsrState::compute_residual_partials(
@@ -845,6 +944,8 @@ fn main() {
                     f64::INFINITY
                 };
 
+                let iter_elapsed = iter_start.elapsed();
+                let ep_elapsed = iter_elapsed - mc_elapsed;
                 log_println!(
                     "\nEPSR iter {}: chi2 = {:.6}, max |ΔEP| = {:.6} eV, max |EP| = {:.6} eV, rel = {:.4}, acceptance = {:.1}%",
                     iter + 1,
@@ -853,6 +954,12 @@ fn main() {
                     max_ep,
                     rel_change,
                     acceptance
+                );
+                log_println!(
+                    "  Timing: MC = {:.1}s, EP update = {:.1}s, total = {:.1}s",
+                    mc_elapsed.as_secs_f64(),
+                    ep_elapsed.as_secs_f64(),
+                    iter_elapsed.as_secs_f64()
                 );
 
                 // Write EP files and per-iteration structure
