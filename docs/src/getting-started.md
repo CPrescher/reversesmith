@@ -39,9 +39,15 @@ rsmith config.toml --resume
 rsmith config.toml --resume --output-dir run01
 ```
 
+### Seed handling
+
+The RNG seed controls the random atom displacements. Priority: `--seed` flag > `seed` in `[rmc]` > random.
+
+For production runs, **omit `seed` from `[rmc]`** so each run gets a unique random seed. The seed is always logged in `rsmith.log`, so any run can be reproduced later by passing `--seed <value>`. The `--seed` flag and the config `seed` field are mainly useful for debugging and testing.
+
 ### Parallel ensemble runs
 
-Run multiple independent fits with different random seeds:
+RMC refinement can converge to different local minima depending on the random trajectory. Running multiple independent fits and comparing results gives confidence in the solution. Omit `seed` from `[rmc]` to ensure each run explores a different path:
 
 ```bash
 for i in $(seq 1 8); do

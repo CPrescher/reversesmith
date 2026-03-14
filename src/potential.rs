@@ -543,8 +543,16 @@ impl PotentialSet {
                 }
 
                 let pot = &self.potentials[pot_idx];
-                let e_new = if r2_new < cutoff2 { pot.evaluate(r2_new.sqrt()) } else { 0.0 };
-                let e_old = if r2_old < cutoff2 { pot.evaluate(r2_old.sqrt()) } else { 0.0 };
+                let e_new = if r2_new < cutoff2 {
+                    pot.evaluate(r2_new.sqrt())
+                } else {
+                    0.0
+                };
+                let e_old = if r2_old < cutoff2 {
+                    pot.evaluate(r2_old.sqrt())
+                } else {
+                    0.0
+                };
                 delta += e_new - e_old;
             }
         }
