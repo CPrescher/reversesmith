@@ -1169,10 +1169,7 @@ pub fn run_rmc(
                 log_println!("Potential weight calibration ({} moves):", calib_count);
                 log_println!("  avg |delta_chi2| per move = {:.6}", avg_dchi2);
                 log_println!("  avg |delta_E| per move    = {:.6} eV", avg_de);
-                log_println!(
-                    "  Current [potential] weight = {:.6}",
-                    energy_weight
-                );
+                log_println!("  Current [potential] weight = {:.6}", energy_weight);
                 log_println!(
                     "  Suggested weight (chi2 ≈ energy influence) = {:.6}",
                     suggested
@@ -1539,12 +1536,12 @@ pub fn run_energy_mc(
         // Compute energy delta
         let old_pos_cell = cell_list.cell_of[atom_idx];
         let new_pos_cell = {
-            let cx = ((new_pos[0] / config.box_lengths[0]).fract() * cell_list.nc[0] as f64)
-                .floor() as usize;
-            let cy = ((new_pos[1] / config.box_lengths[1]).fract() * cell_list.nc[1] as f64)
-                .floor() as usize;
-            let cz = ((new_pos[2] / config.box_lengths[2]).fract() * cell_list.nc[2] as f64)
-                .floor() as usize;
+            let cx = ((new_pos[0] / config.box_lengths[0]).fract() * cell_list.nc[0] as f64).floor()
+                as usize;
+            let cy = ((new_pos[1] / config.box_lengths[1]).fract() * cell_list.nc[1] as f64).floor()
+                as usize;
+            let cz = ((new_pos[2] / config.box_lengths[2]).fract() * cell_list.nc[2] as f64).floor()
+                as usize;
             let cx = cx.min(cell_list.nc[0] - 1);
             let cy = cy.min(cell_list.nc[1] - 1);
             let cz = cz.min(cell_list.nc[2] - 1);
@@ -1553,7 +1550,13 @@ pub fn run_energy_mc(
 
         // Compute energy delta (single pass when atom stays in same cell)
         let delta_energy = potential.energy_delta_atom(
-            config, atom_idx, &old_pos, &new_pos, &cell_list, old_pos_cell, new_pos_cell,
+            config,
+            atom_idx,
+            &old_pos,
+            &new_pos,
+            &cell_list,
+            old_pos_cell,
+            new_pos_cell,
         );
         config.atoms[atom_idx].position = new_pos;
 
@@ -1581,7 +1584,7 @@ pub fn run_energy_mc(
         recent_total += 1;
 
         // Print status
-        if state.move_count % params.print_every == 0 {
+        if state.move_count.is_multiple_of(params.print_every) {
             let ratio = if recent_total > 0 {
                 recent_accepted as f64 / recent_total as f64
             } else {
@@ -1599,7 +1602,7 @@ pub fn run_energy_mc(
         }
 
         // Adaptive step size
-        if state.move_count % params.adjust_step_every == 0 && recent_total > 0 {
+        if state.move_count.is_multiple_of(params.adjust_step_every) && recent_total > 0 {
             let ratio = recent_accepted as f64 / recent_total as f64;
             if ratio > params.target_acceptance + 0.05 {
                 state.max_step *= 1.05;
@@ -1612,7 +1615,7 @@ pub fn run_energy_mc(
         }
 
         // Checkpoint
-        if state.move_count % params.checkpoint_every == 0 {
+        if state.move_count.is_multiple_of(params.checkpoint_every) {
             if let Some(ref f) = checkpoint_fn {
                 f(&state, config);
             }

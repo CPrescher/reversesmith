@@ -11,7 +11,9 @@ use rsmith::io;
 use rsmith::neutron;
 use rsmith::potential::PotentialSet;
 use rsmith::rdf;
-use rsmith::rmc::{self, DataKind, EpsrMode, ExperimentalData, ExperimentalGrData, RmcParams, SqConvention};
+use rsmith::rmc::{
+    self, DataKind, EpsrMode, ExperimentalData, ExperimentalGrData, RmcParams, SqConvention,
+};
 use rsmith::sq;
 use rsmith::xray;
 use rsmith::{log_eprintln, log_println};
@@ -668,7 +670,11 @@ fn main() {
         let epsr_conv_window = epsr_cfg.convergence_window.unwrap_or(3);
         let epsr_moves = epsr_cfg.moves_per_iteration.unwrap_or(params.max_moves);
 
-        let mode_str = if epsr_mode == EpsrMode::Pure { "pure" } else { "hybrid" };
+        let mode_str = if epsr_mode == EpsrMode::Pure {
+            "pure"
+        } else {
+            "hybrid"
+        };
         log_println!(
             "EPSR mode: {} ({} iterations, feedback = {:.3}, kT = {:.4} eV, smooth_sigma = {:.3} A)",
             mode_str,
