@@ -2,6 +2,16 @@
 
 All notable changes to rsmith will be documented in this file.
 
+## [1.2.0] - 2026-03-16
+
+### Added
+- **f(r) fitting**: new `[data.xray_fr]` config option for fitting the reduced pair
+  distribution function f(r) = (2/π) ∫ Q·[S(Q)-1]·W(Q)·sin(Qr) dQ. Unlike g(r), f(r)
+  does not depend on number density ρ₀, making it suitable for comparing ensemble runs
+  at different densities (`--density`). Mutually exclusive with `[data.xray_gr]`.
+- f(r) panel in `compare_ensemble.py` with experimental f(r) computed from S(Q)
+- Documentation for f(r) in config reference, output files, and scattering algorithms
+
 ## [1.1.2] - 2026-03-13
 
 ### Performance
