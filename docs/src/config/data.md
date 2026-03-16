@@ -41,6 +41,29 @@ qmax = 17.97                # Q_max for inverse FT (default: experimental S(Q) Q
 lorch = true                # Apply Lorch window in Q-space (default: true)
 ```
 
+## `[data.xray_fr]` -- X-ray Reduced Pair Distribution Function
+
+A density-independent alternative to `[data.xray_gr]`. The reduced pair distribution function f(r) is defined as:
+
+```
+f(r) = (2/π) ∫ Q·[S(Q)-1]·W(Q)·sin(Qr) dQ
+```
+
+Unlike g(r), f(r) does not depend on the number density ρ₀, making it useful when comparing ensemble runs at different densities (`--density`). The relationship is `f(r) = 4πρ₀r·[g(r) - 1]`.
+
+```toml
+[data.xray_fr]
+file = "experimental.fr"    # Two columns: r (A), f(r)
+weight = 0.3                # Relative weight in total chi2 (default: 1.0)
+sigma = 0.02                # Uncertainty in f(r) units (omit to auto-estimate from data)
+fit_min = 0.0               # Only fit r > fit_min (default: 0)
+fit_max = 7.0               # Only fit r < fit_max (default: inf)
+qmax = 17.97                # Q_max for inverse FT (default: experimental S(Q) Qmax)
+lorch = true                # Apply Lorch window in Q-space (default: true)
+```
+
+**Note**: `[data.xray_gr]` and `[data.xray_fr]` are mutually exclusive -- you cannot use both in the same config.
+
 ## Fields
 
 | Field | Type | Default | Description |

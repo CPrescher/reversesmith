@@ -147,6 +147,12 @@ fn main() {
         process::exit(1);
     });
 
+    // Validate: xray_gr and xray_fr are mutually exclusive
+    if cfg.data.xray_gr.is_some() && cfg.data.xray_fr.is_some() {
+        log_eprintln!("Error: [data.xray_gr] and [data.xray_fr] are mutually exclusive. Use one or the other.");
+        process::exit(1);
+    }
+
     // Load structure (with optional override for --analyze <path>)
     let structure_path = if let Some(ref override_path) = analyze_structure {
         resolve_path(&config_dir, override_path)
@@ -498,8 +504,61 @@ fn main() {
             fit_max,
             qmax,
             lorch,
+            baseline: 1.0,
         });
     }
+
+    // --- Load experimental f(r) data (density-independent alternative to g(r)) ---
+    if let Some(ref fr_cfg) = cfg.data.xray_fr {
+        let path = resolve_path(&config_dir, &fr_cfg.file);
+        log_println!("Loading X-ray f(r) from {:?} ...", path);
+        let (r, fr) = io::read_sq_data(&path).unwrap_or_else(|e| {
+            log_eprintln!("Error reading X-ray f(r): {}", e);
+            process::exit(1);
+        });
+        let sigma = match fr_cfg.sigma {
+            Some(val) => {
+                log_println!("  Using constant sigma = {:.4}", val);
+                vec![val; fr.len()]
+            }
+            None => {
+                let s = rmc::estimate_sigma(&fr, 10);
+                log_println!(
+                    "  Estimated sigma from data: min={:.4}, max={:.4}",
+                    s.iter().cloned().fold(f64::INFINITY, f64::min),
+                    s.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                );
+                s
+            }
+        };
+        let weight = fr_cfg.weight.unwrap_or(1.0);
+        let fit_min = fr_cfg.fit_min.unwrap_or(0.0);
+        let fit_max = fr_cfg.fit_max.unwrap_or(f64::INFINITY);
+        let qmax = fr_cfg.qmax.unwrap_or_else(|| {
+            if !experiments.is_empty() {
+                *experiments[0].q.last().unwrap_or(&20.0)
+            } else {
+                *params.q_grid.last().unwrap_or(&20.0)
+            }
+        });
+        let lorch = fr_cfg.lorch.unwrap_or(true);
+        log_println!("  {} r points, r range: {:.2} - {:.2} A, fit range: [{:.2}, {:.2}], FT Qmax: {:.2}, Lorch: {}",
+            r.len(), r[0], r[r.len() - 1], fit_min, fit_max, qmax, lorch);
+        gr_datasets.push(ExperimentalGrData {
+            r,
+            gr: fr,
+            sigma,
+            weight,
+            fit_min,
+            fit_max,
+            qmax,
+            lorch,
+            baseline: 0.0,
+        });
+    }
+
+    // Track whether we have f(r) (for output file naming)
+    let has_fr = cfg.data.xray_fr.is_some();
 
     if experiments.is_empty() && gr_datasets.is_empty() {
         log_eprintln!("No experimental data specified in config!");
@@ -629,14 +688,21 @@ fn main() {
             } else {
                 1.0
             };
+            let baseline = gd0.baseline;
             let total_gr: Vec<f64> = r_grid
                 .iter()
                 .map(|&ri| {
-                    if ri < 1e-10 {
-                        return 1.0;
-                    }
-                    let pref = dq / (2.0 * std::f64::consts::PI * std::f64::consts::PI * rho0 * ri);
-                    let mut val = 1.0;
+                    let pref = if baseline == 1.0 {
+                        // g(r): dq / (2π²ρ₀r_i)
+                        if ri < 1e-10 {
+                            return baseline;
+                        }
+                        dq / (2.0 * std::f64::consts::PI * std::f64::consts::PI * rho0 * ri)
+                    } else {
+                        // f(r): 2*dq / π (constant)
+                        2.0 * dq / std::f64::consts::PI
+                    };
+                    let mut val = baseline;
                     for (k, &qk) in params.q_grid.iter().enumerate() {
                         if qk > qmax_gr {
                             break;
@@ -656,9 +722,14 @@ fn main() {
                     val
                 })
                 .collect();
-            let total_gr_path = output_dir.join("start_total_gr.dat");
+            let kind_label = if has_fr { "fr" } else { "gr" };
+            let total_gr_path = output_dir.join(format!("start_total_{}.dat", kind_label));
             io::write_gr(&total_gr_path, &r_grid, &total_gr).unwrap();
-            log_println!("  Saved starting total g(r) to {:?}", total_gr_path);
+            log_println!(
+                "  Saved starting total {}(r) to {:?}",
+                kind_label,
+                total_gr_path
+            );
         }
     }
 
@@ -1176,14 +1247,19 @@ fn main() {
         let n_r_out = params.rdf_nbins;
         let dr_out = params.rdf_cutoff / n_r_out as f64;
         let r_out: Vec<f64> = (0..n_r_out).map(|i| (i as f64 + 0.5) * dr_out).collect();
+        let baseline = gd0.baseline;
         let total_gr: Vec<f64> = r_out
             .iter()
             .map(|&ri| {
-                if ri < 1e-10 {
-                    return 1.0;
-                }
-                let pref = dq / (2.0 * std::f64::consts::PI * std::f64::consts::PI * rho0 * ri);
-                let mut val = 1.0;
+                let pref = if baseline == 1.0 {
+                    if ri < 1e-10 {
+                        return baseline;
+                    }
+                    dq / (2.0 * std::f64::consts::PI * std::f64::consts::PI * rho0 * ri)
+                } else {
+                    2.0 * dq / std::f64::consts::PI
+                };
+                let mut val = baseline;
                 for (k, &qk) in params.q_grid.iter().enumerate() {
                     if qk > qmax_gr {
                         break;
@@ -1203,8 +1279,9 @@ fn main() {
                 val
             })
             .collect();
-        let output_gr = output_dir.join("refined_total_gr.dat");
-        log_println!("Saving refined total g(r) to {:?}", output_gr);
+        let kind_label = if has_fr { "fr" } else { "gr" };
+        let output_gr = output_dir.join(format!("refined_total_{}.dat", kind_label));
+        log_println!("Saving refined total {}(r) to {:?}", kind_label, output_gr);
         io::write_gr(&output_gr, &r_out, &total_gr).unwrap();
     }
 

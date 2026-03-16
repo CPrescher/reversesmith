@@ -40,6 +40,7 @@ pub struct DataConfig {
     pub xray_sq: Option<DatasetConfig>,
     pub neutron_sq: Option<DatasetConfig>,
     pub xray_gr: Option<DatasetConfig>,
+    pub xray_fr: Option<DatasetConfig>,
 }
 
 #[derive(Debug, Deserialize)]

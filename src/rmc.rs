@@ -130,7 +130,7 @@ pub enum DataKind {
     Neutron,
 }
 
-/// Experimental g(r) dataset to fit against (real-space target).
+/// Experimental g(r) or f(r) dataset to fit against (real-space target).
 pub struct ExperimentalGrData {
     pub r: Vec<f64>,
     pub gr: Vec<f64>,
@@ -138,10 +138,12 @@ pub struct ExperimentalGrData {
     pub weight: f64,
     pub fit_min: f64,
     pub fit_max: f64,
-    /// Q_max used when deriving the experimental g(r) from S(Q).
+    /// Q_max used when deriving the experimental g(r)/f(r) from S(Q).
     pub qmax: f64,
     /// Apply Lorch modification W(Q) = sin(πQ/Qmax)/(πQ/Qmax) in inverse FT.
     pub lorch: bool,
+    /// Baseline after inverse FT: 1.0 for g(r), 0.0 for f(r).
+    pub baseline: f64,
 }
 
 /// RMC refinement parameters.
@@ -760,18 +762,24 @@ pub fn run_rmc(
             })
             .collect();
 
-        // Per-r prefactors: dq / (2π²ρ₀r_i)
-        let r_prefactors: Vec<f64> = fit_indices
-            .iter()
-            .map(|&orig_i| {
-                let ri = gd.r[orig_i];
-                if ri < 1e-10 {
-                    0.0
-                } else {
-                    dq / (2.0 * PI * PI * rho0 * ri)
-                }
-            })
-            .collect();
+        // Per-r prefactors:
+        //   g(r): dq / (2π²ρ₀r_i) — per-r, density-dependent
+        //   f(r): 2*dq / π — constant, density-independent
+        let r_prefactors: Vec<f64> = if gd.baseline == 1.0 {
+            fit_indices
+                .iter()
+                .map(|&orig_i| {
+                    let ri = gd.r[orig_i];
+                    if ri < 1e-10 {
+                        0.0
+                    } else {
+                        dq / (2.0 * PI * PI * rho0 * ri)
+                    }
+                })
+                .collect()
+        } else {
+            vec![2.0 * dq / PI; fit_indices.len()]
+        };
 
         // Fit-range r-grid (must be uniformly spaced for CZT)
         let r_fit: Vec<f64> = fit_indices.iter().map(|&i| gd.r[i]).collect();
@@ -823,9 +831,9 @@ pub fn run_rmc(
             gr_czt_buf[di][k] = gr_q_weights[di][k] * (exp_total_sq[primary_exp][k] - 1.0);
         }
         gr_czts[di].transform(&gr_czt_buf[di], &mut gr_cached[di]);
-        // Apply per-r prefactor and add 1.0 baseline
+        // Apply per-r prefactor and add baseline (1.0 for g(r), 0.0 for f(r))
         for i in 0..n_fit {
-            gr_cached[di][i] = 1.0 + gr_r_prefactors[di][i] * gr_cached[di][i];
+            gr_cached[di][i] = gd.baseline + gr_r_prefactors[di][i] * gr_cached[di][i];
         }
         let mut chi2 = 0.0;
         for i in 0..n_fit {

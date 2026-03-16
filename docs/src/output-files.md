@@ -11,7 +11,8 @@ Starting structure (computed before refinement begins):
 | `start_xray_sq.dat` | Total X-ray S(Q) of the starting structure |
 | `start_neutron_sq.dat` | Total neutron S(Q) (only when `[data.neutron_sq]` is configured) |
 | `start_gr.dat` | All partial g(r) functions of the starting structure |
-| `start_total_gr.dat` | Total X-ray g(r) via inverse FT (when g(r) data is configured) |
+| `start_total_gr.dat` | Total X-ray g(r) via inverse FT (when `[data.xray_gr]` is configured) |
+| `start_total_fr.dat` | Total X-ray f(r) via inverse FT (when `[data.xray_fr]` is configured) |
 
 Refined structure (after refinement completes):
 
@@ -21,7 +22,8 @@ Refined structure (after refinement completes):
 | `refined_xray_sq.dat` | Final computed total X-ray S(Q) |
 | `refined_neutron_sq.dat` | Final computed total neutron S(Q) (only when `[data.neutron_sq]` is configured) |
 | `refined_gr.dat` | All partial g(r) functions of the refined structure |
-| `refined_total_gr.dat` | Final computed total X-ray g(r) via inverse FT |
+| `refined_total_gr.dat` | Final computed total X-ray g(r) via inverse FT (when `[data.xray_gr]` is configured) |
+| `refined_total_fr.dat` | Final computed total X-ray f(r) via inverse FT (when `[data.xray_fr]` is configured) |
 | `checkpoint.dat` | Periodic checkpoint; use `--resume` to continue from it |
 | `rsmith.log` | Full log of the run |
 

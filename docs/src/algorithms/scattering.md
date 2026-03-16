@@ -79,6 +79,25 @@ When S(Q) changes by delta_S(Q), the g(r) update is simply:
 delta_g(r_i) = sum_k M[i][k] * delta_S(Q_k)
 ```
 
+## f(r) from S(Q) (density-independent alternative)
+
+The reduced pair distribution function f(r) is a density-independent alternative to g(r):
+
+```
+f(r) = (2*dQ / pi) * sum_k Q_k * W(Q_k) * (S(Q_k) - 1) * sin(Q_k * r)
+```
+
+The relationship to g(r) is: `f(r) = 4*pi*rho0*r * (g(r) - 1)`.
+
+The key difference from g(r) is that the prefactor `2*dQ/pi` is constant (no 1/r or density dependence), and the baseline is 0 instead of 1. This means the CZT input `Q_k * W(Q_k) * (S(Q_k) - 1)` is identical for both g(r) and f(r); only the post-transform prefactor and baseline differ:
+
+| Function | r-prefactor | Baseline |
+|----------|-------------|----------|
+| g(r) | `dQ / (2*pi^2 * rho0 * r_i)` (per-r, density-dependent) | 1.0 |
+| f(r) | `2*dQ / pi` (constant, density-independent) | 0.0 |
+
+f(r) is particularly useful when comparing ensemble runs at different densities (`--density`), since the experimental g(r) was derived using an assumed density but f(r) can be computed from S(Q) alone.
+
 ## Effect of RDF cutoff on S(Q)
 
 The finite `rdf_cutoff` (r_max) truncates the Fourier integral:

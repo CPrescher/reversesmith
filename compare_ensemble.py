@@ -212,17 +212,22 @@ if HAS_PLT:
         if config.get("data", {}).get(key) is not None:
             sq_types.append((data_type, key))
 
-    # Check which g(r) data is available
+    # Check which g(r)/f(r) data is available
     has_partial_gr = any(
         os.path.isfile(os.path.join(d, "refined_gr.dat")) for d in run_dirs
     )
     has_total_gr = any(
         os.path.isfile(os.path.join(d, "refined_total_gr.dat")) for d in run_dirs
     )
+    has_total_fr = any(
+        os.path.isfile(os.path.join(d, "refined_total_fr.dat")) for d in run_dirs
+    )
     has_gr_exp = config.get("data", {}).get("xray_gr") is not None
+    has_fr_exp = config.get("data", {}).get("xray_fr") is not None
 
-    # Count panels: S(Q) datasets + total g(r) + partial g(r)
-    n_panels = len(sq_types) + (1 if has_total_gr else 0) + (1 if has_partial_gr else 0)
+    # Count panels: S(Q) datasets + total g(r) + total f(r) + partial g(r)
+    n_panels = (len(sq_types) + (1 if has_total_gr else 0)
+                + (1 if has_total_fr else 0) + (1 if has_partial_gr else 0))
 
     if n_panels > 0:
         fig, axes = plt.subplots(n_panels, 1, figsize=(8, 4 * n_panels), squeeze=False)
@@ -286,6 +291,56 @@ if HAS_PLT:
             ax.axhline(1, color="gray", ls="--", lw=0.5)
             ax.set(xlabel="r (\u00c5)", ylabel="g(r)", xlim=(0, 10))
             ax.set_title("Total X-ray g(r) \u2014 ensemble comparison")
+            ax.legend(fontsize=7, ncol=2)
+
+        # --- Total f(r) panel ---
+        if has_total_fr:
+            ax = axes[panel, 0]
+            panel += 1
+
+            # Compute experimental f(r) from S(Q) via inverse FT
+            if sq_types:
+                _, first_key = sq_types[0]
+                exp_sq_path = os.path.join(config_dir, config["data"][first_key]["file"])
+                if os.path.isfile(exp_sq_path):
+                    sq_exp_data = np.loadtxt(exp_sq_path)
+                    q_exp = sq_exp_data[:, 0]
+                    s_exp = sq_exp_data[:, 1]
+                    # Get Qmax and Lorch from fr config (or gr config)
+                    fr_cfg = config.get("data", {}).get("xray_fr", config.get("data", {}).get("xray_gr", {}))
+                    qmax_fr = fr_cfg.get("qmax", q_exp.max())
+                    use_lorch = fr_cfg.get("lorch", True)
+                    mask_q = q_exp <= qmax_fr
+                    q_eff = q_exp[mask_q]
+                    s_eff = s_exp[mask_q]
+                    dq_exp = q_eff[1] - q_eff[0] if len(q_eff) > 1 else 1.0
+                    # Lorch window
+                    window = np.ones_like(q_eff)
+                    if use_lorch:
+                        arg = np.pi * q_eff / qmax_fr
+                        window = np.where(arg > 1e-10, np.sin(arg) / arg, 1.0)
+                    # f(r) = (2/π) ∫ Q·[S(Q)-1]·W(Q)·sin(Qr) dQ
+                    r_plot = np.linspace(0.1, 10, 500)
+                    fr_exp = np.zeros_like(r_plot)
+                    pref = 2.0 * dq_exp / np.pi
+                    for i, ri in enumerate(r_plot):
+                        fr_exp[i] = pref * np.sum(q_eff * window * (s_eff - 1.0) * np.sin(q_eff * ri))
+                    ax.plot(r_plot, fr_exp, "k--", lw=2, alpha=0.7, label="Experiment (from S(Q))")
+
+            # Overlay total f(r) from all runs
+            for r in results:
+                run_dir = next(d for d in run_dirs if os.path.basename(d) == r["dir"])
+                tfr_path = os.path.join(run_dir, "refined_total_fr.dat")
+                if not os.path.isfile(tfr_path):
+                    continue
+                tfr = np.loadtxt(tfr_path, comments="#")
+                chi2_label = f" ({r.get('chi2', 0):.4f})" if "chi2" in r else ""
+                ax.plot(tfr[:, 0], tfr[:, 1], lw=0.8, alpha=0.6,
+                        label=f"{r['dir']}{chi2_label}")
+
+            ax.axhline(0, color="gray", ls="--", lw=0.5)
+            ax.set(xlabel="r (\u00c5)", ylabel="f(r)", xlim=(0, 10))
+            ax.set_title("Total X-ray f(r) \u2014 ensemble comparison")
             ax.legend(fontsize=7, ncol=2)
 
         # --- Partial g(r) panel ---
