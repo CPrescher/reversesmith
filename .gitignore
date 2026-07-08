@@ -1,6 +1,10 @@
 /target
 /docs/book
 
+# Local benchmark/profile sandboxes
+benchmark_sio2/
+profile_run/
+
 # RMC output files
 checkpoint.dat
 refined.xyz

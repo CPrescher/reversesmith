@@ -12,6 +12,7 @@ The configuration has the following sections:
 | [`[sq]`](config/sq.md) | No | S(Q) computation grid and cutoffs |
 | [`[constraints]`](config/constraints.md) | No | Minimum distances and coordination bounds |
 | [`[potential]`](config/potentials.md) | No | Pair potentials for hybrid RMC |
+| [`[ml_potential]`](config/ml-potential.md) | No | ML potential energy regularizer for RMC |
 | [`[analysis]`](config/analysis.md) | No | Settings for `--analyze` mode |
 
 See [Full Example](full-example.md) for a complete configuration file with all options.

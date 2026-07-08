@@ -5,9 +5,11 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use rsmith::analyze;
-use rsmith::config::Config;
+use rsmith::config::{Config, MlBackend};
+use rsmith::energy::EnergyModel;
 use rsmith::epsr::{self, EpsrState};
 use rsmith::io;
+use rsmith::ml_potential;
 use rsmith::neutron;
 use rsmith::potential::PotentialSet;
 use rsmith::rdf;
@@ -586,12 +588,12 @@ fn main() {
         }
     }
 
-    // --- Build pair potentials ---
-    let potential_set = if let Some(ref pot_cfg) = cfg.potential {
+    // --- Build optional energy regularizer ---
+    let mut potential_set = if let Some(ref pot_cfg) = cfg.potential {
         match PotentialSet::from_config(pot_cfg, &config.species, params.rdf_cutoff, &config_dir) {
             Ok(ps) => {
                 log_println!(
-                    "\nPair potentials (weight = {:.6}, cutoff = {:.1} A):",
+                    "\nEnergy regularizer: pair potentials (weight = {:.6}, cutoff = {:.1} A):",
                     ps.weight,
                     ps.cutoff
                 );
@@ -608,6 +610,43 @@ fn main() {
             Err(e) => {
                 log_eprintln!("Error building potentials: {}", e);
                 process::exit(1);
+            }
+        }
+    } else {
+        None
+    };
+
+    let mut ml_energy_model: Option<Box<dyn EnergyModel>> = if let Some(ref ml_cfg) =
+        cfg.ml_potential
+    {
+        match ml_cfg.backend {
+            MlBackend::GapQuip => {
+                let model_path = resolve_path(&config_dir, &ml_cfg.model);
+                log_println!(
+                    "\nEnergy regularizer: GAP/QUIP (weight = {:.6}, cutoff = {:.1} A)",
+                    ml_cfg.weight.unwrap_or(0.001),
+                    ml_cfg.cutoff
+                );
+                log_println!("  Model: {:?}", model_path);
+                log_println!(
+                    "  Warning: cutoff must be at least the maximum GAP descriptor cutoff"
+                );
+                #[cfg(feature = "gap-quip")]
+                {
+                    match ml_potential::GapQuipModel::from_config(ml_cfg, &config, &config_dir) {
+                        Ok(model) => Some(Box::new(model) as Box<dyn EnergyModel>),
+                        Err(e) => {
+                            log_eprintln!("Error building GAP/QUIP potential: {}", e);
+                            process::exit(1);
+                        }
+                    }
+                }
+                #[cfg(not(feature = "gap-quip"))]
+                {
+                    let e = ml_potential::gap_quip_disabled_error(ml_cfg);
+                    log_eprintln!("Error building GAP/QUIP potential: {}", e);
+                    process::exit(1);
+                }
             }
         }
     } else {
@@ -914,7 +953,7 @@ fn main() {
             };
 
             // Build combined potential = reference + EP
-            let combined = epsr_state.build_combined_potential(
+            let mut combined = epsr_state.build_combined_potential(
                 reference_potential.as_ref(),
                 &config.species,
                 params.rdf_cutoff,
@@ -1023,7 +1062,7 @@ fn main() {
                     &gr_datasets,
                     &constraints,
                     &iter_params,
-                    Some(&combined),
+                    Some(&mut combined),
                     checkpoint_fn,
                     None,
                 );
@@ -1148,13 +1187,21 @@ fn main() {
                 }
             }));
 
+        let energy_model = if let Some(ref mut pair_model) = potential_set {
+            Some(pair_model as &mut dyn EnergyModel)
+        } else {
+            ml_energy_model
+                .as_deref_mut()
+                .map(|model| model as &mut dyn EnergyModel)
+        };
+
         rmc::run_rmc(
             &mut config,
             &experiments,
             &gr_datasets,
             &constraints,
             &params,
-            potential_set.as_ref(),
+            energy_model,
             checkpoint_fn,
             resume_state,
         )

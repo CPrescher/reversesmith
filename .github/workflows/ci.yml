@@ -20,8 +20,15 @@ jobs:
       - run: cargo clippy -- -D warnings
 
   test:
-    name: Tests
-    runs-on: ubuntu-latest
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable

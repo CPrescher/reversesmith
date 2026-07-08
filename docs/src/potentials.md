@@ -1,10 +1,14 @@
-# Pair Potentials (Hybrid RMC)
+# Energy Regularizers
 
 ## Why use potentials?
 
 Standard RMC is underdetermined -- many atomic configurations can produce the same scattering pattern. Some of these configurations are physically unreasonable: distorted coordination polyhedra, unphysical bond lengths, or energetically unfavorable arrangements. Hard constraints (minimum distances, coordination bounds) help, but they are binary and cannot express the smooth energy landscape that governs real materials.
 
 Adding pair potentials to the acceptance criterion biases the refinement toward energetically favorable configurations. This is the simplest form of Empirical Potential Structure Refinement (EPSR): the potential is fixed (not iteratively refined), and its contribution is weighted against chi2.
+
+Machine-learning potentials can also be used as RMC energy regularizers. In that
+case the method is best interpreted as ML-potential-regularized RMC, not EPSR:
+the ML model is fixed and supplies `delta_E_ml` for each proposed atom move.
 
 ## How it works
 
@@ -21,6 +25,10 @@ delta_cost = delta_chi2 + weight * delta_E
 accept if delta_cost < 0, else with prob exp(-delta_cost / 2T)
 ```
 
+With an ML potential, `delta_E` is the ML potential energy change. For GAP this
+is evaluated from the changed local atomic environments rather than from a
+pairwise `V(r)`.
+
 The `weight` parameter controls the balance:
 - `weight = 0` -- pure RMC, potentials computed but don't affect acceptance
 - Small `weight` -- potentials act as a gentle bias, chi2 dominates
@@ -32,7 +40,11 @@ The energy change for a single atom move is computed efficiently:
 ```
 delta_E = E_new(atom_i) - E_old(atom_i)
 ```
-where `E(atom_i) = sum_j V(r_ij)` sums over all neighbours j within the potential cutoff. This uses the same cell list as the RDF computation, so the cost is O(N_neighbours) per move -- negligible compared to the S(Q) update.
+For pair potentials, `E(atom_i) = sum_j V(r_ij)` sums over all neighbours j within the potential cutoff. This uses the same cell list as the RDF computation, so the cost is O(N_neighbours) per move -- negligible compared to the S(Q) update.
+
+For GAP/QUIP, the moved atom changes its own local energy and the local energies
+of nearby atoms whose descriptor environments include it. rsmith therefore
+computes the GAP energy delta from the affected local atomic environments.
 
 ### Best-structure tracking
 
@@ -87,6 +99,10 @@ The energy of an MD-equilibrated structure is large and negative (e.g., -85000 e
 - **E decreasing significantly** -- unusual, may indicate the structure is relaxing toward a lower-energy basin
 
 ## Potential types
+
+For pair-potential configuration details, see
+[`[potential]`](./config/potentials.md). For GAP/QUIP details, see
+[`[ml_potential]`](./config/ml-potential.md).
 
 ### Which potential to use
 

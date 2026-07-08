@@ -18,6 +18,7 @@ pub struct Config {
     pub constraints: Option<ConstraintsConfig>,
     pub analysis: Option<AnalysisConfig>,
     pub potential: Option<PotentialConfig>,
+    pub ml_potential: Option<MlPotentialConfig>,
     pub epsr: Option<EpsrConfig>,
 }
 
@@ -216,11 +217,49 @@ pub struct TabulatedConfig {
     pub file: String,
 }
 
+/// Machine-learning potential configuration for ML-regularized RMC.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MlPotentialConfig {
+    pub backend: MlBackend,
+    pub model: String,
+    pub init_args: Option<String>,
+    pub weight: Option<f64>,
+    pub cutoff: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MlBackend {
+    GapQuip,
+}
+
 impl Config {
     pub fn load(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         let content = fs::read_to_string(path)?;
         let config: Config = toml::from_str(&content)?;
+        config.validate()?;
         Ok(config)
+    }
+
+    fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
+        if self.potential.is_some() && self.ml_potential.is_some() {
+            return Err(
+                "[potential] and [ml_potential] cannot be used together in v1; choose one energy regularizer"
+                    .into(),
+            );
+        }
+
+        if let Some(ml) = &self.ml_potential {
+            if self.epsr.is_some() {
+                return Err("[ml_potential] is supported for RMC only in v1; remove [epsr]".into());
+            }
+            if ml.cutoff <= 0.0 {
+                return Err("[ml_potential] cutoff must be greater than 0".into());
+            }
+        }
+
+        Ok(())
     }
 
     /// Get LAMMPS type map as HashMap<u32, String>.

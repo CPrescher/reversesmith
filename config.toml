@@ -210,6 +210,18 @@ charges = { Ca = 1.2, Si = 2.4, O = -1.2 }   # Per-species charges (e)
 # file = "SiO_potential.dat"
 
 # =============================================================================
+# [ml_potential] — ML-potential-regularized RMC (optional)
+# =============================================================================
+# Alternative to [potential] for normal RMC runs. Cannot be combined with
+# [potential] or [epsr] in v1. Requires building with --features gap-quip.
+# [ml_potential]
+# backend = "gap_quip"
+# model = "gap.xml"
+# init_args = "Potential xml_label=GAP_2026"  # Optional QUIP init string.
+# weight = 0.001
+# cutoff = 5.0  # Must be >= the maximum GAP descriptor cutoff.
+
+# =============================================================================
 # [analysis] — Coordination number and bond angle analysis (optional)
 # =============================================================================
 # Used in --analyze mode. Cutoffs also serve as fallback for constraints

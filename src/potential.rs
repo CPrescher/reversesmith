@@ -10,6 +10,7 @@ use std::path::Path;
 use crate::atoms::Configuration;
 use crate::cells::CellList;
 use crate::config::PotentialConfig;
+use crate::energy::EnergyModel;
 use crate::io;
 
 /// Conversion factor: e^2 / (4πε₀) in eV·A units.
@@ -602,6 +603,39 @@ impl PotentialSet {
             }
         }
         energy
+    }
+}
+
+impl EnergyModel for PotentialSet {
+    fn label(&self) -> &str {
+        "pair potentials"
+    }
+
+    fn weight(&self) -> f64 {
+        self.weight
+    }
+
+    fn cutoff(&self) -> f64 {
+        self.cutoff
+    }
+
+    fn total_energy(&mut self, config: &Configuration, cell_list: &CellList) -> f64 {
+        PotentialSet::total_energy(self, config, cell_list)
+    }
+
+    fn energy_delta_atom(
+        &mut self,
+        config: &Configuration,
+        atom_idx: usize,
+        old_pos: &[f64; 3],
+        new_pos: &[f64; 3],
+        cell_list: &CellList,
+        old_cell: usize,
+        new_cell: usize,
+    ) -> f64 {
+        PotentialSet::energy_delta_atom(
+            self, config, atom_idx, old_pos, new_pos, cell_list, old_cell, new_cell,
+        )
     }
 }
 

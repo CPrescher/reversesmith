@@ -7,6 +7,7 @@ use crate::atoms::Configuration;
 use crate::cells::CellList;
 use crate::constraints::{Constraints, PrecomputedConstraints};
 use crate::czt::CztSineTransform;
+use crate::energy::EnergyModel;
 use crate::log_println;
 use crate::neutron::scattering_length as neutron_scattering_length;
 use crate::potential::PotentialSet;
@@ -482,7 +483,7 @@ pub fn run_rmc(
     gr_data: &[ExperimentalGrData],
     constraints: &Constraints,
     params: &RmcParams,
-    potential: Option<&PotentialSet>,
+    mut energy_model: Option<&mut dyn EnergyModel>,
     checkpoint_fn: Option<Box<dyn Fn(&RmcState, &Configuration)>>,
     resume_state: Option<RmcState>,
 ) -> RmcState {
@@ -928,11 +929,17 @@ pub fn run_rmc(
     };
 
     // Potential energy initialization
-    let energy_weight = potential.map_or(0.0, |p| p.weight);
-    let mut current_energy = if let Some(pot) = potential {
-        let e = pot.total_energy(config, &cell_list);
+    let has_energy_model = energy_model.is_some();
+    let energy_weight = energy_model.as_ref().map_or(0.0, |p| p.weight());
+    let energy_label = energy_model
+        .as_ref()
+        .map_or("energy model", |p| p.label())
+        .to_string();
+    let mut current_energy = if let Some(model) = energy_model.as_deref_mut() {
+        let e = model.total_energy(config, &cell_list);
         log_println!(
-            "Initial potential energy = {:.6} eV (weight = {:.6})",
+            "Initial {} energy = {:.6} eV (weight = {:.6})",
+            energy_label,
             e,
             energy_weight
         );
@@ -981,7 +988,7 @@ pub fn run_rmc(
     let mut conv_baseline_set = !annealing; // need to reset baseline after annealing ends
 
     // Calibration: accumulate |delta_chi2| and |delta_E| to suggest weight
-    let calibration_moves: u64 = if potential.is_some() { 1000 } else { 0 };
+    let calibration_moves: u64 = if has_energy_model { 1000 } else { 0 };
     let mut calib_sum_dchi2 = 0.0f64;
     let mut calib_sum_de = 0.0f64;
     let mut calib_count = 0u64;
@@ -1152,10 +1159,16 @@ pub fn run_rmc(
         let new_chi2 = new_sq_chi2 + new_gr_chi2;
 
         // Compute potential energy delta if potential is active
-        let delta_energy = if let Some(pot) = potential {
-            let old_e = pot.energy_of_atom(config, atom_idx, &old_pos, &cell_list, old_pos_cell);
-            let new_e = pot.energy_of_atom(config, atom_idx, &new_pos, &cell_list, new_pos_cell);
-            new_e - old_e
+        let delta_energy = if let Some(model) = energy_model.as_deref_mut() {
+            model.energy_delta_atom(
+                config,
+                atom_idx,
+                &old_pos,
+                &new_pos,
+                &cell_list,
+                old_pos_cell,
+                new_pos_cell,
+            )
         } else {
             0.0
         };
@@ -1177,7 +1190,7 @@ pub fn run_rmc(
                 log_println!("Potential weight calibration ({} moves):", calib_count);
                 log_println!("  avg |delta_chi2| per move = {:.6}", avg_dchi2);
                 log_println!("  avg |delta_E| per move    = {:.6} eV", avg_de);
-                log_println!("  Current [potential] weight = {:.6}", energy_weight);
+                log_println!("  Current energy weight = {:.6}", energy_weight);
                 log_println!(
                     "  Suggested weight (chi2 ≈ energy influence) = {:.6}",
                     suggested
@@ -1235,6 +1248,9 @@ pub fn run_rmc(
             if let Some(ref mut ccl) = constr_cell_list {
                 ccl.move_atom(atom_idx, &new_pos);
             }
+            if let Some(model) = energy_model.as_deref_mut() {
+                model.accept_move(atom_idx, &new_pos);
+            }
             state.accepted += 1;
             recent_accepted += 1;
 
@@ -1249,6 +1265,9 @@ pub fn run_rmc(
         } else {
             // Revert atom position
             config.atoms[atom_idx].position = old_pos;
+            if let Some(model) = energy_model.as_deref_mut() {
+                model.reject_move(atom_idx, &old_pos);
+            }
         }
 
         state.move_count = move_num + 1;
@@ -1263,7 +1282,7 @@ pub fn run_rmc(
                 0.0
             };
             let overall_ratio = state.accepted as f64 / state.move_count as f64;
-            let chi2_str = if potential.is_some() && has_gr {
+            let chi2_str = if has_energy_model && has_gr {
                 let cost = current_chi2 + energy_weight * current_energy;
                 format!(
                     "cost = {:.4} (chi2: {:.4} [sq: {:.4}, gr: {:.4}], w*E: {:.4} [E: {:.2}])",
@@ -1274,7 +1293,7 @@ pub fn run_rmc(
                     energy_weight * current_energy,
                     current_energy
                 )
-            } else if potential.is_some() {
+            } else if has_energy_model {
                 let cost = current_chi2 + energy_weight * current_energy;
                 format!(
                     "cost = {:.4} (chi2: {:.4}, w*E: {:.4} [E: {:.2}])",
@@ -1639,4 +1658,128 @@ pub fn run_energy_mc(
     );
 
     state
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use crate::atoms::{Atom, Configuration};
+    use crate::cells::CellList;
+    use crate::constraints::Constraints;
+    use crate::energy::EnergyModel;
+
+    use super::{run_rmc, RmcParams};
+
+    struct RejectingEnergyModel {
+        accepted: usize,
+        rejected: usize,
+    }
+
+    impl EnergyModel for RejectingEnergyModel {
+        fn label(&self) -> &str {
+            "mock"
+        }
+
+        fn weight(&self) -> f64 {
+            1.0
+        }
+
+        fn cutoff(&self) -> f64 {
+            3.0
+        }
+
+        fn total_energy(&mut self, _config: &Configuration, _cell_list: &CellList) -> f64 {
+            0.0
+        }
+
+        fn energy_delta_atom(
+            &mut self,
+            _config: &Configuration,
+            _atom_idx: usize,
+            _old_pos: &[f64; 3],
+            _new_pos: &[f64; 3],
+            _cell_list: &CellList,
+            _old_cell: usize,
+            _new_cell: usize,
+        ) -> f64 {
+            1.0e300
+        }
+
+        fn accept_move(&mut self, _atom_idx: usize, _new_pos: &[f64; 3]) {
+            self.accepted += 1;
+        }
+
+        fn reject_move(&mut self, _atom_idx: usize, _old_pos: &[f64; 3]) {
+            self.rejected += 1;
+        }
+    }
+
+    fn small_config() -> Configuration {
+        let atoms = vec![
+            Atom {
+                position: [1.0, 1.0, 1.0],
+                species: "Si".to_string(),
+                type_id: 0,
+            },
+            Atom {
+                position: [3.0, 3.0, 3.0],
+                species: "O".to_string(),
+                type_id: 1,
+            },
+        ];
+        let mut composition = HashMap::new();
+        composition.insert("Si".to_string(), 1);
+        composition.insert("O".to_string(), 1);
+        Configuration {
+            atoms,
+            box_lengths: [10.0, 10.0, 10.0],
+            species: vec!["Si".to_string(), "O".to_string()],
+            composition,
+        }
+    }
+
+    #[test]
+    fn run_rmc_calls_energy_model_reject_hooks() {
+        let mut config = small_config();
+        let params = RmcParams {
+            max_moves: 5,
+            max_step: 0.1,
+            checkpoint_every: 1000,
+            seed: 1234,
+            rdf_cutoff: 4.0,
+            rdf_nbins: 16,
+            q_grid: vec![0.5, 1.0, 1.5],
+            lorch: false,
+            print_every: 1000,
+            target_acceptance: 0.5,
+            adjust_step_every: 1000,
+            anneal_start: 1.0,
+            anneal_end: 1.0,
+            anneal_steps: 0,
+            convergence_threshold: 0.0,
+            convergence_window: 1000,
+            restore_best: false,
+        };
+        let constraints = Constraints::new();
+        let mut model = RejectingEnergyModel {
+            accepted: 0,
+            rejected: 0,
+        };
+
+        let state = run_rmc(
+            &mut config,
+            &[],
+            &[],
+            &constraints,
+            &params,
+            Some(&mut model),
+            None,
+            None,
+        );
+
+        assert_eq!(state.accepted, 0);
+        assert_eq!(model.accepted, 0);
+        assert_eq!(model.rejected, params.max_moves as usize);
+    }
 }

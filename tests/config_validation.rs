@@ -291,3 +291,104 @@ C0 = 1.0
         result.err()
     );
 }
+
+#[test]
+fn valid_ml_potential_fields_accepted() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "gap_quip"
+model = "gap.xml"
+init_args = "Potential xml_label=GAP_2026"
+weight = 0.001
+cutoff = 5.0
+"#;
+    let result = load_toml(toml);
+    assert!(
+        result.is_ok(),
+        "Valid ML potential config should parse: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn potential_and_ml_potential_conflict() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[potential]
+weight = 2.0
+
+[ml_potential]
+backend = "gap_quip"
+model = "gap.xml"
+cutoff = 5.0
+"#;
+    let err = load_toml(toml).unwrap_err();
+    assert!(
+        err.contains("[potential] and [ml_potential]"),
+        "Expected conflict error, got: {err}"
+    );
+}
+
+#[test]
+fn unknown_ml_backend_rejected() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "mace"
+model = "model.pt"
+cutoff = 5.0
+"#;
+    let err = load_toml(toml).unwrap_err();
+    assert!(
+        err.contains("unknown variant") || err.contains("expected"),
+        "Expected unknown backend error, got: {err}"
+    );
+}
+
+#[test]
+fn ml_potential_with_epsr_rejected() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "gap_quip"
+model = "gap.xml"
+cutoff = 5.0
+
+[epsr]
+iterations = 2
+"#;
+    let err = load_toml(toml).unwrap_err();
+    assert!(
+        err.contains("RMC only"),
+        "Expected EPSR conflict error, got: {err}"
+    );
+}
