@@ -5,6 +5,9 @@
 benchmark_sio2/
 profile_run/
 
+# Local tool settings
+.claude/settings.local.json
+
 # RMC output files
 checkpoint.dat
 refined.xyz
