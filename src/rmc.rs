@@ -820,7 +820,7 @@ pub fn run_rmc(
     }
 
     // Primary total S(Q) for g(r) inverse FT (use experiment 0's weights)
-    let primary_exp = 0.min(n_exp.saturating_sub(1));
+    let primary_exp = 0;
 
     // Compute initial model g(r) from initial total_sq via CZT
     let mut gr_chi2_current = 0.0;
