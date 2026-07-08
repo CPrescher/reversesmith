@@ -2,6 +2,30 @@
 
 All notable changes to rsmith will be documented in this file.
 
+## [1.3.0] - 2026-07-08
+
+### Added
+- **ML-potential-regularized RMC**: new `[ml_potential]` config section for using
+  machine-learning interatomic potentials as RMC energy regularizers.
+- Optional `gap-quip` feature with a GAP/QUIP backend using local affected-atom
+  per-atom energy deltas through a small C ABI shim.
+- Generic `EnergyModel` abstraction so pair potentials and ML potentials share the
+  RMC energy-regularizer path.
+- External QUIP build helper that writes both `env.sh` and pkg-config metadata for
+  portable linking against a local QUIP/libAtoms build.
+- Feature-gated GAP/QUIP integration test and mock energy-model RMC acceptance tests.
+
+### Changed
+- Existing pair potentials remain config-compatible but now implement the generic
+  energy regularizer interface.
+- Default builds remain QUIP-free; QUIP is only required when building with
+  `--features gap-quip`.
+- CI now runs the default Rust test suite on both Linux and macOS.
+
+### Documentation
+- Added GAP/QUIP build instructions for macOS, Linux, and cluster/module systems.
+- Added ML-potential configuration reference and example `[ml_potential]` config.
+
 ## [1.2.0] - 2026-03-16
 
 ### Added
