@@ -164,8 +164,11 @@ pub fn parse_parameters(input: &str) -> Result<SnapParameters, String> {
     if parameters.rcutfac <= 0.0 || !parameters.rcutfac.is_finite() {
         return Err("SNAP rcutfac must be finite and greater than zero".to_string());
     }
-    if !(0.0..1.0).contains(&parameters.rfac0) {
-        return Err("SNAP rfac0 must be greater than or equal to 0 and less than 1".to_string());
+    if !parameters.rfac0.is_finite() || parameters.rfac0 <= 0.0 || parameters.rfac0 >= 1.0 {
+        return Err("SNAP rfac0 must be finite, greater than 0, and less than 1".to_string());
+    }
+    if !parameters.rmin0.is_finite() || parameters.rmin0 < 0.0 {
+        return Err("SNAP rmin0 must be finite and greater than or equal to 0".to_string());
     }
     if parameters.switchinnerflag {
         if parameters.sinner.is_empty() || parameters.dinner.is_empty() {
@@ -175,6 +178,13 @@ pub fn parse_parameters(input: &str) -> Result<SnapParameters, String> {
             return Err(
                 "SNAP sinner and dinner must contain the same number of values".to_string(),
             );
+        }
+        if parameters
+            .sinner
+            .iter()
+            .any(|value| *value <= 0.0 || !value.is_finite())
+        {
+            return Err("SNAP sinner values must be finite and greater than zero".to_string());
         }
         if parameters
             .dinner
@@ -434,5 +444,30 @@ mod tests {
     fn non_finite_coefficients_are_rejected() {
         let error = parse_coefficients("1 1\nSi 0.5 1.0\nNaN\n").unwrap_err();
         assert!(error.contains("coefficient on line 3 must be finite"));
+    }
+
+    #[test]
+    fn radial_mapping_parameters_are_strictly_validated() {
+        for rfac0 in ["0", "1", "NaN", "inf"] {
+            let input = format!("rcutfac 4.9\ntwojmax 8\nrfac0 {rfac0}\n");
+            let error = parse_parameters(&input).unwrap_err();
+            assert!(error.contains("rfac0 must be finite"), "{error}");
+        }
+
+        for rmin0 in ["-0.1", "NaN", "inf"] {
+            let input = format!("rcutfac 4.9\ntwojmax 8\nrmin0 {rmin0}\n");
+            let error = parse_parameters(&input).unwrap_err();
+            assert!(error.contains("rmin0 must be finite"), "{error}");
+        }
+    }
+
+    #[test]
+    fn inner_switch_values_must_be_finite_and_positive() {
+        for sinner in ["0", "-0.1", "NaN", "inf"] {
+            let input =
+                format!("rcutfac 4.9\ntwojmax 8\nswitchinnerflag 1\nsinner {sinner}\ndinner 0.2\n");
+            let error = parse_parameters(&input).unwrap_err();
+            assert!(error.contains("sinner values must be finite"), "{error}");
+        }
     }
 }
