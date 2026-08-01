@@ -11,6 +11,33 @@ This is RMC regularized by an ML potential, not EPSR refinement of the ML model.
 In v1, `[ml_potential]` is only supported for normal RMC runs and cannot be
 combined with `[epsr]` or `[potential]`.
 
+## Native SNAP
+
+```toml
+[ml_potential]
+backend = "snap_native"
+coefficient_file = "potential.snapcoeff"
+parameter_file = "potential.snapparam"
+weight = 0.001
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `backend` | String | required | `snap_native` |
+| `coefficient_file` | String | required | FitSNAP/LAMMPS `.snapcoeff` file, relative to the config file |
+| `parameter_file` | String | required | Matching `.snapparam` file, relative to the config file |
+| `weight` | Float | 0.001 | Scales the SNAP energy contribution in the RMC cost |
+
+Do not set `cutoff`. rsmith derives every species-pair cutoff from `rcutfac`
+and the element radii in the model files. A manually configured SNAP cutoff is
+rejected so that it cannot silently omit affected atomic environments.
+
+Native SNAP is part of the default Rust build. FitSNAP is used to fit the model,
+but neither FitSNAP nor LAMMPS is needed when rsmith evaluates it. See
+[Native SNAP](../snap.md) for setup, compatibility, and troubleshooting, and
+[Native SNAP Implementation](../algorithms/snap-native.md) for the descriptor
+math, local cache, and LAMMPS validation strategy.
+
 ## GAP/QUIP
 
 ```toml
