@@ -20,6 +20,7 @@
     {
       "name": "diamond_equilibrium",
       "total_energy_ev": -105.60121423305254,
+      "all_atoms_equivalent": true,
       "representative_atoms": [
         {
           "id": 1,
@@ -38,6 +39,7 @@
     {
       "name": "diamond_atom_1_displaced",
       "total_energy_ev": -105.82982066565232,
+      "all_atoms_equivalent": false,
       "representative_atoms": [
         {
           "id": 1,

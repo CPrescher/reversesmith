@@ -19,7 +19,9 @@ cell and whose second frame has atom 1 displaced by the vector documented in
 the input. The checked JSON keeps one equilibrium environment and several
 distinct displaced environments, plus both total energies. The 2x2x2 cell is
 larger than twice the model cutoff so all references use the minimum-image
-convention that the native evaluator will enforce.
+convention that the native evaluator will enforce. The generating LAMMPS
+version is retained as provenance; normal tests consume the frozen values and
+do not require that version (or LAMMPS itself) at runtime.
 
 The example XYZ cells exercise a single-element diamond-Si structure and a
 two-element zincblende-InP structure. Additional numerical validation can use

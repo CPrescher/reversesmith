@@ -6,9 +6,17 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 struct ReferenceFixture {
     schema_version: u32,
+    generator: ReferenceGenerator,
     model: ReferenceModel,
     cell: ReferenceCell,
     configurations: Vec<ReferenceConfiguration>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ReferenceGenerator {
+    program: String,
+    version: String,
+    input: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -27,12 +35,14 @@ struct ReferenceCell {
 struct ReferenceConfiguration {
     name: String,
     total_energy_ev: f64,
+    all_atoms_equivalent: bool,
     representative_atoms: Vec<ReferenceAtom>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ReferenceAtom {
     id: usize,
+    position_angstrom: [f64; 3],
     descriptors: Vec<f64>,
     energy_ev: f64,
 }
@@ -51,7 +61,7 @@ fn load_fixture() -> ReferenceFixture {
 }
 
 fn assert_close(actual: f64, expected: f64) {
-    let tolerance = 1.0e-12 * expected.abs().max(1.0);
+    let tolerance = 1.0e-12 * expected.abs().max(1.0) + 1.0e-15;
     assert!(
         (actual - expected).abs() <= tolerance,
         "expected {expected:.16e}, got {actual:.16e}"
@@ -69,11 +79,22 @@ fn reference_fixture_matches_the_synthetic_model_contract() {
     .unwrap();
 
     assert_eq!(fixture.schema_version, 1);
+    assert_eq!(fixture.generator.program, "LAMMPS");
+    assert!(!fixture.generator.version.is_empty());
+    assert_eq!(fixture.generator.input, "linear_two_element_si.lammps.in");
+    assert!(test_data(&fixture.generator.input).is_file());
     assert_eq!(
         fixture.model.descriptor_count,
         model.coefficients.ncoeff - 1
     );
-    assert_eq!(fixture.configurations.len(), 2);
+    assert_eq!(
+        fixture
+            .configurations
+            .iter()
+            .map(|configuration| configuration.name.as_str())
+            .collect::<Vec<_>>(),
+        ["diamond_equilibrium", "diamond_atom_1_displaced"]
+    );
     assert!(fixture
         .configurations
         .iter()
@@ -109,6 +130,7 @@ fn reference_atomic_energies_are_the_linear_descriptor_contraction() {
         assert!(!configuration.name.is_empty());
         for atom in &configuration.representative_atoms {
             assert!((1..=fixture.cell.atom_count).contains(&atom.id));
+            assert!(atom.position_angstrom.iter().all(|value| value.is_finite()));
             assert_eq!(atom.descriptors.len(), fixture.model.descriptor_count);
             let energy = coefficients[0]
                 + coefficients[1..]
@@ -120,10 +142,32 @@ fn reference_atomic_energies_are_the_linear_descriptor_contraction() {
         }
     }
 
-    let equilibrium = &fixture.configurations[0];
+    let equilibrium = fixture
+        .configurations
+        .iter()
+        .find(|configuration| configuration.all_atoms_equivalent)
+        .unwrap();
     assert_eq!(equilibrium.representative_atoms.len(), 1);
     assert_close(
         equilibrium.representative_atoms[0].energy_ev * fixture.cell.atom_count as f64,
         equilibrium.total_energy_ev,
+    );
+
+    let displaced = fixture
+        .configurations
+        .iter()
+        .find(|configuration| configuration.name == "diamond_atom_1_displaced")
+        .unwrap();
+    assert!(!displaced.all_atoms_equivalent);
+    // Atom 1 is the moved center, 2/3/5 sample distinct perturbed neighbor
+    // environments, and 6 is outside the moved atom's cutoff and remains an
+    // equilibrium environment. The selected subset does not sum to the total.
+    assert_eq!(
+        displaced
+            .representative_atoms
+            .iter()
+            .map(|atom| atom.id)
+            .collect::<Vec<_>>(),
+        [1, 2, 3, 5, 6]
     );
 }
