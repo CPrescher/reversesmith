@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::atoms::Configuration;
 use crate::cells::CellList;
 use crate::energy::EnergyModel;
@@ -128,6 +130,9 @@ impl SnapNativeModel {
                 self.accepted_positions[neighbor_index],
                 self.box_lengths,
             );
+            // This is a coarse cell-list filter. `atomic_energy` applies the
+            // exact species-pair cutoff, and `maximum_cutoff` was constructed
+            // as the maximum over every configured pair.
             if squared_norm(displacement) <= self.maximum_cutoff.powi(2) {
                 neighbors.push(SnapNeighbor {
                     displacement,
@@ -174,6 +179,9 @@ impl SnapNativeModel {
                 let cutoff = self
                     .model
                     .cutoff_for_types(moved_type, self.type_indices[candidate])?;
+                // SNAP pair cutoffs are symmetric because they are
+                // rcutfac * (radius_moved + radius_candidate). One check is
+                // therefore sufficient for the candidate central atom.
                 let displacement = minimum_image_displacement(
                     self.accepted_positions[candidate],
                     position,
@@ -196,6 +204,21 @@ impl SnapNativeModel {
         assert!(
             self.pending_trial.is_none(),
             "native SNAP received a new trial before the previous trial was accepted or rejected"
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    fn debug_assert_cache_consistent(&self) {
+        let cached_sum = self.atom_energies.iter().sum::<f64>();
+        let scale = self
+            .atom_energies
+            .iter()
+            .map(|energy| energy.abs())
+            .sum::<f64>()
+            .max(1.0);
+        debug_assert!(
+            (cached_sum - self.total_energy).abs() <= 1.0e-10 * scale,
+            "native SNAP total energy cache became inconsistent"
         );
     }
 }
@@ -239,6 +262,9 @@ impl EnergyModel for SnapNativeModel {
             old_pos.iter().chain(new_pos).all(|value| value.is_finite()),
             "native SNAP trial positions must be finite"
         );
+        // Trial positions may use any periodic image. Wrapping before all
+        // cell and minimum-image operations keeps the accepted/trial states
+        // comparable at box boundaries.
         let old_position = wrap_position(*old_pos, self.box_lengths);
         let new_position = wrap_position(*new_pos, self.box_lengths);
         let accepted_error = squared_norm(minimum_image_displacement(
@@ -303,6 +329,8 @@ impl EnergyModel for SnapNativeModel {
             self.atom_energies[index] = energy;
         }
         self.total_energy += pending.delta;
+        #[cfg(debug_assertions)]
+        self.debug_assert_cache_consistent();
     }
 
     fn reject_move(&mut self, atom_idx: usize, old_pos: &[f64; 3]) {
@@ -351,6 +379,7 @@ impl SnapCellList {
 
     fn candidate_atoms(&self, position: [f64; 3]) -> Vec<usize> {
         let center = self.cell_coordinates(self.cell_for_position(position));
+        let mut seen_cells = HashSet::with_capacity(27);
         let mut cells = Vec::with_capacity(27);
         for z_offset in -1..=1 {
             for y_offset in -1..=1 {
@@ -361,7 +390,7 @@ impl SnapCellList {
                         periodic_cell(center[2], z_offset, self.cell_counts[2]),
                     ];
                     let cell = self.linear_cell(coordinates);
-                    if !cells.contains(&cell) {
+                    if seen_cells.insert(cell) {
                         cells.push(cell);
                     }
                 }
