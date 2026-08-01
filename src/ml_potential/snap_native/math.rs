@@ -243,17 +243,7 @@ impl std::ops::IndexMut<(usize, usize)> for AngularMatrix {
 }
 
 fn wigner_u_matrices(two_j_max: usize, displacement: [f64; 3], theta: f64) -> Vec<AngularMatrix> {
-    let [x, y, z] = displacement;
-    let radius = (x * x + y * y + z * z).sqrt();
-    debug_assert!(radius > 0.0);
-
-    // Cayley--Klein parameters for the unit quaternion obtained by mapping
-    // the three-dimensional neighbor position onto the three-sphere.
-    let sine = theta.sin();
-    let direction_scale = sine.abs() / radius;
-    let sine_sign = if sine < 0.0 { -1.0 } else { 1.0 };
-    let a = Complex64::new(sine_sign * theta.cos(), -direction_scale * z);
-    let b = Complex64::new(direction_scale * y, -direction_scale * x);
+    let (a, b) = cayley_klein_parameters(displacement, theta);
 
     let mut matrices = Vec::with_capacity(two_j_max + 1);
     matrices.push(AngularMatrix::identity(0));
@@ -293,6 +283,24 @@ fn wigner_u_matrices(two_j_max: usize, displacement: [f64; 3], theta: f64) -> Ve
     }
 
     matrices
+}
+
+fn cayley_klein_parameters(displacement: [f64; 3], theta: f64) -> (Complex64, Complex64) {
+    let [x, y, z] = displacement;
+    let radius = (x * x + y * y + z * z).sqrt();
+    debug_assert!(radius > 0.0);
+
+    // Cayley--Klein parameters for the unit quaternion obtained by mapping
+    // the three-dimensional neighbor position onto the three-sphere. This is
+    // algebraically identical to z0=r/tan(theta), followed by normalization
+    // of (z0, -z, y, -x). The sign is therefore required when theta is
+    // negative; using cos(theta) alone would not match that mapping.
+    let sine = theta.sin();
+    let direction_scale = sine.abs() / radius;
+    let sine_sign = if sine < 0.0 { -1.0 } else { 1.0 };
+    let a = Complex64::new(sine_sign * theta.cos(), -direction_scale * z);
+    let b = Complex64::new(direction_scale * y, -direction_scale * x);
+    (a, b)
 }
 
 impl ClebschGordanBlock {
@@ -513,8 +521,44 @@ mod tests {
     #[test]
     fn isolated_atom_bispectrum_is_removed_by_bzero() {
         let basis = SnapBasis::new(8).unwrap();
-        let descriptors = basis.bispectrum(&basis.empty_density(), false, true);
-        assert!(descriptors.iter().all(|value| value.abs() < 1.0e-13));
+        let density = basis.empty_density();
+        let unnormalized = basis.bispectrum(&density, false, false);
+        let normalized = basis.bispectrum(&density, true, false);
+        for (block, (unnormalized, normalized)) in basis
+            .coupling_blocks
+            .iter()
+            .zip(unnormalized.into_iter().zip(normalized))
+        {
+            assert_close(unnormalized, (block.two_j + 1) as f64);
+            assert_close(normalized, 1.0);
+        }
+        assert!(basis
+            .bispectrum(&density, false, true)
+            .iter()
+            .all(|value| value.abs() < 1.0e-13));
+        assert!(basis
+            .bispectrum(&density, true, true)
+            .iter()
+            .all(|value| value.abs() < 1.0e-13));
+    }
+
+    #[test]
+    fn signed_cayley_mapping_matches_the_z0_definition() {
+        let displacement = [1.2, -0.7, 2.1];
+        let theta = -0.731_f64;
+        let radius = displacement
+            .iter()
+            .map(|value| value * value)
+            .sum::<f64>()
+            .sqrt();
+        let z0 = radius / theta.tan();
+        let inverse_norm = 1.0 / (radius * radius + z0 * z0).sqrt();
+        let (a, b) = cayley_klein_parameters(displacement, theta);
+
+        assert_close(a.re, z0 * inverse_norm);
+        assert_close(a.im, -displacement[2] * inverse_norm);
+        assert_close(b.re, displacement[1] * inverse_norm);
+        assert_close(b.im, -displacement[0] * inverse_norm);
     }
 
     #[test]

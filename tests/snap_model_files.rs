@@ -65,6 +65,46 @@ fn loads_synthetic_multi_element_model_and_mapping() {
 }
 
 #[test]
+fn evaluator_reports_mutated_model_invariants_instead_of_truncating_or_panicking() {
+    let mut model = SnapModelFiles::load(
+        &test_data("linear_two_element.snapcoeff"),
+        &test_data("linear_two_element.snapparam"),
+        &["Si".to_string()],
+    )
+    .unwrap();
+
+    model.type_to_element[0] = usize::MAX;
+    let error = model.atomic_energy(0, &[]).unwrap_err();
+    assert!(error.contains("maps to invalid element index"), "{error}");
+
+    model.type_to_element[0] = 0;
+    model.coefficients.elements[0].coefficients.pop();
+    let error = model.atomic_energy(0, &[]).unwrap_err();
+    assert!(error.contains("coefficients"), "{error}");
+    assert!(error.contains("are required"), "{error}");
+}
+
+#[test]
+fn evaluator_rejects_numerically_zero_neighbor_distances() {
+    let model = SnapModelFiles::load(
+        &test_data("linear_two_element.snapcoeff"),
+        &test_data("linear_two_element.snapparam"),
+        &["Si".to_string()],
+    )
+    .unwrap();
+    let error = model
+        .atomic_descriptors(
+            0,
+            &[SnapNeighbor {
+                displacement: [1.0e-200, 0.0, 0.0],
+                type_index: 0,
+            }],
+        )
+        .unwrap_err();
+    assert!(error.contains("distance must be at least"), "{error}");
+}
+
+#[test]
 fn loads_lammps_example_models_when_available() {
     let Some(directory) = std::env::var_os("RSMITH_LAMMPS_POTENTIALS") else {
         eprintln!("skipping LAMMPS SNAP parser examples: RSMITH_LAMMPS_POTENTIALS is not set");

@@ -9,6 +9,8 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+const MIN_NEIGHBOR_DISTANCE_ANGSTROM: f64 = 1.0e-10;
+
 /// Parameters controlling the SNAP bispectrum calculation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SnapParameters {
@@ -155,8 +157,10 @@ impl SnapModelFiles {
             if !radius_squared.is_finite() {
                 return Err("SNAP neighbor distance must be finite".to_string());
             }
-            if radius_squared == 0.0 {
-                return Err("SNAP neighbor displacement must be nonzero".to_string());
+            if radius_squared < MIN_NEIGHBOR_DISTANCE_ANGSTROM.powi(2) {
+                return Err(format!(
+                    "SNAP neighbor distance must be at least {MIN_NEIGHBOR_DISTANCE_ANGSTROM} Angstrom"
+                ));
             }
             let radius = radius_squared.sqrt();
             let cutoff =
@@ -217,6 +221,15 @@ impl SnapModelFiles {
         let element_index = self.element_index_for_type(central_type_index)?;
         let descriptors = self.atomic_descriptors(central_type_index, neighbors)?;
         let coefficients = &self.coefficients.elements[element_index].coefficients;
+        if coefficients.len() != descriptors.len() + 1 {
+            return Err(format!(
+                "SNAP element '{}' has {} coefficients, but {} are required for {} descriptors and one intercept",
+                self.coefficients.elements[element_index].name,
+                coefficients.len(),
+                descriptors.len() + 1,
+                descriptors.len()
+            ));
+        }
         Ok(coefficients[0]
             + coefficients[1..]
                 .iter()
@@ -226,15 +239,23 @@ impl SnapModelFiles {
     }
 
     fn element_index_for_type(&self, type_index: usize) -> Result<usize, String> {
-        self.type_to_element
+        let element_index = self
+            .type_to_element
             .get(type_index)
             .copied()
             .ok_or_else(|| {
                 format!(
                 "SNAP atom type index {type_index} is outside the configured mapping of {} types",
-                self.type_to_element.len()
-            )
-            })
+                    self.type_to_element.len()
+                )
+            })?;
+        if element_index >= self.coefficients.elements.len() {
+            return Err(format!(
+                "SNAP atom type index {type_index} maps to invalid element index {element_index}; the model has {} elements",
+                self.coefficients.elements.len()
+            ));
+        }
+        Ok(element_index)
     }
 }
 
@@ -257,6 +278,9 @@ fn radial_switch(
             + 1.0)
     };
 
+    // The outer cutoff is authoritative. An inner transition is allowed to
+    // extend beyond it; multiplying the already-zero outer value preserves a
+    // smooth zero and matches SNAP's composition of the two switches.
     if inner_enabled && radius < inner_midpoint + inner_half_width {
         if radius > inner_midpoint - inner_half_width {
             value *= 0.5
@@ -614,7 +638,7 @@ fn metadata_value(line: &str, key: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_coefficients, parse_parameters, validate_model};
+    use super::{parse_coefficients, parse_parameters, radial_switch, validate_model};
 
     #[test]
     fn parameter_defaults_match_lammps_snap_defaults() {
@@ -694,5 +718,11 @@ mod tests {
             let error = parse_parameters(&input).unwrap_err();
             assert!(error.contains("sinner values must be finite"), "{error}");
         }
+    }
+
+    #[test]
+    fn outer_cutoff_remains_authoritative_when_inner_switch_extends_past_it() {
+        let value = radial_switch(4.5, 4.0, 0.0, true, true, 4.0, 1.0);
+        assert_eq!(value, 0.0);
     }
 }
