@@ -315,13 +315,14 @@ environment is unambiguous. Do not set `cutoff` for `snap_native`; unlike the
 GAP and MACE backends, the native SNAP cutoff is derived from the model files,
 and a manual value is rejected to avoid silently using the wrong range.
 
-Native evaluation currently supports linear, non-chemical SNAP models,
-including `switchflag`, `rmin0`, per-element `wj` and `radelem`, `bzeroflag`,
-and `bnormflag`. Models with `chemflag` or `quadraticflag` are parsed and
-validated but rejected by the evaluator with an explicit error until those
-descriptor contractions are implemented. FitSNAP remains responsible for
-fitting; rsmith only loads and evaluates the resulting potential. LAMMPS is
-used as a numerical test oracle and is not a runtime dependency.
+Native evaluation supports linear standard and explicit multi-element
+(`chemflag`) SNAP models, including `switchflag`, `rmin0`, per-element `wj` and
+`radelem`, `bzeroflag`, `bnormflag`, and both `wselfallflag` conventions. Models
+with `quadraticflag` are parsed and validated but rejected by the evaluator
+with an explicit error until the quadratic contraction is implemented.
+FitSNAP remains responsible for fitting; rsmith only loads and evaluates the
+resulting potential. LAMMPS is used as a numerical test oracle and is not a
+runtime dependency.
 
 Small reproducible model files, example cells, and frozen LAMMPS reference
 energies live in `tests/data/snap`. Run their native checks with:

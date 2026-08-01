@@ -123,6 +123,10 @@ impl SnapBasis {
         (0..=self.two_j_max).map(AngularMatrix::identity).collect()
     }
 
+    pub fn zero_density(&self) -> Vec<AngularMatrix> {
+        (0..=self.two_j_max).map(AngularMatrix::zeros).collect()
+    }
+
     pub fn add_neighbor(
         &self,
         density: &mut [AngularMatrix],
@@ -143,13 +147,26 @@ impl SnapBasis {
         normalize: bool,
         subtract_isolated_atom: bool,
     ) -> Vec<f64> {
-        debug_assert_eq!(density.len(), self.two_j_max + 1);
+        self.mixed_bispectrum(density, density, density, normalize, subtract_isolated_atom)
+    }
+
+    pub fn mixed_bispectrum(
+        &self,
+        density1: &[AngularMatrix],
+        density2: &[AngularMatrix],
+        density3: &[AngularMatrix],
+        normalize: bool,
+        subtract_isolated_atom: bool,
+    ) -> Vec<f64> {
+        debug_assert_eq!(density1.len(), self.two_j_max + 1);
+        debug_assert_eq!(density2.len(), self.two_j_max + 1);
+        debug_assert_eq!(density3.len(), self.two_j_max + 1);
         self.coupling_blocks
             .iter()
             .map(|block| {
-                let u1 = &density[block.two_j1];
-                let u2 = &density[block.two_j2];
-                let u = &density[block.two_j];
+                let u1 = &density1[block.two_j1];
+                let u2 = &density2[block.two_j2];
+                let u = &density3[block.two_j];
                 let mut coupled = AngularMatrix::zeros(block.two_j);
 
                 for m1_index in 0..=block.two_j1 {

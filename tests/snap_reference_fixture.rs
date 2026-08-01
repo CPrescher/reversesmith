@@ -65,6 +65,13 @@ fn load_fixture() -> ReferenceFixture {
     .unwrap()
 }
 
+fn load_chemical_fixture() -> ReferenceFixture {
+    serde_json::from_str(
+        &std::fs::read_to_string(test_data("chemical_two_element_inp.reference.json")).unwrap(),
+    )
+    .unwrap()
+}
+
 fn assert_close(actual: f64, expected: f64) {
     let tolerance = 1.0e-12 * expected.abs().max(1.0) + 1.0e-15;
     assert!(
@@ -118,15 +125,60 @@ fn neighbors_for_atom(
     positions: &[[f64; 3]],
     box_lengths: [f64; 3],
 ) -> Vec<SnapNeighbor> {
+    let type_indices = vec![0; positions.len()];
+    typed_neighbors_for_atom(atom_index, positions, &type_indices, box_lengths)
+}
+
+fn typed_neighbors_for_atom(
+    atom_index: usize,
+    positions: &[[f64; 3]],
+    type_indices: &[usize],
+    box_lengths: [f64; 3],
+) -> Vec<SnapNeighbor> {
     positions
         .iter()
         .enumerate()
         .filter(|(neighbor_index, _)| *neighbor_index != atom_index)
-        .map(|(_, position)| SnapNeighbor {
+        .map(|(neighbor_index, position)| SnapNeighbor {
             displacement: minimum_image_displacement(positions[atom_index], *position, box_lengths),
-            type_index: 0,
+            type_index: type_indices[neighbor_index],
         })
         .collect()
+}
+
+fn zincblende_inp_positions() -> Vec<[f64; 3]> {
+    let lattice_constant = 5.87;
+    [
+        [0.0, 0.0, 0.0],
+        [0.0, 0.5, 0.5],
+        [0.5, 0.0, 0.5],
+        [0.5, 0.5, 0.0],
+        [0.25, 0.25, 0.25],
+        [0.25, 0.75, 0.75],
+        [0.75, 0.25, 0.75],
+        [0.75, 0.75, 0.25],
+    ]
+    .into_iter()
+    .map(|fractional| fractional.map(|coordinate| coordinate * lattice_constant))
+    .collect()
+}
+
+fn inp_configuration(positions: &[[f64; 3]]) -> Configuration {
+    let type_indices = [0, 0, 0, 0, 1, 1, 1, 1];
+    Configuration {
+        atoms: positions
+            .iter()
+            .zip(type_indices)
+            .map(|(position, type_id)| Atom {
+                position: *position,
+                species: if type_id == 0 { "In" } else { "P" }.to_string(),
+                type_id,
+            })
+            .collect(),
+        box_lengths: [5.87; 3],
+        species: vec!["In".to_string(), "P".to_string()],
+        composition: HashMap::from([("In".to_string(), 4), ("P".to_string(), 4)]),
+    }
 }
 
 fn silicon_configuration(positions: &[[f64; 3]]) -> Configuration {
@@ -320,6 +372,124 @@ fn native_descriptors_are_rotation_invariant() {
     let actual = model.atomic_descriptors(0, &rotated).unwrap();
     for (actual, expected) in actual.iter().zip(expected) {
         assert_close(*actual, expected);
+    }
+}
+
+#[test]
+fn chemical_descriptors_energies_and_local_trials_match_lammps() {
+    let fixture = load_chemical_fixture();
+    let model_files = SnapModelFiles::load(
+        &test_data("chemical_two_element.snapcoeff"),
+        &test_data("chemical_two_element.snapparam"),
+        &["In".to_string(), "P".to_string()],
+    )
+    .unwrap();
+    assert_eq!(model_files.descriptor_count(), 40);
+    assert_eq!(fixture.model.descriptor_count, 40);
+    let type_indices = [0, 0, 0, 0, 1, 1, 1, 1];
+
+    for expected_configuration in &fixture.configurations {
+        let mut positions = zincblende_inp_positions();
+        if expected_configuration.name == "zincblende_atom_1_displaced" {
+            positions[0] = expected_configuration.representative_atoms[0].position_angstrom;
+        }
+
+        let expected_atom = &expected_configuration.representative_atoms[0];
+        let atom_index = expected_atom.id - 1;
+        let neighbors = typed_neighbors_for_atom(
+            atom_index,
+            &positions,
+            &type_indices,
+            fixture.cell.box_lengths_angstrom,
+        );
+        let descriptors = model_files
+            .atomic_descriptors(type_indices[atom_index], &neighbors)
+            .unwrap();
+        assert_eq!(descriptors.len(), expected_atom.descriptors.len());
+        for (actual, expected) in descriptors.iter().zip(&expected_atom.descriptors) {
+            assert_close(*actual, *expected);
+        }
+        assert_close(
+            model_files
+                .atomic_energy(type_indices[atom_index], &neighbors)
+                .unwrap(),
+            expected_atom.energy_ev,
+        );
+
+        let total_energy = positions
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                let neighbors = typed_neighbors_for_atom(
+                    index,
+                    &positions,
+                    &type_indices,
+                    fixture.cell.box_lengths_angstrom,
+                );
+                model_files
+                    .atomic_energy(type_indices[index], &neighbors)
+                    .unwrap()
+            })
+            .sum::<f64>();
+        assert_close(total_energy, expected_configuration.total_energy_ev);
+    }
+
+    let positions = zincblende_inp_positions();
+    let mut configuration = inp_configuration(&positions);
+    let mut runtime = SnapNativeModel::new(model_files, &configuration, 1.0).unwrap();
+    let rdf_cell_list = CellList::new(&positions, &configuration.box_lengths, 2.6);
+    let equilibrium_energy = fixture.configurations[0].total_energy_ev;
+    let displaced_energy = fixture.configurations[1].total_energy_ev;
+    assert_close(runtime.cached_total_energy(), equilibrium_energy);
+
+    let old_position = configuration.atoms[0].position;
+    let new_position = fixture.configurations[1].representative_atoms[0].position_angstrom;
+    configuration.atoms[0].position = new_position;
+    let delta = runtime.energy_delta_atom(
+        &configuration,
+        0,
+        &old_position,
+        &new_position,
+        &rdf_cell_list,
+        0,
+        0,
+    );
+    assert_close(equilibrium_energy + delta, displaced_energy);
+    runtime.accept_move(0, &new_position);
+    assert_close(runtime.cached_total_energy(), displaced_energy);
+
+    let center_self_model = SnapModelFiles::load(
+        &test_data("chemical_two_element.snapcoeff"),
+        &test_data("chemical_two_element_center_self.snapparam"),
+        &["In".to_string(), "P".to_string()],
+    )
+    .unwrap();
+    // LAMMPS 22 Jul 2025 Update 4, generated by
+    // chemical_two_element_center_self.lammps.in.
+    for (configuration_index, expected_total) in [-12.003_907_971_852_996, -12.004_551_450_816_276]
+        .into_iter()
+        .enumerate()
+    {
+        let mut positions = zincblende_inp_positions();
+        if configuration_index == 1 {
+            positions[0] = fixture.configurations[1].representative_atoms[0].position_angstrom;
+        }
+        let total = positions
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                let neighbors = typed_neighbors_for_atom(
+                    index,
+                    &positions,
+                    &type_indices,
+                    fixture.cell.box_lengths_angstrom,
+                );
+                center_self_model
+                    .atomic_energy(type_indices[index], &neighbors)
+                    .unwrap()
+            })
+            .sum::<f64>();
+        assert_close(total, expected_total);
     }
 }
 

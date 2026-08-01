@@ -126,21 +126,39 @@ impl SnapModelFiles {
     }
 
     pub fn descriptor_count(&self) -> usize {
-        self.basis.descriptor_count()
+        let chemical_channels = if self.parameters.chemflag {
+            self.coefficients.elements.len().pow(3)
+        } else {
+            1
+        };
+        self.basis.descriptor_count() * chemical_channels
     }
 
-    /// Evaluate the standard, non-chemical SNAP descriptors of one atom.
+    /// Evaluate the SNAP descriptors of one atom in coefficient-file order.
     pub fn atomic_descriptors(
         &self,
         central_type_index: usize,
         neighbors: &[SnapNeighbor],
     ) -> Result<Vec<f64>, String> {
-        if self.parameters.chemflag {
-            return Err("native chemical SNAP descriptors are not implemented yet".to_string());
-        }
         let central_element_index = self.element_index_for_type(central_type_index)?;
         let central_element = &self.coefficients.elements[central_element_index];
-        let mut density = self.basis.empty_density();
+        let density_count = if self.parameters.chemflag {
+            self.coefficients.elements.len()
+        } else {
+            1
+        };
+        let mut densities = (0..density_count)
+            .map(|element_index| {
+                if !self.parameters.chemflag
+                    || self.parameters.wselfallflag
+                    || element_index == central_element_index
+                {
+                    self.basis.empty_density()
+                } else {
+                    self.basis.zero_density()
+                }
+            })
+            .collect::<Vec<_>>();
 
         for neighbor in neighbors {
             let neighbor_element_index = self.element_index_for_type(neighbor.type_index)?;
@@ -197,19 +215,49 @@ impl SnapModelFiles {
             let theta =
                 (radius - self.parameters.rmin0) * self.parameters.rfac0 * std::f64::consts::PI
                     / (cutoff - self.parameters.rmin0);
+            let density_index = if self.parameters.chemflag {
+                neighbor_element_index
+            } else {
+                0
+            };
             self.basis.add_neighbor(
-                &mut density,
+                &mut densities[density_index],
                 neighbor.displacement,
                 theta,
                 switching_weight * neighbor_element.weight,
             );
         }
 
-        Ok(self.basis.bispectrum(
-            &density,
-            self.parameters.bnormflag,
-            self.parameters.bzeroflag,
-        ))
+        if !self.parameters.chemflag {
+            return Ok(self.basis.bispectrum(
+                &densities[0],
+                self.parameters.bnormflag,
+                self.parameters.bzeroflag,
+            ));
+        }
+
+        let mut descriptors = Vec::with_capacity(self.descriptor_count());
+        // LAMMPS coefficient files store the angular components inside each
+        // ordered (element1, element2, element3) chemical channel.
+        for element1 in 0..density_count {
+            for element2 in 0..density_count {
+                for element3 in 0..density_count {
+                    let subtract_isolated_atom = self.parameters.bzeroflag
+                        && (self.parameters.wselfallflag
+                            || (element1 == central_element_index
+                                && element2 == central_element_index
+                                && element3 == central_element_index));
+                    descriptors.extend(self.basis.mixed_bispectrum(
+                        &densities[element1],
+                        &densities[element2],
+                        &densities[element3],
+                        self.parameters.bnormflag,
+                        subtract_isolated_atom,
+                    ));
+                }
+            }
+        }
+        Ok(descriptors)
     }
 
     /// Evaluate one atom's linear SNAP energy in eV.

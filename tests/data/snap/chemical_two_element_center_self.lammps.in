@@ -1,0 +1,25 @@
+# Validate the wselfallflag=0 chemical self-contribution rule.
+
+units metal
+atom_style atomic
+boundary p p p
+
+lattice diamond 5.87
+region simulation_box block 0 1 0 1 0 1 units lattice
+create_box 2 simulation_box
+create_atoms 1 box basis 5 2 basis 6 2 basis 7 2 basis 8 2
+mass 1 114.818
+mass 2 30.973761998
+
+pair_style snap
+pair_coeff * * chemical_two_element.snapcoeff &
+                 chemical_two_element_center_self.snapparam In P
+
+thermo 1
+thermo_style custom step atoms pe
+thermo_modify format float %.17g
+run 0
+
+group displaced_atom id 1
+displace_atoms displaced_atom move 0.071 -0.043 0.029 units box
+run 1

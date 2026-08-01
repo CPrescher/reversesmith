@@ -47,6 +47,51 @@ fn diamond_supercell_neighbors() -> Vec<SnapNeighbor> {
     neighbors
 }
 
+fn zincblende_supercell_neighbors(central_index: usize) -> Vec<SnapNeighbor> {
+    let lattice_constant = 5.87;
+    let box_length = 3.0 * lattice_constant;
+    let basis = [
+        ([0.0, 0.0, 0.0], 0),
+        ([0.0, 0.5, 0.5], 0),
+        ([0.5, 0.0, 0.5], 0),
+        ([0.5, 0.5, 0.0], 0),
+        ([0.25, 0.25, 0.25], 1),
+        ([0.25, 0.75, 0.75], 1),
+        ([0.75, 0.25, 0.75], 1),
+        ([0.75, 0.75, 0.25], 1),
+    ];
+    let mut atoms = Vec::with_capacity(216);
+    for z_cell in 0..3 {
+        for y_cell in 0..3 {
+            for x_cell in 0..3 {
+                for (fractional, type_index) in basis {
+                    atoms.push((
+                        [
+                            (x_cell as f64 + fractional[0]) * lattice_constant,
+                            (y_cell as f64 + fractional[1]) * lattice_constant,
+                            (z_cell as f64 + fractional[2]) * lattice_constant,
+                        ],
+                        type_index,
+                    ));
+                }
+            }
+        }
+    }
+    let central_position = atoms[central_index].0;
+    atoms
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| *index != central_index)
+        .map(|(_, (position, type_index))| SnapNeighbor {
+            displacement: std::array::from_fn(|axis| {
+                let displacement = position[axis] - central_position[axis];
+                displacement - box_length * (displacement / box_length).round()
+            }),
+            type_index,
+        })
+        .collect()
+}
+
 #[test]
 fn loads_synthetic_multi_element_model_and_mapping() {
     let elements = vec!["O".to_string(), "Si".to_string(), "O".to_string()];
@@ -135,4 +180,15 @@ fn loads_lammps_example_models_when_available() {
     .unwrap();
     assert!(inp.parameters.chemflag);
     assert_eq!(inp.type_to_element, vec![0, 1]);
+    assert_eq!(inp.descriptor_count(), 240);
+    // LAMMPS 22 Jul 2025 Update 4, pure pair_style snap (without the ZBL
+    // overlay in the distributed example), 3x3x3 zincblende InP.
+    let in_energy = inp
+        .atomic_energy(0, &zincblende_supercell_neighbors(0))
+        .unwrap();
+    let p_energy = inp
+        .atomic_energy(1, &zincblende_supercell_neighbors(4))
+        .unwrap();
+    let total_energy = 108.0 * (in_energy + p_energy);
+    assert!((total_energy - -1_229.893_944_643_025).abs() < 1.0e-8);
 }
