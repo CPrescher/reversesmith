@@ -648,6 +648,33 @@ fn main() {
                     process::exit(1);
                 }
             }
+            MlBackend::MacePython => {
+                let model_path = resolve_path(&config_dir, &ml_cfg.model);
+                log_println!(
+                    "\nEnergy regularizer: MACE/Python (weight = {:.6}, cutoff = {:.1} A)",
+                    ml_cfg.weight.unwrap_or(0.001),
+                    ml_cfg.cutoff
+                );
+                log_println!("  Model: {:?}", model_path);
+                log_println!(
+                    "  Python: {}",
+                    ml_cfg.python.as_deref().unwrap_or("python3")
+                );
+                log_println!("  Device: {}", ml_cfg.device.as_deref().unwrap_or("cpu"));
+                if let Some(threads) = ml_cfg.torch_threads {
+                    log_println!("  Torch threads: {}", threads);
+                }
+                log_println!(
+                    "  Energy delta strategy: full-system energy difference for correctness"
+                );
+                match ml_potential::MacePythonModel::from_config(ml_cfg, &config, &config_dir) {
+                    Ok(model) => Some(Box::new(model) as Box<dyn EnergyModel>),
+                    Err(e) => {
+                        log_eprintln!("Error building MACE/Python potential: {}", e);
+                        process::exit(1);
+                    }
+                }
+            }
         }
     } else {
         None

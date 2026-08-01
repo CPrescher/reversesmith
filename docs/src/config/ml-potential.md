@@ -88,3 +88,73 @@ pointer and should use its own safe default for the supplied GAP XML.
 
 The backend fails at startup if GAP/QUIP support is requested but the binary was
 not built with `--features gap-quip`.
+
+## MACE/Python
+
+MACE support uses a small Python worker process. The Rust binary stays pure
+Rust, while the worker imports `mace-torch`, PyTorch, and ASE from the Python
+environment selected in the config.
+
+```toml
+[ml_potential]
+backend = "mace_python"
+model = "mace.model"
+weight = 0.001
+cutoff = 5.0
+device = "cpu"
+torch_threads = 8
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `backend` | String | required | `mace_python` |
+| `model` | String | required | MACE model path, relative to the config file |
+| `weight` | Float | 0.001 | Scales the MACE energy contribution in the RMC cost |
+| `cutoff` | Float | required | Model cutoff in A; retained for logging and future local-delta support |
+| `device` | String | `cpu` | PyTorch device, e.g. `cpu`, `cuda`, or `mps` |
+| `torch_threads` | Integer | PyTorch default | Sets `torch.set_num_threads()` in the worker |
+| `python` | String | `python3` | Python executable used to launch the worker |
+| `worker` | String | embedded worker | Optional custom worker script for testing or site integration |
+
+Create the optional MACE Python environment with uv:
+
+```bash
+uv sync --group mace
+cargo build --release
+```
+
+Then point rsmith at `.venv/bin/python`, or set `python = ".venv/bin/python"` in
+`[ml_potential]`. No Rust feature flag is required for `mace_python` because
+MACE is loaded by the Python worker at runtime.
+
+For correctness, the first MACE backend computes:
+
+```text
+delta_E = E_full(after move) - E_full(before move)
+```
+
+This is slower than a local delta, but it is robust for message-passing models
+where a moved atom can affect neighbors beyond one cutoff. Parallelism comes
+from PyTorch inside each energy evaluation through `torch_threads` or the
+selected accelerator device.
+
+MACE code and MACE model files have separate licenses. Check the license of the
+specific model file before redistribution or publication.
+
+### Real MACE Integration Test
+
+The normal test suite uses a mock worker and does not require PyTorch or MACE.
+To run against an actual MACE checkpoint, create the uv environment and download
+the small MIT-licensed MACE-MP model:
+
+```bash
+uv sync --group mace
+MODEL=$(.venv/bin/python scripts/download_mace_test_model.py)
+RSMITH_MACE_TEST_MODEL="$MODEL" \
+RSMITH_MACE_TEST_PYTHON=.venv/bin/python \
+RSMITH_MACE_TEST_DEVICE=cpu \
+RSMITH_MACE_TEST_TORCH_THREADS=1 \
+cargo test mace_python_backend_runs_real_model_when_configured -- --nocapture
+```
+
+If `RSMITH_MACE_TEST_MODEL` is not set, the real-model test skips itself.

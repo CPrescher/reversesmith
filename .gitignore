@@ -1,6 +1,9 @@
 /target
 /docs/book
 
+# Local Python environments
+.venv/
+
 # Local benchmark/profile sandboxes
 benchmark_sio2/
 profile_run/

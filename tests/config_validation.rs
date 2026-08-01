@@ -319,6 +319,59 @@ cutoff = 5.0
 }
 
 #[test]
+fn valid_mace_python_fields_accepted() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "mace_python"
+model = "mace.model"
+weight = 0.001
+cutoff = 5.0
+device = "cpu"
+torch_threads = 4
+python = "python3"
+worker = "custom_worker.py"
+"#;
+    let result = load_toml(toml);
+    assert!(
+        result.is_ok(),
+        "Valid MACE/Python config should parse: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn mace_python_rejects_zero_torch_threads() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "mace_python"
+model = "mace.model"
+cutoff = 5.0
+torch_threads = 0
+"#;
+    let err = load_toml(toml).unwrap_err();
+    assert!(
+        err.contains("torch_threads"),
+        "Expected torch_threads validation error, got: {err}"
+    );
+}
+
+#[test]
 fn potential_and_ml_potential_conflict() {
     let toml = r#"
 [system]
@@ -356,7 +409,7 @@ format = "xyz"
 [rmc]
 
 [ml_potential]
-backend = "mace"
+backend = "unknown_backend"
 model = "model.pt"
 cutoff = 5.0
 "#;

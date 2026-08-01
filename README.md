@@ -6,7 +6,7 @@ A Reverse Monte Carlo (RMC) structure refinement tool written in Rust. Refines a
 
 - **S(Q) and g(r) fitting** -- simultaneous refinement against structure factor and pair distribution function
 - **Hybrid RMC** -- pair potentials (Buckingham, Pedone, Coulomb DSF, tabulated) bias refinement toward energetically favorable configurations
-- **ML-potential-regularized RMC** -- optional GAP/QUIP energy regularizer behind a feature-gated native binding
+- **ML-potential-regularized RMC** -- optional GAP/QUIP or MACE energy regularizers
 - **Hard constraints** -- minimum interatomic distances and coordination number bounds
 - **Simulated annealing** -- exponential cooling schedule with adaptive step size
 - **Structural analysis** -- coordination numbers and bond angle distributions for validation
@@ -310,6 +310,42 @@ energy delta will be wrong.
 `init_args` is optional. Use it when your GAP XML requires a specific QUIP
 initialization string, such as an `xml_label`. If omitted, the shim receives a
 null pointer and must choose an appropriate default for the model.
+
+For MACE, use the Python worker backend:
+
+```toml
+[ml_potential]
+backend = "mace_python"
+model = "mace.model"
+weight = 0.001
+cutoff = 5.0
+device = "cpu"        # cpu, cuda, or mps
+torch_threads = 8     # optional CPU threading control
+```
+
+Create the optional MACE Python environment with uv:
+
+```bash
+uv sync --group mace
+cargo build --release
+```
+
+`mace_python` does not require a Rust feature flag. rsmith launches an embedded
+Python worker, keeps the MACE calculator alive across trial moves, and computes
+full-system energy differences for correctness. MACE code and MACE model files
+have separate licenses; check the license of the specific model before
+redistribution.
+
+To run the real MACE integration test with the small MIT-licensed MACE-MP model:
+
+```bash
+MODEL=$(.venv/bin/python scripts/download_mace_test_model.py)
+RSMITH_MACE_TEST_MODEL="$MODEL" \
+RSMITH_MACE_TEST_PYTHON=.venv/bin/python \
+RSMITH_MACE_TEST_DEVICE=cpu \
+RSMITH_MACE_TEST_TORCH_THREADS=1 \
+cargo test mace_python_backend_runs_real_model_when_configured -- --nocapture
+```
 
 ### 5. Smoke-test the binding
 

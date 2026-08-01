@@ -4,9 +4,11 @@ use crate::atoms::Configuration;
 
 #[cfg(feature = "gap-quip")]
 pub mod gap_quip;
+pub mod mace_python;
 
 #[cfg(feature = "gap-quip")]
 pub use gap_quip::GapQuipModel;
+pub use mace_python::MacePythonModel;
 
 #[cfg(not(feature = "gap-quip"))]
 use crate::config::MlPotentialConfig;

@@ -226,12 +226,17 @@ pub struct MlPotentialConfig {
     pub init_args: Option<String>,
     pub weight: Option<f64>,
     pub cutoff: f64,
+    pub device: Option<String>,
+    pub torch_threads: Option<usize>,
+    pub python: Option<String>,
+    pub worker: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MlBackend {
     GapQuip,
+    MacePython,
 }
 
 impl Config {
@@ -256,6 +261,9 @@ impl Config {
             }
             if ml.cutoff <= 0.0 {
                 return Err("[ml_potential] cutoff must be greater than 0".into());
+            }
+            if matches!(ml.backend, MlBackend::MacePython) && ml.torch_threads == Some(0) {
+                return Err("[ml_potential] torch_threads must be greater than 0".into());
             }
         }
 
