@@ -8,6 +8,27 @@ fn test_data(name: &str) -> PathBuf {
         .join(name)
 }
 
+fn coefficient_element_names(path: &Path) -> Vec<String> {
+    let content = std::fs::read_to_string(path).unwrap();
+    let lines = content
+        .lines()
+        .filter_map(|line| {
+            let data = line.split('#').next().unwrap().trim();
+            (!data.is_empty()).then_some(data)
+        })
+        .collect::<Vec<_>>();
+    let header = lines[0].split_whitespace().collect::<Vec<_>>();
+    let element_count = header[0].parse::<usize>().unwrap();
+    let coefficient_count = header[1].parse::<usize>().unwrap();
+    let mut cursor = 1;
+    let mut names = Vec::with_capacity(element_count);
+    for _ in 0..element_count {
+        names.push(lines[cursor].split_whitespace().next().unwrap().to_string());
+        cursor += coefficient_count + 1;
+    }
+    names
+}
+
 fn diamond_supercell_neighbors() -> Vec<SnapNeighbor> {
     let lattice_constant = 5.43;
     let box_length = 2.0 * lattice_constant;
@@ -205,4 +226,29 @@ fn loads_lammps_example_models_when_available() {
         .unwrap();
     let total_energy = 108.0 * (in_energy + p_energy);
     assert!((total_energy - -1_229.893_944_643_025).abs() < 1.0e-8);
+
+    let mut loaded_model_count = 0;
+    for entry in std::fs::read_dir(&directory).unwrap() {
+        let parameter_path = entry.unwrap().path();
+        if parameter_path.extension().and_then(|value| value.to_str()) != Some("snapparam") {
+            continue;
+        }
+        let coefficient_path = parameter_path.with_extension("snapcoeff");
+        if !coefficient_path.is_file() {
+            continue;
+        }
+        let elements = coefficient_element_names(&coefficient_path);
+        let model = SnapModelFiles::load(&coefficient_path, &parameter_path, &elements)
+            .unwrap_or_else(|error| panic!("failed to load {}: {error}", parameter_path.display()));
+        assert_eq!(model.coefficients.elements.len(), elements.len());
+        loaded_model_count += 1;
+    }
+    assert!(
+        loaded_model_count > 0,
+        "no SNAP model pairs were discovered"
+    );
+    eprintln!(
+        "loaded {loaded_model_count} SNAP models from {}",
+        directory.display()
+    );
 }

@@ -50,3 +50,13 @@ equilibrium and displaced references therefore test coefficient order as well
 as the one-half factor on diagonal terms. The optional
 `si_zuo_quadratic_reference.lammps.in` performs the same pure-SNAP check with
 LAMMPS's distributed 1,596-coefficient silicon model.
+
+To load every SNAP model in an installed LAMMPS potential directory and run
+the published Si/InP numerical checks, set `RSMITH_LAMMPS_POTENTIALS` before
+running `cargo test --test snap_model_files`. A reusable release-mode comparison
+of cached local trials against full model rebuilds is available with:
+
+```console
+cargo test --release --test snap_reference_fixture \
+  benchmark_local_trials_against_full_rebuilds -- --ignored --nocapture
+```

@@ -799,3 +799,75 @@ fn local_trial_delta_matches_a_fresh_full_rebuild_in_a_larger_cell() {
         rebuilt_model.cached_total_energy(),
     );
 }
+
+#[test]
+#[ignore = "manual release-mode local-delta performance comparison"]
+fn benchmark_local_trials_against_full_rebuilds() {
+    let mut positions = Vec::new();
+    for z in 0..5 {
+        for y in 0..5 {
+            for x in 0..5 {
+                positions.push([
+                    0.5 + 3.4 * x as f64,
+                    0.5 + 3.4 * y as f64,
+                    0.5 + 3.4 * z as f64,
+                ]);
+            }
+        }
+    }
+    let mut configuration = silicon_configuration_in_box(&positions, [17.0; 3]);
+    let model_files = SnapModelFiles::load(
+        &test_data("linear_two_element.snapcoeff"),
+        &test_data("linear_two_element.snapparam"),
+        &["Si".to_string()],
+    )
+    .unwrap();
+    let mut local_model = SnapNativeModel::new(model_files.clone(), &configuration, 1.0).unwrap();
+    let rdf_cell_list = CellList::new(&positions, &configuration.box_lengths, 4.0);
+    let old_position = configuration.atoms[0].position;
+    let trial_count = 200;
+
+    let local_start = std::time::Instant::now();
+    let mut local_checksum = 0.0;
+    for trial in 0..trial_count {
+        let offset = 0.001 * (trial + 1) as f64;
+        let new_position = [
+            old_position[0] + offset,
+            old_position[1] - 0.5 * offset,
+            old_position[2] + 0.25 * offset,
+        ];
+        configuration.atoms[0].position = new_position;
+        local_checksum += local_model.energy_delta_atom(
+            &configuration,
+            0,
+            &old_position,
+            &new_position,
+            &rdf_cell_list,
+            0,
+            0,
+        );
+        local_model.reject_move(0, &old_position);
+    }
+    let local_elapsed = local_start.elapsed();
+
+    let rebuild_start = std::time::Instant::now();
+    let mut rebuild_checksum = 0.0;
+    for trial in 0..trial_count {
+        let offset = 0.001 * (trial + 1) as f64;
+        configuration.atoms[0].position = [
+            old_position[0] + offset,
+            old_position[1] - 0.5 * offset,
+            old_position[2] + 0.25 * offset,
+        ];
+        let rebuilt = SnapNativeModel::new(model_files.clone(), &configuration, 1.0).unwrap();
+        rebuild_checksum += rebuilt.cached_total_energy();
+    }
+    let rebuild_elapsed = rebuild_start.elapsed();
+
+    assert!(local_checksum.is_finite());
+    assert!(rebuild_checksum.is_finite());
+    eprintln!(
+        "{trial_count} trials: local={local_elapsed:?}, full rebuild={rebuild_elapsed:?}, speedup={:.1}x",
+        rebuild_elapsed.as_secs_f64() / local_elapsed.as_secs_f64()
+    );
+}
