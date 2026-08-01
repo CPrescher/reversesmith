@@ -621,11 +621,14 @@ fn main() {
     {
         match ml_cfg.backend {
             MlBackend::GapQuip => {
-                let model_path = resolve_path(&config_dir, &ml_cfg.model);
+                let model_path = resolve_path(
+                    &config_dir,
+                    ml_cfg.model.as_deref().expect("validated GAP model path"),
+                );
                 log_println!(
                     "\nEnergy regularizer: GAP/QUIP (weight = {:.6}, cutoff = {:.1} A)",
                     ml_cfg.weight.unwrap_or(0.001),
-                    ml_cfg.cutoff
+                    ml_cfg.cutoff.expect("validated GAP cutoff")
                 );
                 log_println!("  Model: {:?}", model_path);
                 log_println!(
@@ -649,11 +652,14 @@ fn main() {
                 }
             }
             MlBackend::MacePython => {
-                let model_path = resolve_path(&config_dir, &ml_cfg.model);
+                let model_path = resolve_path(
+                    &config_dir,
+                    ml_cfg.model.as_deref().expect("validated MACE model path"),
+                );
                 log_println!(
                     "\nEnergy regularizer: MACE/Python (weight = {:.6}, cutoff = {:.1} A)",
                     ml_cfg.weight.unwrap_or(0.001),
-                    ml_cfg.cutoff
+                    ml_cfg.cutoff.expect("validated MACE cutoff")
                 );
                 log_println!("  Model: {:?}", model_path);
                 log_println!(
@@ -671,6 +677,39 @@ fn main() {
                     Ok(model) => Some(Box::new(model) as Box<dyn EnergyModel>),
                     Err(e) => {
                         log_eprintln!("Error building MACE/Python potential: {}", e);
+                        process::exit(1);
+                    }
+                }
+            }
+            MlBackend::SnapNative => {
+                let coefficient_path = resolve_path(
+                    &config_dir,
+                    ml_cfg
+                        .coefficient_file
+                        .as_deref()
+                        .expect("validated SNAP coefficient file"),
+                );
+                let parameter_path = resolve_path(
+                    &config_dir,
+                    ml_cfg
+                        .parameter_file
+                        .as_deref()
+                        .expect("validated SNAP parameter file"),
+                );
+                log_println!(
+                    "\nEnergy regularizer: native SNAP (weight = {:.6})",
+                    ml_cfg.weight.unwrap_or(0.001)
+                );
+                log_println!("  Coefficients: {:?}", coefficient_path);
+                log_println!("  Parameters: {:?}", parameter_path);
+                match ml_potential::SnapNativeModel::from_config(ml_cfg, &config, &config_dir) {
+                    Ok(model) => {
+                        log_println!("  Maximum pair cutoff: {:.6} A", model.cutoff());
+                        log_println!("  Energy delta strategy: native local environment cache");
+                        Some(Box::new(model) as Box<dyn EnergyModel>)
+                    }
+                    Err(e) => {
+                        log_eprintln!("Error building native SNAP potential: {}", e);
                         process::exit(1);
                     }
                 }

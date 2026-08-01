@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use rsmith::atoms::{Atom, Configuration};
 use rsmith::cells::CellList;
+use rsmith::config::{MlBackend, MlPotentialConfig};
 use rsmith::energy::EnergyModel;
 use rsmith::ml_potential::snap_native::{SnapModelFiles, SnapNativeModel, SnapNeighbor};
 use serde::Deserialize;
@@ -386,6 +387,34 @@ fn cached_local_trials_match_lammps_and_are_transactional() {
     model.accept_move(0, &old_position);
     assert_close(displaced_energy + reverse_delta, equilibrium_energy);
     assert_close(model.cached_total_energy(), equilibrium_energy);
+}
+
+#[test]
+fn config_constructor_loads_relative_fit_snap_files() {
+    let positions = diamond_supercell_positions();
+    let configuration = silicon_configuration(&positions);
+    let config = MlPotentialConfig {
+        backend: MlBackend::SnapNative,
+        model: None,
+        coefficient_file: Some("linear_two_element.snapcoeff".to_string()),
+        parameter_file: Some("linear_two_element.snapparam".to_string()),
+        init_args: None,
+        weight: Some(0.75),
+        cutoff: None,
+        device: None,
+        torch_threads: None,
+        python: None,
+        worker: None,
+    };
+    let base_directory = test_data("");
+    let mut model = SnapNativeModel::from_config(&config, &configuration, &base_directory).unwrap();
+    let rdf_cell_list = CellList::new(&positions, &configuration.box_lengths, 4.0);
+
+    assert_close(
+        model.total_energy(&configuration, &rdf_cell_list),
+        load_fixture().configurations[0].total_energy_ev,
+    );
+    assert_close(model.weight(), 0.75);
 }
 
 #[test]

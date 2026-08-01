@@ -348,6 +348,86 @@ worker = "custom_worker.py"
 }
 
 #[test]
+fn valid_snap_native_fields_accepted_without_runtime_cutoff() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "snap_native"
+coefficient_file = "potential.snapcoeff"
+parameter_file = "potential.snapparam"
+weight = 0.001
+"#;
+    let config = load_toml(toml).expect("valid native SNAP config should parse");
+    let ml = config.ml_potential.unwrap();
+    assert!(ml.model.is_none());
+    assert!(ml.cutoff.is_none());
+    assert_eq!(ml.coefficient_file.as_deref(), Some("potential.snapcoeff"));
+    assert_eq!(ml.parameter_file.as_deref(), Some("potential.snapparam"));
+}
+
+#[test]
+fn snap_native_requires_both_model_files() {
+    for model_files in [
+        "coefficient_file = \"potential.snapcoeff\"",
+        "parameter_file = \"potential.snapparam\"",
+        "",
+    ] {
+        let toml = format!(
+            r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "snap_native"
+{model_files}
+"#
+        );
+        let err = load_toml(&toml).unwrap_err();
+        assert!(
+            err.contains("coefficient_file and parameter_file"),
+            "expected native SNAP file validation error, got: {err}"
+        );
+    }
+}
+
+#[test]
+fn existing_ml_backends_still_require_model_and_cutoff() {
+    for backend in ["gap_quip", "mace_python"] {
+        let toml = format!(
+            r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "{backend}"
+"#
+        );
+        let err = load_toml(&toml).unwrap_err();
+        assert!(
+            err.contains("model is required"),
+            "expected model validation error for {backend}, got: {err}"
+        );
+    }
+}
+
+#[test]
 fn mace_python_rejects_zero_torch_threads() {
     let toml = r#"
 [system]

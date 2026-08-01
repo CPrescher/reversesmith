@@ -222,10 +222,12 @@ pub struct TabulatedConfig {
 #[serde(deny_unknown_fields)]
 pub struct MlPotentialConfig {
     pub backend: MlBackend,
-    pub model: String,
+    pub model: Option<String>,
+    pub coefficient_file: Option<String>,
+    pub parameter_file: Option<String>,
     pub init_args: Option<String>,
     pub weight: Option<f64>,
-    pub cutoff: f64,
+    pub cutoff: Option<f64>,
     pub device: Option<String>,
     pub torch_threads: Option<usize>,
     pub python: Option<String>,
@@ -237,6 +239,7 @@ pub struct MlPotentialConfig {
 pub enum MlBackend {
     GapQuip,
     MacePython,
+    SnapNative,
 }
 
 impl Config {
@@ -259,11 +262,37 @@ impl Config {
             if self.epsr.is_some() {
                 return Err("[ml_potential] is supported for RMC only in v1; remove [epsr]".into());
             }
-            if ml.cutoff <= 0.0 {
-                return Err("[ml_potential] cutoff must be greater than 0".into());
+            if let Some(weight) = ml.weight {
+                if !weight.is_finite() || weight < 0.0 {
+                    return Err("[ml_potential] weight must be finite and non-negative".into());
+                }
             }
-            if matches!(ml.backend, MlBackend::MacePython) && ml.torch_threads == Some(0) {
-                return Err("[ml_potential] torch_threads must be greater than 0".into());
+            if ml
+                .cutoff
+                .is_some_and(|cutoff| cutoff <= 0.0 || !cutoff.is_finite())
+            {
+                return Err("[ml_potential] cutoff must be finite and greater than 0".into());
+            }
+            match ml.backend {
+                MlBackend::GapQuip | MlBackend::MacePython => {
+                    if ml.model.is_none() {
+                        return Err("[ml_potential] model is required for this backend".into());
+                    }
+                    if ml.cutoff.is_none() {
+                        return Err("[ml_potential] cutoff is required for this backend".into());
+                    }
+                    if matches!(ml.backend, MlBackend::MacePython) && ml.torch_threads == Some(0) {
+                        return Err("[ml_potential] torch_threads must be greater than 0".into());
+                    }
+                }
+                MlBackend::SnapNative => {
+                    if ml.coefficient_file.is_none() || ml.parameter_file.is_none() {
+                        return Err(
+                            "[ml_potential] snap_native requires coefficient_file and parameter_file"
+                                .into(),
+                        );
+                    }
+                }
             }
         }
 

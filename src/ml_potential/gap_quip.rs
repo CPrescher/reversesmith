@@ -57,14 +57,21 @@ impl GapQuipModel {
         config: &Configuration,
         base_dir: &Path,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        if cfg.cutoff <= 0.0 {
+        let cutoff = cfg
+            .cutoff
+            .ok_or("[ml_potential] cutoff is required for GAP/QUIP")?;
+        if cutoff <= 0.0 {
             return Err("[ml_potential] cutoff must be greater than 0".into());
         }
+        let model = cfg
+            .model
+            .as_deref()
+            .ok_or("[ml_potential] model is required for GAP/QUIP")?;
 
-        let model_path = if Path::new(&cfg.model).is_absolute() {
-            Path::new(&cfg.model).to_path_buf()
+        let model_path = if Path::new(model).is_absolute() {
+            Path::new(model).to_path_buf()
         } else {
-            base_dir.join(&cfg.model)
+            base_dir.join(model)
         };
         if !model_path.exists() {
             return Err(format!("GAP model file not found: {}", model_path.display()).into());
@@ -104,7 +111,7 @@ impl GapQuipModel {
         Ok(GapQuipModel {
             handle,
             weight: cfg.weight.unwrap_or(0.001),
-            cutoff: cfg.cutoff,
+            cutoff,
             _species_names: species_names,
         })
     }

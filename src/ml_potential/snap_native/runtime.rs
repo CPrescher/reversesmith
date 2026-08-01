@@ -1,7 +1,9 @@
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use crate::atoms::Configuration;
 use crate::cells::CellList;
+use crate::config::MlPotentialConfig;
 use crate::energy::EnergyModel;
 
 use super::{SnapModelFiles, SnapNeighbor};
@@ -32,6 +34,30 @@ struct PendingTrial {
 }
 
 impl SnapNativeModel {
+    pub fn from_config(
+        config: &MlPotentialConfig,
+        configuration: &Configuration,
+        base_directory: &Path,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let coefficient_file = config
+            .coefficient_file
+            .as_deref()
+            .ok_or("[ml_potential] snap_native requires coefficient_file")?;
+        let parameter_file = config
+            .parameter_file
+            .as_deref()
+            .ok_or("[ml_potential] snap_native requires parameter_file")?;
+        let coefficient_path = resolve_path(base_directory, coefficient_file);
+        let parameter_path = resolve_path(base_directory, parameter_file);
+        let model =
+            SnapModelFiles::load(&coefficient_path, &parameter_path, &configuration.species)?;
+        Ok(Self::new(
+            model,
+            configuration,
+            config.weight.unwrap_or(0.001),
+        )?)
+    }
+
     pub fn new(
         model: SnapModelFiles,
         configuration: &Configuration,
@@ -466,6 +492,15 @@ fn minimum_image_displacement(
 
 fn squared_norm(vector: [f64; 3]) -> f64 {
     vector.iter().map(|component| component * component).sum()
+}
+
+fn resolve_path(base_directory: &Path, path: &str) -> PathBuf {
+    let path = Path::new(path);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        base_directory.join(path)
+    }
 }
 
 #[cfg(test)]

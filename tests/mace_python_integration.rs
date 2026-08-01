@@ -64,10 +64,12 @@ fn mace_python_backend_runs_real_model_when_configured() {
 
     let cfg = MlPotentialConfig {
         backend: MlBackend::MacePython,
-        model: model_path,
+        model: Some(model_path),
+        coefficient_file: None,
+        parameter_file: None,
         init_args: None,
         weight: Some(0.001),
-        cutoff: 5.0,
+        cutoff: Some(5.0),
         device: Some(device),
         torch_threads,
         python: Some(python),

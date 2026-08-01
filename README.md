@@ -6,7 +6,7 @@ A Reverse Monte Carlo (RMC) structure refinement tool written in Rust. Refines a
 
 - **S(Q) and g(r) fitting** -- simultaneous refinement against structure factor and pair distribution function
 - **Hybrid RMC** -- pair potentials (Buckingham, Pedone, Coulomb DSF, tabulated) bias refinement toward energetically favorable configurations
-- **ML-potential-regularized RMC** -- optional GAP/QUIP or MACE energy regularizers
+- **ML-potential-regularized RMC** -- optional native SNAP, GAP/QUIP, or MACE energy regularizers
 - **Hard constraints** -- minimum interatomic distances and coordination number bounds
 - **Simulated annealing** -- exponential cooling schedule with adaptive step size
 - **Structural analysis** -- coordination numbers and bond angle distributions for validation
@@ -293,6 +293,42 @@ Using an installed rpath is preferable for cluster/module deployments.
 
 `[ml_potential]` is an alternative to `[potential]` for normal RMC. In the first
 implementation it cannot be combined with `[potential]` or `[epsr]`.
+
+For a linear SNAP potential fitted by FitSNAP, rsmith can evaluate the model
+natively without installing or launching LAMMPS:
+
+```toml
+[ml_potential]
+backend = "snap_native"
+coefficient_file = "potential.snapcoeff"
+parameter_file = "potential.snapparam"
+weight = 0.001
+```
+
+The model files use the standard LAMMPS/FitSNAP `.snapcoeff` and `.snapparam`
+formats. rsmith derives the species-pair cutoffs from `rcutfac` and the element
+radii, maintains its own SNAP-sized cell list, and caches accepted per-atom
+energies. A trial atom move therefore recomputes only the local environments
+within the old or new cutoff shells. The configured cell must be larger than
+twice the largest model cutoff in every direction so that the minimum-image
+environment is unambiguous.
+
+Native evaluation currently supports linear, non-chemical SNAP models,
+including `switchflag`, `rmin0`, per-element `wj` and `radelem`, `bzeroflag`,
+and `bnormflag`. Models with `chemflag` or `quadraticflag` are parsed and
+validated but rejected by the evaluator with an explicit error until those
+descriptor contractions are implemented. FitSNAP remains responsible for
+fitting; rsmith only loads and evaluates the resulting potential. LAMMPS is
+used as a numerical test oracle and is not a runtime dependency.
+
+Small reproducible model files, example cells, and frozen LAMMPS reference
+energies live in `tests/data/snap`. Run their native checks with:
+
+```bash
+cargo test --test snap_model_files --test snap_reference_fixture
+```
+
+For GAP/QUIP, use:
 
 ```toml
 [ml_potential]
