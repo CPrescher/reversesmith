@@ -374,10 +374,16 @@ weight = 0.001
 
 #[test]
 fn snap_native_requires_both_model_files() {
-    for model_files in [
-        "coefficient_file = \"potential.snapcoeff\"",
-        "parameter_file = \"potential.snapparam\"",
-        "",
+    for (model_files, missing_field) in [
+        (
+            "coefficient_file = \"potential.snapcoeff\"",
+            "parameter_file",
+        ),
+        (
+            "parameter_file = \"potential.snapparam\"",
+            "coefficient_file",
+        ),
+        ("", "coefficient_file"),
     ] {
         let toml = format!(
             r#"
@@ -396,8 +402,8 @@ backend = "snap_native"
         );
         let err = load_toml(&toml).unwrap_err();
         assert!(
-            err.contains("coefficient_file and parameter_file"),
-            "expected native SNAP file validation error, got: {err}"
+            err.contains(&format!("requires {missing_field}")),
+            "expected missing {missing_field} validation error, got: {err}"
         );
     }
 }
@@ -424,7 +430,107 @@ backend = "{backend}"
             err.contains("model is required"),
             "expected model validation error for {backend}, got: {err}"
         );
+
+        let toml = format!(
+            r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "{backend}"
+model = "model.file"
+"#
+        );
+        let err = load_toml(&toml).unwrap_err();
+        assert!(
+            err.contains("cutoff is required"),
+            "expected cutoff validation error for {backend}, got: {err}"
+        );
     }
+}
+
+#[test]
+fn ml_potential_rejects_invalid_weights() {
+    for weight in ["-0.5", "inf", "nan"] {
+        let toml = format!(
+            r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "snap_native"
+coefficient_file = "potential.snapcoeff"
+parameter_file = "potential.snapparam"
+weight = {weight}
+"#
+        );
+        let err = load_toml(&toml).unwrap_err();
+        assert!(
+            err.contains("weight must be finite and non-negative"),
+            "expected invalid weight error for {weight}, got: {err}"
+        );
+    }
+}
+
+#[test]
+fn ml_potential_rejects_invalid_cutoffs() {
+    for cutoff in ["0.0", "-5.0", "inf", "nan"] {
+        let toml = format!(
+            r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "gap_quip"
+model = "model.file"
+cutoff = {cutoff}
+"#
+        );
+        let err = load_toml(&toml).unwrap_err();
+        assert!(
+            err.contains("cutoff must be finite and greater than 0"),
+            "expected invalid cutoff error for {cutoff}, got: {err}"
+        );
+    }
+}
+
+#[test]
+fn snap_native_rejects_a_manual_cutoff() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "snap_native"
+coefficient_file = "potential.snapcoeff"
+parameter_file = "potential.snapparam"
+cutoff = 4.0
+"#;
+    let err = load_toml(toml).unwrap_err();
+    assert!(
+        err.contains("cutoff must be omitted for snap_native"),
+        "expected derived cutoff validation error, got: {err}"
+    );
 }
 
 #[test]

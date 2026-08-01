@@ -286,9 +286,15 @@ impl Config {
                     }
                 }
                 MlBackend::SnapNative => {
-                    if ml.coefficient_file.is_none() || ml.parameter_file.is_none() {
+                    if ml.coefficient_file.is_none() {
+                        return Err("[ml_potential] snap_native requires coefficient_file".into());
+                    }
+                    if ml.parameter_file.is_none() {
+                        return Err("[ml_potential] snap_native requires parameter_file".into());
+                    }
+                    if ml.cutoff.is_some() {
                         return Err(
-                            "[ml_potential] snap_native requires coefficient_file and parameter_file"
+                            "[ml_potential] cutoff must be omitted for snap_native; it is derived from the model files"
                                 .into(),
                         );
                     }

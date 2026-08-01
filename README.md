@@ -311,7 +311,9 @@ radii, maintains its own SNAP-sized cell list, and caches accepted per-atom
 energies. A trial atom move therefore recomputes only the local environments
 within the old or new cutoff shells. The configured cell must be larger than
 twice the largest model cutoff in every direction so that the minimum-image
-environment is unambiguous.
+environment is unambiguous. Do not set `cutoff` for `snap_native`; unlike the
+GAP and MACE backends, the native SNAP cutoff is derived from the model files,
+and a manual value is rejected to avoid silently using the wrong range.
 
 Native evaluation currently supports linear, non-chemical SNAP models,
 including `switchflag`, `rmin0`, per-element `wj` and `radelem`, `bzeroflag`,

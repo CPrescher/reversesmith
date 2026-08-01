@@ -392,7 +392,7 @@ fn cached_local_trials_match_lammps_and_are_transactional() {
 #[test]
 fn config_constructor_loads_relative_fit_snap_files() {
     let positions = diamond_supercell_positions();
-    let configuration = silicon_configuration(&positions);
+    let mut configuration = silicon_configuration(&positions);
     let config = MlPotentialConfig {
         backend: MlBackend::SnapNative,
         model: None,
@@ -409,12 +409,58 @@ fn config_constructor_loads_relative_fit_snap_files() {
     let base_directory = test_data("");
     let mut model = SnapNativeModel::from_config(&config, &configuration, &base_directory).unwrap();
     let rdf_cell_list = CellList::new(&positions, &configuration.box_lengths, 4.0);
+    let equilibrium_energy = load_fixture().configurations[0].total_energy_ev;
 
     assert_close(
         model.total_energy(&configuration, &rdf_cell_list),
-        load_fixture().configurations[0].total_energy_ev,
+        equilibrium_energy,
     );
     assert_close(model.weight(), 0.75);
+
+    let old_position = configuration.atoms[0].position;
+    let new_position = [
+        old_position[0] + 0.08,
+        old_position[1] - 0.03,
+        old_position[2] + 0.04,
+    ];
+    configuration.atoms[0].position = new_position;
+    let accepted_delta = model.energy_delta_atom(
+        &configuration,
+        0,
+        &old_position,
+        &new_position,
+        &rdf_cell_list,
+        0,
+        0,
+    );
+    model.accept_move(0, &new_position);
+
+    let rebuilt = SnapNativeModel::from_config(&config, &configuration, &base_directory).unwrap();
+    assert_close(model.cached_total_energy(), rebuilt.cached_total_energy());
+    assert_close(
+        equilibrium_energy + accepted_delta,
+        rebuilt.cached_total_energy(),
+    );
+
+    let rejected_position = [
+        new_position[0] - 0.02,
+        new_position[1] + 0.06,
+        new_position[2],
+    ];
+    configuration.atoms[0].position = rejected_position;
+    let rejected_delta = model.energy_delta_atom(
+        &configuration,
+        0,
+        &new_position,
+        &rejected_position,
+        &rdf_cell_list,
+        0,
+        0,
+    );
+    assert!(rejected_delta.is_finite());
+    model.reject_move(0, &new_position);
+    configuration.atoms[0].position = new_position;
+    assert_close(model.cached_total_energy(), rebuilt.cached_total_energy());
 }
 
 #[test]
