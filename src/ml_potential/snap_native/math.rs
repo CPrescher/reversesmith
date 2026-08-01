@@ -5,6 +5,8 @@
 //! here is the Condon--Shortley convention used in the published SNAP
 //! bispectrum definition.
 
+use rustfft::num_complex::Complex64;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct BispectrumIndex {
     pub two_j1: usize,
@@ -92,6 +94,7 @@ pub(super) fn coupling_blocks(two_j_max: usize) -> Vec<ClebschGordanBlock> {
 
 #[derive(Clone, Debug)]
 pub(super) struct SnapBasis {
+    two_j_max: usize,
     coupling_blocks: Vec<ClebschGordanBlock>,
 }
 
@@ -106,12 +109,190 @@ impl SnapBasis {
                 ));
             }
         }
-        Ok(Self { coupling_blocks })
+        Ok(Self {
+            two_j_max,
+            coupling_blocks,
+        })
     }
 
     pub fn descriptor_count(&self) -> usize {
         self.coupling_blocks.len()
     }
+
+    pub fn empty_density(&self) -> Vec<AngularMatrix> {
+        (0..=self.two_j_max).map(AngularMatrix::identity).collect()
+    }
+
+    pub fn add_neighbor(
+        &self,
+        density: &mut [AngularMatrix],
+        displacement: [f64; 3],
+        theta: f64,
+        weight: f64,
+    ) {
+        debug_assert_eq!(density.len(), self.two_j_max + 1);
+        let matrices = wigner_u_matrices(self.two_j_max, displacement, theta);
+        for (total, neighbor) in density.iter_mut().zip(matrices) {
+            total.add_scaled(&neighbor, weight);
+        }
+    }
+
+    pub fn bispectrum(
+        &self,
+        density: &[AngularMatrix],
+        normalize: bool,
+        subtract_isolated_atom: bool,
+    ) -> Vec<f64> {
+        debug_assert_eq!(density.len(), self.two_j_max + 1);
+        self.coupling_blocks
+            .iter()
+            .map(|block| {
+                let u1 = &density[block.two_j1];
+                let u2 = &density[block.two_j2];
+                let u = &density[block.two_j];
+                let mut coupled = AngularMatrix::zeros(block.two_j);
+
+                for m1_index in 0..=block.two_j1 {
+                    for m2_index in 0..=block.two_j2 {
+                        let Some(m_index) = block.coupled_m_index(m1_index, m2_index) else {
+                            continue;
+                        };
+                        let m_coupling = block.coefficient(m1_index, m2_index);
+                        for mp1_index in 0..=block.two_j1 {
+                            for mp2_index in 0..=block.two_j2 {
+                                let Some(mp_index) = block.coupled_m_index(mp1_index, mp2_index)
+                                else {
+                                    continue;
+                                };
+                                let coupling = m_coupling * block.coefficient(mp1_index, mp2_index);
+                                coupled[(m_index, mp_index)] += coupling
+                                    * u1[(m1_index, mp1_index)]
+                                    * u2[(m2_index, mp2_index)];
+                            }
+                        }
+                    }
+                }
+
+                let normalization = if normalize {
+                    (block.two_j + 1) as f64
+                } else {
+                    1.0
+                };
+                let mut value = u
+                    .values
+                    .iter()
+                    .zip(&coupled.values)
+                    .map(|(u_value, coupled_value)| (u_value.conj() * coupled_value).re)
+                    .sum::<f64>()
+                    / normalization;
+                if subtract_isolated_atom {
+                    value -= if normalize {
+                        1.0
+                    } else {
+                        (block.two_j + 1) as f64
+                    };
+                }
+                value
+            })
+            .collect()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct AngularMatrix {
+    two_j: usize,
+    values: Vec<Complex64>,
+}
+
+impl AngularMatrix {
+    fn zeros(two_j: usize) -> Self {
+        Self {
+            two_j,
+            values: vec![Complex64::new(0.0, 0.0); (two_j + 1).pow(2)],
+        }
+    }
+
+    fn identity(two_j: usize) -> Self {
+        let mut matrix = Self::zeros(two_j);
+        for index in 0..=two_j {
+            matrix[(index, index)] = Complex64::new(1.0, 0.0);
+        }
+        matrix
+    }
+
+    fn add_scaled(&mut self, other: &Self, scale: f64) {
+        debug_assert_eq!(self.two_j, other.two_j);
+        for (target, value) in self.values.iter_mut().zip(&other.values) {
+            *target += scale * value;
+        }
+    }
+}
+
+impl std::ops::Index<(usize, usize)> for AngularMatrix {
+    type Output = Complex64;
+
+    fn index(&self, (m_index, mp_index): (usize, usize)) -> &Self::Output {
+        &self.values[mp_index * (self.two_j + 1) + m_index]
+    }
+}
+
+impl std::ops::IndexMut<(usize, usize)> for AngularMatrix {
+    fn index_mut(&mut self, (m_index, mp_index): (usize, usize)) -> &mut Self::Output {
+        &mut self.values[mp_index * (self.two_j + 1) + m_index]
+    }
+}
+
+fn wigner_u_matrices(two_j_max: usize, displacement: [f64; 3], theta: f64) -> Vec<AngularMatrix> {
+    let [x, y, z] = displacement;
+    let radius = (x * x + y * y + z * z).sqrt();
+    debug_assert!(radius > 0.0);
+
+    // Cayley--Klein parameters for the unit quaternion obtained by mapping
+    // the three-dimensional neighbor position onto the three-sphere.
+    let sine = theta.sin();
+    let direction_scale = sine.abs() / radius;
+    let sine_sign = if sine < 0.0 { -1.0 } else { 1.0 };
+    let a = Complex64::new(sine_sign * theta.cos(), -direction_scale * z);
+    let b = Complex64::new(direction_scale * y, -direction_scale * x);
+
+    let mut matrices = Vec::with_capacity(two_j_max + 1);
+    matrices.push(AngularMatrix::identity(0));
+
+    for two_j in 1..=two_j_max {
+        let previous = &matrices[two_j - 1];
+        let mut current = AngularMatrix::zeros(two_j);
+
+        // Recouple the previous representation with the spin-1/2
+        // representation. Only the left half is independent.
+        for mp_index in 0..=two_j / 2 {
+            for m_index in 0..two_j {
+                let previous_value = previous[(m_index, mp_index)];
+                let denominator = (two_j - mp_index) as f64;
+                let a_factor = ((two_j - m_index) as f64 / denominator).sqrt();
+                let b_factor = ((m_index + 1) as f64 / denominator).sqrt();
+                current[(m_index, mp_index)] += a_factor * a.conj() * previous_value;
+                current[(m_index + 1, mp_index)] -= b_factor * b.conj() * previous_value;
+            }
+        }
+
+        // Recover the right half from inversion symmetry. For even two_j,
+        // the middle column was already calculated by the recurrence.
+        for mp_index in 0..two_j.div_ceil(2) {
+            for m_index in 0..=two_j {
+                let sign = if (m_index + mp_index) % 2 == 0 {
+                    1.0
+                } else {
+                    -1.0
+                };
+                current[(two_j - m_index, two_j - mp_index)] =
+                    sign * current[(m_index, mp_index)].conj();
+            }
+        }
+
+        matrices.push(current);
+    }
+
+    matrices
 }
 
 impl ClebschGordanBlock {
@@ -310,6 +491,30 @@ mod tests {
                 assert_close(norm, 1.0);
             }
         }
+    }
+
+    #[test]
+    fn wigner_matrices_are_unitary() {
+        let matrices = wigner_u_matrices(8, [1.2, -0.7, 2.1], 1.137);
+        for matrix in matrices {
+            for row in 0..=matrix.two_j {
+                for other_row in 0..=matrix.two_j {
+                    let inner_product = (0..=matrix.two_j)
+                        .map(|column| matrix[(row, column)] * matrix[(other_row, column)].conj())
+                        .sum::<Complex64>();
+                    let expected = if row == other_row { 1.0 } else { 0.0 };
+                    assert_close(inner_product.re, expected);
+                    assert_close(inner_product.im, 0.0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn isolated_atom_bispectrum_is_removed_by_bzero() {
+        let basis = SnapBasis::new(8).unwrap();
+        let descriptors = basis.bispectrum(&basis.empty_density(), false, true);
+        assert!(descriptors.iter().all(|value| value.abs() < 1.0e-13));
     }
 
     #[test]

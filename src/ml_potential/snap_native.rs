@@ -64,6 +64,15 @@ pub struct SnapElement {
     pub coefficients: Vec<f64>,
 }
 
+/// One neighbor of a central atom for native SNAP evaluation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SnapNeighbor {
+    /// Minimum-image displacement from the central atom, in Angstrom.
+    pub displacement: [f64; 3],
+    /// Zero-based rsmith atom-type index, resolved through `type_to_element`.
+    pub type_index: usize,
+}
+
 /// Fully resolved pair of FitSNAP output files.
 #[derive(Debug, Clone)]
 pub struct SnapModelFiles {
@@ -114,6 +123,154 @@ impl SnapModelFiles {
     pub fn descriptor_count(&self) -> usize {
         self.basis.descriptor_count()
     }
+
+    /// Evaluate the standard, non-chemical SNAP descriptors of one atom.
+    pub fn atomic_descriptors(
+        &self,
+        central_type_index: usize,
+        neighbors: &[SnapNeighbor],
+    ) -> Result<Vec<f64>, String> {
+        if self.parameters.chemflag {
+            return Err("native chemical SNAP descriptors are not implemented yet".to_string());
+        }
+        let central_element_index = self.element_index_for_type(central_type_index)?;
+        let central_element = &self.coefficients.elements[central_element_index];
+        let mut density = self.basis.empty_density();
+
+        for neighbor in neighbors {
+            let neighbor_element_index = self.element_index_for_type(neighbor.type_index)?;
+            let neighbor_element = &self.coefficients.elements[neighbor_element_index];
+            if neighbor
+                .displacement
+                .iter()
+                .any(|coordinate| !coordinate.is_finite())
+            {
+                return Err("SNAP neighbor displacement must be finite".to_string());
+            }
+            let radius_squared = neighbor
+                .displacement
+                .iter()
+                .map(|coordinate| coordinate * coordinate)
+                .sum::<f64>();
+            if !radius_squared.is_finite() {
+                return Err("SNAP neighbor distance must be finite".to_string());
+            }
+            if radius_squared == 0.0 {
+                return Err("SNAP neighbor displacement must be nonzero".to_string());
+            }
+            let radius = radius_squared.sqrt();
+            let cutoff =
+                self.parameters.rcutfac * (central_element.radius + neighbor_element.radius);
+            if radius > cutoff {
+                continue;
+            }
+
+            let (inner_midpoint, inner_half_width) = if self.parameters.switchinnerflag {
+                (
+                    0.5 * (self.parameters.sinner[central_element_index]
+                        + self.parameters.sinner[neighbor_element_index]),
+                    0.5 * (self.parameters.dinner[central_element_index]
+                        + self.parameters.dinner[neighbor_element_index]),
+                )
+            } else {
+                (0.0, 0.0)
+            };
+            let switching_weight = radial_switch(
+                radius,
+                cutoff,
+                self.parameters.rmin0,
+                self.parameters.switchflag,
+                self.parameters.switchinnerflag,
+                inner_midpoint,
+                inner_half_width,
+            );
+            if switching_weight == 0.0 {
+                continue;
+            }
+            let theta =
+                (radius - self.parameters.rmin0) * self.parameters.rfac0 * std::f64::consts::PI
+                    / (cutoff - self.parameters.rmin0);
+            self.basis.add_neighbor(
+                &mut density,
+                neighbor.displacement,
+                theta,
+                switching_weight * neighbor_element.weight,
+            );
+        }
+
+        Ok(self.basis.bispectrum(
+            &density,
+            self.parameters.bnormflag,
+            self.parameters.bzeroflag,
+        ))
+    }
+
+    /// Evaluate one atom's linear SNAP energy in eV.
+    pub fn atomic_energy(
+        &self,
+        central_type_index: usize,
+        neighbors: &[SnapNeighbor],
+    ) -> Result<f64, String> {
+        if self.parameters.quadraticflag {
+            return Err("native quadratic SNAP energies are not implemented yet".to_string());
+        }
+        let element_index = self.element_index_for_type(central_type_index)?;
+        let descriptors = self.atomic_descriptors(central_type_index, neighbors)?;
+        let coefficients = &self.coefficients.elements[element_index].coefficients;
+        Ok(coefficients[0]
+            + coefficients[1..]
+                .iter()
+                .zip(descriptors)
+                .map(|(coefficient, descriptor)| coefficient * descriptor)
+                .sum::<f64>())
+    }
+
+    fn element_index_for_type(&self, type_index: usize) -> Result<usize, String> {
+        self.type_to_element
+            .get(type_index)
+            .copied()
+            .ok_or_else(|| {
+                format!(
+                "SNAP atom type index {type_index} is outside the configured mapping of {} types",
+                self.type_to_element.len()
+            )
+            })
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn radial_switch(
+    radius: f64,
+    cutoff: f64,
+    minimum_radius: f64,
+    outer_enabled: bool,
+    inner_enabled: bool,
+    inner_midpoint: f64,
+    inner_half_width: f64,
+) -> f64 {
+    let mut value = if !outer_enabled || radius <= minimum_radius {
+        1.0
+    } else if radius > cutoff {
+        0.0
+    } else {
+        0.5 * ((std::f64::consts::PI * (radius - minimum_radius) / (cutoff - minimum_radius)).cos()
+            + 1.0)
+    };
+
+    if inner_enabled && radius < inner_midpoint + inner_half_width {
+        if radius > inner_midpoint - inner_half_width {
+            value *= 0.5
+                * (1.0
+                    - (std::f64::consts::FRAC_PI_2
+                        + std::f64::consts::FRAC_PI_2 * (radius - inner_midpoint)
+                            / inner_half_width)
+                        .cos());
+        } else {
+            value = 0.0;
+        }
+    }
+
+    value
 }
 
 pub fn parse_parameters(input: &str) -> Result<SnapParameters, String> {
@@ -352,6 +509,22 @@ fn validate_model(
             "SNAP inner switching supplies {} values for {} coefficient elements",
             parameters.sinner.len(),
             coefficients.elements.len()
+        ));
+    }
+    let minimum_cutoff = coefficients
+        .elements
+        .iter()
+        .flat_map(|central| {
+            coefficients
+                .elements
+                .iter()
+                .map(move |neighbor| parameters.rcutfac * (central.radius + neighbor.radius))
+        })
+        .fold(f64::INFINITY, f64::min);
+    if parameters.rmin0 >= minimum_cutoff {
+        return Err(format!(
+            "SNAP rmin0={} must be smaller than every pair cutoff; minimum cutoff is {minimum_cutoff}",
+            parameters.rmin0
         ));
     }
     let chemical_channels = if parameters.chemflag {

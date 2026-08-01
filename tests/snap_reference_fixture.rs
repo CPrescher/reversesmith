@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use rsmith::ml_potential::snap_native::SnapModelFiles;
+use rsmith::ml_potential::snap_native::{SnapModelFiles, SnapNeighbor};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -66,6 +66,62 @@ fn assert_close(actual: f64, expected: f64) {
         (actual - expected).abs() <= tolerance,
         "expected {expected:.16e}, got {actual:.16e}"
     );
+}
+
+fn diamond_supercell_positions() -> Vec<[f64; 3]> {
+    let lattice_constant = 5.43;
+    let basis = [
+        [0.0, 0.0, 0.0],
+        [0.0, 0.5, 0.5],
+        [0.5, 0.0, 0.5],
+        [0.5, 0.5, 0.0],
+        [0.25, 0.25, 0.25],
+        [0.25, 0.75, 0.75],
+        [0.75, 0.25, 0.75],
+        [0.75, 0.75, 0.25],
+    ];
+    let mut positions = Vec::with_capacity(64);
+    for z_cell in 0..2 {
+        for y_cell in 0..2 {
+            for x_cell in 0..2 {
+                for fractional in basis {
+                    positions.push([
+                        (x_cell as f64 + fractional[0]) * lattice_constant,
+                        (y_cell as f64 + fractional[1]) * lattice_constant,
+                        (z_cell as f64 + fractional[2]) * lattice_constant,
+                    ]);
+                }
+            }
+        }
+    }
+    positions
+}
+
+fn minimum_image_displacement(
+    central: [f64; 3],
+    neighbor: [f64; 3],
+    box_lengths: [f64; 3],
+) -> [f64; 3] {
+    std::array::from_fn(|axis| {
+        let displacement = neighbor[axis] - central[axis];
+        displacement - box_lengths[axis] * (displacement / box_lengths[axis]).round()
+    })
+}
+
+fn neighbors_for_atom(
+    atom_index: usize,
+    positions: &[[f64; 3]],
+    box_lengths: [f64; 3],
+) -> Vec<SnapNeighbor> {
+    positions
+        .iter()
+        .enumerate()
+        .filter(|(neighbor_index, _)| *neighbor_index != atom_index)
+        .map(|(_, position)| SnapNeighbor {
+            displacement: minimum_image_displacement(positions[atom_index], *position, box_lengths),
+            type_index: 0,
+        })
+        .collect()
 }
 
 #[test]
@@ -170,4 +226,74 @@ fn reference_atomic_energies_are_the_linear_descriptor_contraction() {
             .collect::<Vec<_>>(),
         [1, 2, 3, 5, 6]
     );
+}
+
+#[test]
+fn native_descriptors_and_energies_match_lammps() {
+    let fixture = load_fixture();
+    let model = SnapModelFiles::load(
+        &test_data("linear_two_element.snapcoeff"),
+        &test_data("linear_two_element.snapparam"),
+        &["Si".to_string()],
+    )
+    .unwrap();
+
+    for configuration in &fixture.configurations {
+        let mut positions = diamond_supercell_positions();
+        if configuration.name == "diamond_atom_1_displaced" {
+            positions[0] = configuration.representative_atoms[0].position_angstrom;
+        }
+
+        for expected_atom in &configuration.representative_atoms {
+            let atom_index = expected_atom.id - 1;
+            let neighbors =
+                neighbors_for_atom(atom_index, &positions, fixture.cell.box_lengths_angstrom);
+            let descriptors = model.atomic_descriptors(0, &neighbors).unwrap();
+            for (actual, expected) in descriptors.iter().zip(&expected_atom.descriptors) {
+                assert_close(*actual, *expected);
+            }
+            assert_close(
+                model.atomic_energy(0, &neighbors).unwrap(),
+                expected_atom.energy_ev,
+            );
+        }
+
+        let total_energy = (0..positions.len())
+            .map(|atom_index| {
+                let neighbors =
+                    neighbors_for_atom(atom_index, &positions, fixture.cell.box_lengths_angstrom);
+                model.atomic_energy(0, &neighbors).unwrap()
+            })
+            .sum::<f64>();
+        assert_close(total_energy, configuration.total_energy_ev);
+    }
+}
+
+#[test]
+fn native_descriptors_are_rotation_invariant() {
+    let model = SnapModelFiles::load(
+        &test_data("linear_two_element.snapcoeff"),
+        &test_data("linear_two_element.snapparam"),
+        &["Si".to_string()],
+    )
+    .unwrap();
+    let positions = diamond_supercell_positions();
+    let neighbors = neighbors_for_atom(0, &positions, [10.86; 3]);
+    let rotated = neighbors
+        .iter()
+        .map(|neighbor| SnapNeighbor {
+            displacement: [
+                neighbor.displacement[1],
+                neighbor.displacement[2],
+                neighbor.displacement[0],
+            ],
+            type_index: neighbor.type_index,
+        })
+        .collect::<Vec<_>>();
+
+    let expected = model.atomic_descriptors(0, &neighbors).unwrap();
+    let actual = model.atomic_descriptors(0, &rotated).unwrap();
+    for (actual, expected) in actual.iter().zip(expected) {
+        assert_close(*actual, expected);
+    }
 }
