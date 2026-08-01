@@ -260,33 +260,66 @@ impl SnapModelFiles {
         Ok(descriptors)
     }
 
-    /// Evaluate one atom's linear SNAP energy in eV.
+    /// Evaluate one atom's linear or quadratic SNAP energy in eV.
     pub fn atomic_energy(
         &self,
         central_type_index: usize,
         neighbors: &[SnapNeighbor],
     ) -> Result<f64, String> {
-        if self.parameters.quadraticflag {
-            return Err("native quadratic SNAP energies are not implemented yet".to_string());
-        }
         let element_index = self.element_index_for_type(central_type_index)?;
         let descriptors = self.atomic_descriptors(central_type_index, neighbors)?;
         let coefficients = &self.coefficients.elements[element_index].coefficients;
-        if coefficients.len() != descriptors.len() + 1 {
+        let linear_end = descriptors
+            .len()
+            .checked_add(1)
+            .ok_or_else(|| "SNAP linear coefficient count overflows usize".to_string())?;
+        let quadratic_count = if self.parameters.quadraticflag {
+            descriptors
+                .len()
+                .checked_add(1)
+                .and_then(|next| descriptors.len().checked_mul(next))
+                .map(|count| count / 2)
+                .ok_or_else(|| "SNAP quadratic coefficient count overflows usize".to_string())?
+        } else {
+            0
+        };
+        let expected_count = linear_end
+            .checked_add(quadratic_count)
+            .ok_or_else(|| "SNAP total coefficient count overflows usize".to_string())?;
+        if coefficients.len() != expected_count {
             return Err(format!(
-                "SNAP element '{}' has {} coefficients, but {} are required for {} descriptors and one intercept",
+                "SNAP element '{}' has {} coefficients, but {expected_count} are required for {} descriptors, one intercept, and {quadratic_count} quadratic terms",
                 self.coefficients.elements[element_index].name,
                 coefficients.len(),
-                descriptors.len() + 1,
                 descriptors.len()
             ));
         }
-        Ok(coefficients[0]
+        let mut energy = coefficients[0]
             + coefficients[1..]
                 .iter()
-                .zip(descriptors)
+                .take(descriptors.len())
+                .zip(&descriptors)
                 .map(|(coefficient, descriptor)| coefficient * descriptor)
-                .sum::<f64>())
+                .sum::<f64>();
+
+        if self.parameters.quadraticflag {
+            let mut coefficient_index = linear_end;
+            // Coefficients store the upper triangle of the symmetric alpha
+            // matrix row by row. In 1/2 B^T alpha B, off-diagonal terms occur
+            // twice while diagonal terms retain the factor of one half.
+            for first in 0..descriptors.len() {
+                for second in first..descriptors.len() {
+                    let symmetry_factor = if first == second { 0.5 } else { 1.0 };
+                    energy += symmetry_factor
+                        * coefficients[coefficient_index]
+                        * descriptors[first]
+                        * descriptors[second];
+                    coefficient_index += 1;
+                }
+            }
+            debug_assert_eq!(coefficient_index, coefficients.len());
+        }
+        Ok(energy)
     }
 
     fn element_index_for_type(&self, type_index: usize) -> Result<usize, String> {

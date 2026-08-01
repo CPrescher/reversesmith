@@ -317,12 +317,10 @@ and a manual value is rejected to avoid silently using the wrong range.
 
 Native evaluation supports linear standard and explicit multi-element
 (`chemflag`) SNAP models, including `switchflag`, `rmin0`, per-element `wj` and
-`radelem`, `bzeroflag`, `bnormflag`, and both `wselfallflag` conventions. Models
-with `quadraticflag` are parsed and validated but rejected by the evaluator
-with an explicit error until the quadratic contraction is implemented.
-FitSNAP remains responsible for fitting; rsmith only loads and evaluates the
-resulting potential. LAMMPS is used as a numerical test oracle and is not a
-runtime dependency.
+`radelem`, `bzeroflag`, `bnormflag`, both `wselfallflag` conventions, and
+quadratic (`quadraticflag`) energy models. FitSNAP remains responsible for
+fitting; rsmith only loads and evaluates the resulting potential. LAMMPS is
+used as a numerical test oracle and is not a runtime dependency.
 
 Small reproducible model files, example cells, and frozen LAMMPS reference
 energies live in `tests/data/snap`. Run their native checks with:

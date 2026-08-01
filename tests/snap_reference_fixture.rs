@@ -72,6 +72,13 @@ fn load_chemical_fixture() -> ReferenceFixture {
     .unwrap()
 }
 
+fn load_quadratic_fixture() -> ReferenceFixture {
+    serde_json::from_str(
+        &std::fs::read_to_string(test_data("quadratic_si.reference.json")).unwrap(),
+    )
+    .unwrap()
+}
+
 fn assert_close(actual: f64, expected: f64) {
     let tolerance = 1.0e-12 * expected.abs().max(1.0) + 1.0e-15;
     assert!(
@@ -491,6 +498,110 @@ fn chemical_descriptors_energies_and_local_trials_match_lammps() {
             .sum::<f64>();
         assert_close(total, expected_total);
     }
+}
+
+#[test]
+fn quadratic_energy_contraction_and_local_trials_match_lammps() {
+    let fixture = load_quadratic_fixture();
+    let model_files = SnapModelFiles::load(
+        &test_data("quadratic_si.snapcoeff"),
+        &test_data("quadratic_si.snapparam"),
+        &["Si".to_string()],
+    )
+    .unwrap();
+    assert!(model_files.parameters.quadraticflag);
+    assert_eq!(model_files.descriptor_count(), 5);
+    assert_eq!(model_files.coefficients.ncoeff, 21);
+
+    for expected_configuration in &fixture.configurations {
+        let mut positions = diamond_supercell_positions();
+        if expected_configuration.name == "diamond_atom_1_displaced" {
+            positions[0] = expected_configuration.representative_atoms[0].position_angstrom;
+        }
+        let expected_atom = &expected_configuration.representative_atoms[0];
+        let atom_index = expected_atom.id - 1;
+        let neighbors =
+            neighbors_for_atom(atom_index, &positions, fixture.cell.box_lengths_angstrom);
+        let descriptors = model_files.atomic_descriptors(0, &neighbors).unwrap();
+        for (actual, expected) in descriptors.iter().zip(&expected_atom.descriptors) {
+            assert_close(*actual, *expected);
+        }
+        assert_close(
+            model_files.atomic_energy(0, &neighbors).unwrap(),
+            expected_atom.energy_ev,
+        );
+
+        let total_energy = positions
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                model_files
+                    .atomic_energy(
+                        0,
+                        &neighbors_for_atom(index, &positions, fixture.cell.box_lengths_angstrom),
+                    )
+                    .unwrap()
+            })
+            .sum::<f64>();
+        assert_close(total_energy, expected_configuration.total_energy_ev);
+    }
+
+    let positions = diamond_supercell_positions();
+    let mut configuration = silicon_configuration(&positions);
+    let mut runtime = SnapNativeModel::new(model_files, &configuration, 1.0).unwrap();
+    let rdf_cell_list = CellList::new(&positions, &configuration.box_lengths, 4.0);
+    let equilibrium_energy = fixture.configurations[0].total_energy_ev;
+    let displaced_energy = fixture.configurations[1].total_energy_ev;
+    let old_position = configuration.atoms[0].position;
+    let new_position = fixture.configurations[1].representative_atoms[0].position_angstrom;
+    configuration.atoms[0].position = new_position;
+    let delta = runtime.energy_delta_atom(
+        &configuration,
+        0,
+        &old_position,
+        &new_position,
+        &rdf_cell_list,
+        0,
+        0,
+    );
+    assert_close(equilibrium_energy + delta, displaced_energy);
+    runtime.accept_move(0, &new_position);
+    assert_close(runtime.cached_total_energy(), displaced_energy);
+}
+
+#[test]
+fn quadratic_contraction_composes_with_chemical_descriptors() {
+    let positions = zincblende_inp_positions();
+    let type_indices = [0, 0, 0, 0, 1, 1, 1, 1];
+    let neighbors = typed_neighbors_for_atom(0, &positions, &type_indices, [5.87; 3]);
+    let mut model = SnapModelFiles::load(
+        &test_data("chemical_two_element.snapcoeff"),
+        &test_data("chemical_two_element.snapparam"),
+        &["In".to_string(), "P".to_string()],
+    )
+    .unwrap();
+    let descriptors = model.atomic_descriptors(0, &neighbors).unwrap();
+    let linear_energy = model.atomic_energy(0, &neighbors).unwrap();
+    let quadratic_count = descriptors.len() * (descriptors.len() + 1) / 2;
+    model.parameters.quadraticflag = true;
+    model.coefficients.ncoeff += quadratic_count;
+    for element in &mut model.coefficients.elements {
+        element
+            .coefficients
+            .extend(std::iter::repeat_n(0.0, quadratic_count));
+    }
+
+    let quadratic_start = descriptors.len() + 1;
+    let descriptor_count = descriptors.len();
+    let coefficients = &mut model.coefficients.elements[0].coefficients;
+    coefficients[quadratic_start] = 2.0;
+    coefficients[quadratic_start + 1] = 3.0;
+    coefficients[quadratic_start + descriptor_count] = 4.0;
+    let expected = linear_energy
+        + descriptors[0].powi(2)
+        + 3.0 * descriptors[0] * descriptors[1]
+        + 2.0 * descriptors[1].powi(2);
+    assert_close(model.atomic_energy(0, &neighbors).unwrap(), expected);
 }
 
 #[test]

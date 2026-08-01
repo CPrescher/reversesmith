@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "generator": {
+    "program": "LAMMPS",
+    "version": "22 Jul 2025 - Update 4",
+    "input": "quadratic_si.lammps.in"
+  },
+  "model": {
+    "descriptor_count": 5,
+    "maximum_cutoff_angstrom": 4.0
+  },
+  "cell": {
+    "atom_count": 64,
+    "box_lengths_angstrom": [10.86, 10.86, 10.86]
+  },
+  "configurations": [
+    {
+      "name": "diamond_equilibrium",
+      "total_energy_ev": -98.80583855914665,
+      "all_atoms_equivalent": true,
+      "representative_atoms": [
+        {
+          "id": 1,
+          "position_angstrom": [0.0, 0.0, 0.0],
+          "descriptors": [
+            14.677002332151627,
+            -0.35622172517326756,
+            -2.3168942788304054,
+            0.6098664273469074,
+            -1.9998973921067522
+          ],
+          "energy_ev": -1.5438412274866677
+        }
+      ]
+    },
+    {
+      "name": "diamond_atom_1_displaced",
+      "total_energy_ev": -99.5504937039626,
+      "all_atoms_equivalent": false,
+      "representative_atoms": [
+        {
+          "id": 1,
+          "position_angstrom": [0.137, 10.777, 0.059],
+          "descriptors": [
+            14.897485960357347,
+            -0.3836191698055633,
+            -2.3108788465787322,
+            1.0606990073086324,
+            -1.998183335171547
+          ],
+          "energy_ev": -1.9999204365078231
+        }
+      ]
+    }
+  ]
+}

@@ -172,6 +172,20 @@ fn loads_lammps_example_models_when_available() {
             .unwrap();
     assert!((total_energy - -346.549_395_358_721_5).abs() < 1.0e-9);
 
+    let silicon_quadratic = SnapModelFiles::load(
+        &directory.join("Si_Zuo_JPCA2020.quadratic.snapcoeff"),
+        &directory.join("Si_Zuo_JPCA2020.quadratic.snapparam"),
+        &["Si".to_string()],
+    )
+    .unwrap();
+    assert!(silicon_quadratic.parameters.quadraticflag);
+    assert_eq!(silicon_quadratic.coefficients.ncoeff, 1596);
+    let total_energy = 64.0
+        * silicon_quadratic
+            .atomic_energy(0, &diamond_supercell_neighbors())
+            .unwrap();
+    assert!((total_energy - -347.062_817_967_136_6).abs() < 1.0e-9);
+
     let inp = SnapModelFiles::load(
         &directory.join("InP_JCPA2020.snapcoeff"),
         &directory.join("InP_JCPA2020.snapparam"),
