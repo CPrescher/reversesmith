@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "generator": {
+    "program": "LAMMPS",
+    "version": "22 Jul 2025 - Update 4",
+    "input": "linear_two_element_si.lammps.in"
+  },
+  "model": {
+    "coefficient_file": "linear_two_element.snapcoeff",
+    "parameter_file": "linear_two_element.snapparam",
+    "elements": ["Si"],
+    "descriptor_count": 5,
+    "maximum_cutoff_angstrom": 4.0
+  },
+  "cell": {
+    "atom_count": 64,
+    "box_lengths_angstrom": [10.86, 10.86, 10.86]
+  },
+  "configurations": [
+    {
+      "name": "diamond_equilibrium",
+      "total_energy_ev": -105.60121423305254,
+      "representative_atoms": [
+        {
+          "id": 1,
+          "position_angstrom": [0.0, 0.0, 0.0],
+          "descriptors": [
+            14.677002332151627,
+            -0.35622172517326756,
+            -2.3168942788304054,
+            0.6098664273469074,
+            -1.9998973921067522
+          ],
+          "energy_ev": -1.6500189723914445
+        }
+      ]
+    },
+    {
+      "name": "diamond_atom_1_displaced",
+      "total_energy_ev": -105.82982066565232,
+      "representative_atoms": [
+        {
+          "id": 1,
+          "position_angstrom": [0.137, 10.777, 0.059],
+          "descriptors": [
+            14.897485960357347,
+            -0.3836191698055633,
+            -2.310878846578732,
+            1.0606990073086324,
+            -1.998183335171547
+          ],
+          "energy_ev": -1.8001624944859986
+        },
+        {
+          "id": 2,
+          "position_angstrom": [0.0, 2.715, 2.715],
+          "descriptors": [
+            14.659040396694412,
+            -0.35145733254503075,
+            -2.315554158838569,
+            0.5990019691544033,
+            -2.0038381074845155
+          ],
+          "energy_ev": -1.6499905828771424
+        },
+        {
+          "id": 3,
+          "position_angstrom": [2.715, 0.0, 2.715],
+          "descriptors": [
+            14.858825930313625,
+            -0.4026902493922033,
+            -2.3305892032170257,
+            0.714571344281703,
+            -1.9620759475951277
+          ],
+          "energy_ev": -1.6496226295655494
+        },
+        {
+          "id": 5,
+          "position_angstrom": [1.3575, 1.3575, 1.3575],
+          "descriptors": [
+            15.108199708912775,
+            -0.2669016979015717,
+            -2.306251907583165,
+            0.4905012545342995,
+            -2.0761016122720615
+          ],
+          "energy_ev": -1.6119265697531082
+        },
+        {
+          "id": 6,
+          "position_angstrom": [1.3575, 4.0725, 4.0725],
+          "descriptors": [
+            14.677002332151627,
+            -0.35622172517326756,
+            -2.3168942788304054,
+            0.6098664273469079,
+            -1.999897392106752
+          ],
+          "energy_ev": -1.6500189723914445
+        }
+      ]
+    }
+  ]
+}
