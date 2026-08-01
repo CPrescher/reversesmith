@@ -31,14 +31,21 @@ impl MacePythonModel {
         config: &Configuration,
         base_dir: &Path,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        if cfg.cutoff <= 0.0 {
+        let cutoff = cfg
+            .cutoff
+            .ok_or("[ml_potential] cutoff is required for MACE/Python")?;
+        if cutoff <= 0.0 {
             return Err("[ml_potential] cutoff must be greater than 0".into());
         }
         if cfg.torch_threads == Some(0) {
             return Err("[ml_potential] torch_threads must be greater than 0".into());
         }
 
-        let model_path = resolve_path(base_dir, &cfg.model);
+        let model = cfg
+            .model
+            .as_deref()
+            .ok_or("[ml_potential] model is required for MACE/Python")?;
+        let model_path = resolve_path(base_dir, model);
         if !model_path.exists() {
             return Err(format!("MACE model file not found: {}", model_path.display()).into());
         }
@@ -72,7 +79,7 @@ impl MacePythonModel {
             stdin: std::io::BufWriter::new(child_stdin),
             stdout: BufReader::new(child_stdout),
             weight: cfg.weight.unwrap_or(0.001),
-            cutoff: cfg.cutoff,
+            cutoff,
         };
 
         let init = json!({
@@ -311,10 +318,12 @@ for line in sys.stdin:
         );
         let cfg = MlPotentialConfig {
             backend: MlBackend::MacePython,
-            model: model_path.to_string_lossy().to_string(),
+            model: Some(model_path.to_string_lossy().to_string()),
+            coefficient_file: None,
+            parameter_file: None,
             init_args: None,
             weight: Some(0.5),
-            cutoff: 5.0,
+            cutoff: Some(5.0),
             device: Some("cpu".to_string()),
             torch_threads: Some(1),
             python: Some("python3".to_string()),

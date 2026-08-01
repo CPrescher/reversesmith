@@ -44,10 +44,16 @@ fn gap_quip_backend_initializes_when_test_model_is_available() {
     let config = small_config();
     let ml_cfg = MlPotentialConfig {
         backend: MlBackend::GapQuip,
-        model,
+        model: Some(model),
+        coefficient_file: None,
+        parameter_file: None,
         init_args,
         weight: Some(0.001),
-        cutoff: 5.0,
+        cutoff: Some(5.0),
+        device: None,
+        torch_threads: None,
+        python: None,
+        worker: None,
     };
     let mut backend = GapQuipModel::from_config(&ml_cfg, &config, Path::new("."))
         .expect("GAP/QUIP backend should initialize with the configured test model");

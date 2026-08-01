@@ -348,6 +348,192 @@ worker = "custom_worker.py"
 }
 
 #[test]
+fn valid_snap_native_fields_accepted_without_runtime_cutoff() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "snap_native"
+coefficient_file = "potential.snapcoeff"
+parameter_file = "potential.snapparam"
+weight = 0.001
+"#;
+    let config = load_toml(toml).expect("valid native SNAP config should parse");
+    let ml = config.ml_potential.unwrap();
+    assert!(ml.model.is_none());
+    assert!(ml.cutoff.is_none());
+    assert_eq!(ml.coefficient_file.as_deref(), Some("potential.snapcoeff"));
+    assert_eq!(ml.parameter_file.as_deref(), Some("potential.snapparam"));
+}
+
+#[test]
+fn snap_native_requires_both_model_files() {
+    for (model_files, missing_field) in [
+        (
+            "coefficient_file = \"potential.snapcoeff\"",
+            "parameter_file",
+        ),
+        (
+            "parameter_file = \"potential.snapparam\"",
+            "coefficient_file",
+        ),
+        ("", "coefficient_file"),
+    ] {
+        let toml = format!(
+            r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "snap_native"
+{model_files}
+"#
+        );
+        let err = load_toml(&toml).unwrap_err();
+        assert!(
+            err.contains(&format!("requires {missing_field}")),
+            "expected missing {missing_field} validation error, got: {err}"
+        );
+    }
+}
+
+#[test]
+fn existing_ml_backends_still_require_model_and_cutoff() {
+    for backend in ["gap_quip", "mace_python"] {
+        let toml = format!(
+            r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "{backend}"
+"#
+        );
+        let err = load_toml(&toml).unwrap_err();
+        assert!(
+            err.contains("model is required"),
+            "expected model validation error for {backend}, got: {err}"
+        );
+
+        let toml = format!(
+            r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "{backend}"
+model = "model.file"
+"#
+        );
+        let err = load_toml(&toml).unwrap_err();
+        assert!(
+            err.contains("cutoff is required"),
+            "expected cutoff validation error for {backend}, got: {err}"
+        );
+    }
+}
+
+#[test]
+fn ml_potential_rejects_invalid_weights() {
+    for weight in ["-0.5", "inf", "nan"] {
+        let toml = format!(
+            r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "snap_native"
+coefficient_file = "potential.snapcoeff"
+parameter_file = "potential.snapparam"
+weight = {weight}
+"#
+        );
+        let err = load_toml(&toml).unwrap_err();
+        assert!(
+            err.contains("weight must be finite and non-negative"),
+            "expected invalid weight error for {weight}, got: {err}"
+        );
+    }
+}
+
+#[test]
+fn ml_potential_rejects_invalid_cutoffs() {
+    for cutoff in ["0.0", "-5.0", "inf", "nan"] {
+        let toml = format!(
+            r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "gap_quip"
+model = "model.file"
+cutoff = {cutoff}
+"#
+        );
+        let err = load_toml(&toml).unwrap_err();
+        assert!(
+            err.contains("cutoff must be finite and greater than 0"),
+            "expected invalid cutoff error for {cutoff}, got: {err}"
+        );
+    }
+}
+
+#[test]
+fn snap_native_rejects_a_manual_cutoff() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "snap_native"
+coefficient_file = "potential.snapcoeff"
+parameter_file = "potential.snapparam"
+cutoff = 4.0
+"#;
+    let err = load_toml(toml).unwrap_err();
+    assert!(
+        err.contains("cutoff must be omitted for snap_native"),
+        "expected derived cutoff validation error, got: {err}"
+    );
+}
+
+#[test]
 fn mace_python_rejects_zero_torch_threads() {
     let toml = r#"
 [system]

@@ -1,0 +1,42 @@
+# Reproduce the checked SNAP descriptors and energy in
+# linear_two_element_si.reference. Run from this directory with a LAMMPS
+# executable that includes the ML-SNAP package:
+#
+#   lmp_serial -log none -in linear_two_element_si.lammps.in
+
+units metal
+atom_style atomic
+boundary p p p
+
+# A 2x2x2 conventional diamond cell is large enough for the synthetic
+# model's 4.0 Angstrom maximum cutoff under the minimum-image convention.
+lattice diamond 5.43
+region simulation_box block 0 2 0 2 0 2 units lattice
+create_box 1 simulation_box
+create_atoms 1 box
+mass 1 28.0855
+
+pair_style snap
+pair_coeff * * linear_two_element.snapcoeff linear_two_element.snapparam Si
+
+# Arguments mirror linear_two_element.snapparam and the Si radius/weight in
+# linear_two_element.snapcoeff. twojmax=2 produces five descriptors.
+compute snap_descriptor all sna/atom 4.0 0.99363 2 0.50 1.00 &
+        rmin0 0.0 quadraticflag 0 bzeroflag 1 switchflag 1
+
+thermo 1
+thermo_style custom step atoms pe
+thermo_modify format float %.17g
+
+dump snap_reference all custom 1 linear_two_element_si.dump &
+     id type x y z c_snap_descriptor[*]
+dump_modify snap_reference sort id format float %.17g
+
+run 0
+
+# Break the crystal symmetry so the reference also exercises angular and
+# radial dependence rather than only one highly symmetric environment.
+group displaced_atom id 1
+displace_atoms displaced_atom move 0.137 -0.083 0.059 units box
+dump_modify snap_reference first no
+run 1

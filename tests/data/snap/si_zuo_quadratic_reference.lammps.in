@@ -1,0 +1,21 @@
+# Optional validation of LAMMPS's distributed Si_Zuo quadratic SNAP model.
+# Supply its directory with `-var potential_dir /path/to/potentials`.
+
+units metal
+atom_style atomic
+boundary p p p
+
+lattice diamond 5.43
+region simulation_box block 0 2 0 2 0 2 units lattice
+create_box 1 simulation_box
+create_atoms 1 box
+mass 1 28.0855
+
+pair_style snap
+pair_coeff * * ${potential_dir}/Si_Zuo_JPCA2020.quadratic.snapcoeff &
+                 ${potential_dir}/Si_Zuo_JPCA2020.quadratic.snapparam Si
+
+thermo 1
+thermo_style custom step atoms pe
+thermo_modify format float %.17g
+run 0

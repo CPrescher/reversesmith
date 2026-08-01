@@ -1,0 +1,37 @@
+# Reproduce explicit chemical SNAP descriptors and energies for an equilibrium
+# and displaced zincblende InP cell. Requires LAMMPS with ML-SNAP.
+
+units metal
+atom_style atomic
+boundary p p p
+
+lattice diamond 5.87
+region simulation_box block 0 1 0 1 0 1 units lattice
+create_box 2 simulation_box
+create_atoms 1 box basis 5 2 basis 6 2 basis 7 2 basis 8 2
+mass 1 114.818
+mass 2 30.973761998
+
+pair_style snap
+pair_coeff * * chemical_two_element.snapcoeff chemical_two_element.snapparam In P
+
+# twojmax=2 gives five angular components and 2^3 ordered chemical channels.
+compute snap_descriptor all sna/atom 1.0 0.99363 2 1.30 1.30 1.00 0.80 &
+        rmin0 0.0 switchflag 1 bzeroflag 1 quadraticflag 0 &
+        chem 2 0 1 bnormflag 1 wselfallflag 1
+compute snap_energy all pe/atom
+
+thermo 1
+thermo_style custom step atoms pe
+thermo_modify format float %.17g
+
+dump snap_reference all custom 1 chemical_two_element_inp.dump &
+     id type x y z c_snap_descriptor[*] c_snap_energy
+dump_modify snap_reference sort id format float %.17g
+
+run 0
+
+group displaced_atom id 1
+displace_atoms displaced_atom move 0.071 -0.043 0.029 units box
+dump_modify snap_reference first no
+run 1

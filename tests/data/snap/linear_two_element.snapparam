@@ -1,0 +1,9 @@
+# Minimal FitSNAP-compatible linear SNAP parameters authored for rsmith tests.
+rcutfac 4.0
+twojmax 2
+rfac0 0.99363
+rmin0 0.0
+switchflag 1
+bzeroflag 1
+quadraticflag 0
+chemflag 0
