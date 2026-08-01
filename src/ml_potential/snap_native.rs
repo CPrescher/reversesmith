@@ -3,6 +3,8 @@
 //! The evaluator is intentionally independent of LAMMPS.  LAMMPS is used only
 //! in integration tests as a numerical reference for FitSNAP-compatible files.
 
+mod math;
+
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -70,6 +72,7 @@ pub struct SnapModelFiles {
     pub type_to_element: Vec<usize>,
     pub coefficient_path: PathBuf,
     pub parameter_path: PathBuf,
+    basis: math::SnapBasis,
 }
 
 impl SnapModelFiles {
@@ -94,8 +97,9 @@ impl SnapModelFiles {
         let coefficients = parse_coefficients(&coefficient_text)?;
         let parameters = parse_parameters(&parameter_text)?;
         let type_to_element = resolve_type_elements(&coefficients, type_elements)?;
+        let basis = math::SnapBasis::new(parameters.twojmax)?;
 
-        validate_model(&parameters, &coefficients)?;
+        validate_model(&parameters, &coefficients, basis.descriptor_count())?;
 
         Ok(Self {
             parameters,
@@ -103,7 +107,12 @@ impl SnapModelFiles {
             type_to_element,
             coefficient_path: coefficient_path.to_path_buf(),
             parameter_path: parameter_path.to_path_buf(),
+            basis,
         })
+    }
+
+    pub fn descriptor_count(&self) -> usize {
+        self.basis.descriptor_count()
     }
 }
 
@@ -329,6 +338,7 @@ fn resolve_type_elements(
 fn validate_model(
     parameters: &SnapParameters,
     coefficients: &SnapCoefficients,
+    descriptor_count: usize,
 ) -> Result<(), String> {
     if let Some(units) = &coefficients.units {
         if units != "metal" {
@@ -342,6 +352,37 @@ fn validate_model(
             "SNAP inner switching supplies {} values for {} coefficient elements",
             parameters.sinner.len(),
             coefficients.elements.len()
+        ));
+    }
+    let chemical_channels = if parameters.chemflag {
+        coefficients
+            .elements
+            .len()
+            .checked_pow(3)
+            .ok_or_else(|| "SNAP chemical descriptor count overflows usize".to_string())?
+    } else {
+        1
+    };
+    let linear_count = descriptor_count
+        .checked_mul(chemical_channels)
+        .ok_or_else(|| "SNAP linear descriptor count overflows usize".to_string())?;
+    let quadratic_count = if parameters.quadraticflag {
+        linear_count
+            .checked_add(1)
+            .and_then(|next| linear_count.checked_mul(next))
+            .map(|count| count / 2)
+            .ok_or_else(|| "SNAP quadratic descriptor count overflows usize".to_string())?
+    } else {
+        0
+    };
+    let expected_ncoeff = 1usize
+        .checked_add(linear_count)
+        .and_then(|count| count.checked_add(quadratic_count))
+        .ok_or_else(|| "SNAP coefficient count overflows usize".to_string())?;
+    if coefficients.ncoeff != expected_ncoeff {
+        return Err(format!(
+            "SNAP coefficient file has {} coefficients per element, but twojmax={} and the enabled model flags require {expected_ncoeff}",
+            coefficients.ncoeff, parameters.twojmax
         ));
     }
     Ok(())
@@ -400,7 +441,7 @@ fn metadata_value(line: &str, key: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_coefficients, parse_parameters};
+    use super::{parse_coefficients, parse_parameters, validate_model};
 
     #[test]
     fn parameter_defaults_match_lammps_snap_defaults() {
@@ -438,6 +479,17 @@ mod tests {
     fn coefficient_count_is_enforced_per_element() {
         let error = parse_coefficients("1 2\nSi 0.5 1.0\n-1.0\n").unwrap_err();
         assert!(error.contains("ended after 1 of 2 coefficients"));
+    }
+
+    #[test]
+    fn coefficient_count_must_match_the_descriptor_basis() {
+        let parameters = parse_parameters("rcutfac 4.0\ntwojmax 2\n").unwrap();
+        let coefficients =
+            parse_coefficients("1 5\nSi 0.5 1.0\n-1.0\n0.1\n0.2\n0.3\n0.4\n").unwrap();
+
+        let error = validate_model(&parameters, &coefficients, 5).unwrap_err();
+        assert!(error.contains("has 5 coefficients per element"), "{error}");
+        assert!(error.contains("require 6"), "{error}");
     }
 
     #[test]

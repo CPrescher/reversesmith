@@ -22,6 +22,7 @@ fn loads_synthetic_multi_element_model_and_mapping() {
     assert_eq!(model.coefficients.elements[0].name, "Si");
     assert_eq!(model.coefficients.ncoeff, 6);
     assert_eq!(model.parameters.twojmax, 2);
+    assert_eq!(model.descriptor_count(), 5);
 }
 
 #[test]
