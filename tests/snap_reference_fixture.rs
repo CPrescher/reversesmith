@@ -1,6 +1,10 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use rsmith::ml_potential::snap_native::{SnapModelFiles, SnapNeighbor};
+use rsmith::atoms::{Atom, Configuration};
+use rsmith::cells::CellList;
+use rsmith::energy::EnergyModel;
+use rsmith::ml_potential::snap_native::{SnapModelFiles, SnapNativeModel, SnapNeighbor};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -122,6 +126,26 @@ fn neighbors_for_atom(
             type_index: 0,
         })
         .collect()
+}
+
+fn silicon_configuration(positions: &[[f64; 3]]) -> Configuration {
+    silicon_configuration_in_box(positions, [10.86; 3])
+}
+
+fn silicon_configuration_in_box(positions: &[[f64; 3]], box_lengths: [f64; 3]) -> Configuration {
+    Configuration {
+        atoms: positions
+            .iter()
+            .map(|position| Atom {
+                position: *position,
+                species: "Si".to_string(),
+                type_id: 0,
+            })
+            .collect(),
+        box_lengths,
+        species: vec!["Si".to_string()],
+        composition: HashMap::from([("Si".to_string(), positions.len())]),
+    }
 }
 
 #[test]
@@ -296,4 +320,126 @@ fn native_descriptors_are_rotation_invariant() {
     for (actual, expected) in actual.iter().zip(expected) {
         assert_close(*actual, expected);
     }
+}
+
+#[test]
+fn cached_local_trials_match_lammps_and_are_transactional() {
+    let fixture = load_fixture();
+    let positions = diamond_supercell_positions();
+    let mut configuration = silicon_configuration(&positions);
+    let model_files = SnapModelFiles::load(
+        &test_data("linear_two_element.snapcoeff"),
+        &test_data("linear_two_element.snapparam"),
+        &["Si".to_string()],
+    )
+    .unwrap();
+    let mut model = SnapNativeModel::new(model_files, &configuration, 0.75).unwrap();
+    let rdf_cell_list = CellList::new(&positions, &configuration.box_lengths, 4.0);
+    let equilibrium_energy = fixture.configurations[0].total_energy_ev;
+    let displaced_energy = fixture.configurations[1].total_energy_ev;
+    assert_close(
+        model.total_energy(&configuration, &rdf_cell_list),
+        equilibrium_energy,
+    );
+
+    let old_position = configuration.atoms[0].position;
+    let new_position = fixture.configurations[1].representative_atoms[0].position_angstrom;
+    configuration.atoms[0].position = new_position;
+    let delta = model.energy_delta_atom(
+        &configuration,
+        0,
+        &old_position,
+        &new_position,
+        &rdf_cell_list,
+        0,
+        0,
+    );
+    assert_close(equilibrium_energy + delta, displaced_energy);
+    model.reject_move(0, &old_position);
+    configuration.atoms[0].position = old_position;
+    assert_close(model.cached_total_energy(), equilibrium_energy);
+
+    configuration.atoms[0].position = new_position;
+    let delta = model.energy_delta_atom(
+        &configuration,
+        0,
+        &old_position,
+        &new_position,
+        &rdf_cell_list,
+        0,
+        0,
+    );
+    model.accept_move(0, &new_position);
+    assert_close(equilibrium_energy + delta, displaced_energy);
+    assert_close(model.cached_total_energy(), displaced_energy);
+
+    configuration.atoms[0].position = old_position;
+    let reverse_delta = model.energy_delta_atom(
+        &configuration,
+        0,
+        &new_position,
+        &old_position,
+        &rdf_cell_list,
+        0,
+        0,
+    );
+    model.accept_move(0, &old_position);
+    assert_close(displaced_energy + reverse_delta, equilibrium_energy);
+    assert_close(model.cached_total_energy(), equilibrium_energy);
+}
+
+#[test]
+fn local_trial_delta_matches_a_fresh_full_rebuild_in_a_larger_cell() {
+    let mut positions = Vec::new();
+    for z in 0..5 {
+        for y in 0..5 {
+            for x in 0..5 {
+                positions.push([
+                    0.5 + 3.4 * x as f64,
+                    0.5 + 3.4 * y as f64,
+                    0.5 + 3.4 * z as f64,
+                ]);
+            }
+        }
+    }
+    let mut configuration = silicon_configuration_in_box(&positions, [17.0; 3]);
+    let model_files = SnapModelFiles::load(
+        &test_data("linear_two_element.snapcoeff"),
+        &test_data("linear_two_element.snapparam"),
+        &["Si".to_string()],
+    )
+    .unwrap();
+    let mut local_model = SnapNativeModel::new(model_files, &configuration, 1.0).unwrap();
+    let rdf_cell_list = CellList::new(&positions, &configuration.box_lengths, 4.0);
+    let initial_energy = local_model.cached_total_energy();
+    let old_position = configuration.atoms[0].position;
+    let new_position = [0.82, 0.37, 0.71];
+    configuration.atoms[0].position = new_position;
+
+    let local_delta = local_model.energy_delta_atom(
+        &configuration,
+        0,
+        &old_position,
+        &new_position,
+        &rdf_cell_list,
+        0,
+        0,
+    );
+    let rebuilt_files = SnapModelFiles::load(
+        &test_data("linear_two_element.snapcoeff"),
+        &test_data("linear_two_element.snapparam"),
+        &["Si".to_string()],
+    )
+    .unwrap();
+    let rebuilt_model = SnapNativeModel::new(rebuilt_files, &configuration, 1.0).unwrap();
+    assert_close(
+        initial_energy + local_delta,
+        rebuilt_model.cached_total_energy(),
+    );
+
+    local_model.accept_move(0, &new_position);
+    assert_close(
+        local_model.cached_total_energy(),
+        rebuilt_model.cached_total_energy(),
+    );
 }

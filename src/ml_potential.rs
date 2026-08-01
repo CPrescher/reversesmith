@@ -10,6 +10,7 @@ pub mod snap_native;
 #[cfg(feature = "gap-quip")]
 pub use gap_quip::GapQuipModel;
 pub use mace_python::MacePythonModel;
+pub use snap_native::SnapNativeModel;
 
 #[cfg(not(feature = "gap-quip"))]
 use crate::config::MlPotentialConfig;

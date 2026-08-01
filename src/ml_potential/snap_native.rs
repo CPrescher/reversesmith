@@ -4,6 +4,9 @@
 //! in integration tests as a numerical reference for FitSNAP-compatible files.
 
 mod math;
+mod runtime;
+
+pub use runtime::SnapNativeModel;
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -256,6 +259,31 @@ impl SnapModelFiles {
             ));
         }
         Ok(element_index)
+    }
+
+    fn cutoff_for_types(
+        &self,
+        central_type_index: usize,
+        neighbor_type_index: usize,
+    ) -> Result<f64, String> {
+        let central = self.element_index_for_type(central_type_index)?;
+        let neighbor = self.element_index_for_type(neighbor_type_index)?;
+        Ok(self.parameters.rcutfac
+            * (self.coefficients.elements[central].radius
+                + self.coefficients.elements[neighbor].radius))
+    }
+
+    fn maximum_cutoff_for_types(&self, type_indices: &[usize]) -> Result<f64, String> {
+        let mut unique_types = type_indices.to_vec();
+        unique_types.sort_unstable();
+        unique_types.dedup();
+        let mut maximum = 0.0_f64;
+        for central in &unique_types {
+            for neighbor in &unique_types {
+                maximum = maximum.max(self.cutoff_for_types(*central, *neighbor)?);
+            }
+        }
+        Ok(maximum)
     }
 }
 
