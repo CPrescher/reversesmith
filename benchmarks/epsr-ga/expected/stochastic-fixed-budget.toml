@@ -1,0 +1,97 @@
+# Observed EPSR26 LiquidGa50C stochastic comparison, recorded 2026-08-03.
+# This is a fixed-budget matched-start result, not a convergence tolerance.
+# Distributions contain ten independent seeds; times are sequential, one-thread
+# executable wall times on the hardware recorded in manifest.toml.
+
+[provenance]
+rsmith_version = "1.4.0"
+rsmith_git_commit = "740cca4062045aa1c9508b25e1980c5dd474e652"
+rsmith_pre_verlet_binary_sha256 = "b94eff7bd2ddac8d558691685c877d6d8b8d396a153f431269efb8a8ceef4e70"
+rsmith_verlet_binary_sha256 = "21a81dbaf347d2a2f121de67d20c60e66afe04268909dcda65278a2385f27ffe"
+rsmith_optimization = "12 A cutoff plus 3 A skin Verlet neighbor list"
+epsr_version = "26: 2017-03-10"
+epsr_binary_sha256 = "7ae49797659eeeff507621a9aaf573e6fb7bc1747166c4cb04280b08c659c3a1"
+
+[protocol]
+replicates = 10
+epochs = 40
+moves_per_epoch = 25000
+moves_per_replicate = 1000000
+threads_per_process = 1
+timing_processes_concurrent = 1
+starting_coordinates = "same EPSR26 worked-example endpoint for both methods and every seed"
+
+[observed.native.total_fit_rms_over_dynamic_range]
+min = 0.020812724832869233
+median = 0.021278471252450408
+max = 0.022149953125576546
+mean = 0.02125401649861813
+sample_stddev = 0.000396658043175506
+
+[observed.rsmith.total_fit_rms_over_dynamic_range]
+min = 0.013214208123552947
+median = 0.013497381380503732
+max = 0.013899004044607017
+mean = 0.013512570971382826
+sample_stddev = 0.00019876953256398484
+
+[observed.native.gr_vs_worked_rms_over_dynamic_range]
+min = 0.020317764216999084
+median = 0.021656505402614976
+max = 0.023213143490210232
+mean = 0.021611307660045143
+sample_stddev = 0.0008050294591814258
+
+[observed.rsmith.gr_vs_worked_rms_over_dynamic_range]
+min = 0.02466065250459936
+median = 0.02478035070527838
+max = 0.025039932575444027
+mean = 0.02480420933182899
+sample_stddev = 0.0001184663615795646
+
+[observed.matched.iq_rms_over_dynamic_range]
+min = 0.016385892194952102
+median = 0.01710843830246845
+max = 0.018024584809040976
+
+[observed.matched.gr_rms_over_dynamic_range]
+min = 0.0313891424253933
+median = 0.03246847839819791
+max = 0.03338050391248962
+
+[observed.native.wall_seconds]
+min = 28.126162375
+median = 29.085726104
+max = 29.25049
+mean = 28.8399002294
+sample_stddev = 0.46389963434095693
+
+[observed.rsmith_pre_verlet.wall_seconds]
+min = 43.265132542
+median = 44.636172604
+max = 45.139151083
+mean = 44.3789757083
+sample_stddev = 0.6693094150517765
+
+[observed.rsmith.wall_seconds]
+min = 16.524826125
+median = 16.714780833
+max = 16.845531292
+mean = 16.699659287400003
+sample_stddev = 0.11866575735999967
+
+[observed.speed_ratio]
+rsmith_over_native_median_wall_time = 0.5746729778460407
+rsmith_speedup_over_native = 1.7401201005624936
+rsmith_speedup_over_pre_verlet = 2.670461135564206
+rsmith_wall_time_reduction_percent = 62.5532838998339
+
+[observed.native.final_acceptance]
+min = 0.2412
+median = 0.253
+max = 0.2654
+
+[observed.rsmith.final_acceptance]
+min = 0.236
+median = 0.2415
+max = 0.259

@@ -1,0 +1,75 @@
+id = "epsr-ga"
+status = "native_forward_and_fixed_budget_parity_validated"
+reference_program = "EPSR26"
+reference_version = "26: 2017-03-10"
+source = "EPSR workshop2022 worked example LiquidGa50C"
+redistribution = false
+atom_count = 5000
+species = ["Ga"]
+temperature_k = 323.0
+box_angstrom = [45.725258, 45.725258, 45.725258]
+number_density_atoms_per_a3 = 0.0522999763
+
+[native_zero_move]
+epsr_iterations = 1
+mc_cycles_per_iteration = 0
+reset_accumulators = true
+rdf_origin_molecules = 5000
+qmin_inverse_angstrom = 0.0
+qmax_inverse_angstrom = 29.95
+qstep_inverse_angstrom = 0.05
+rdf_dr_angstrom = 0.03
+fwhm_inverse_angstrom = 0.0
+fwhmq = 0.0
+
+[comparison]
+primary = "partial_g_r_rebinned_0.12A"
+secondary = "partial_i_q"
+same_configuration = true
+same_q_grid = true
+same_resolution = true
+same_lorch_setting = true
+
+[tolerances]
+status = "preregistered_before_rsmith_result"
+gr_rebinned_rms_over_dynamic_range_max = 0.015
+gr_rebinned_max_over_dynamic_range_max = 0.10
+iq_rms_over_dynamic_range_max = 0.03
+iq_max_over_dynamic_range_max = 0.15
+oracle_gr_rms_over_dynamic_range_max = 1.0e-6
+oracle_gr_max_over_dynamic_range_max = 1.0e-5
+
+[stochastic_fixed_budget]
+status = "pilot_informed_protocol_then_ten_seed_ensemble"
+seeds = [20260802, 20260803, 20260804, 20260805, 20260806, 20260807, 20260808, 20260809, 20260810, 20260811]
+replicates = 10
+epochs = 40
+moves_per_epoch = 25000
+moves_per_replicate = 1000000
+threads_per_process = 1
+timing_processes_concurrent = 1
+starting_coordinates = "same EPSR26 worked-example endpoint for both methods and every seed"
+ensemble_configurations_per_replicate = 40
+
+[stochastic_fixed_budget.scoring]
+q_fit_inverse_angstrom = [1.3, 29.95]
+gr_fit_angstrom = [1.5, 10.0]
+gr_block_width_angstrom = 0.12
+measured_total_reference = "LiquidGa50C.EPSR.t01"
+worked_structural_reference = "LiquidGa50C.EPSR.g01; 702-configuration supplied ensemble"
+
+[stochastic_fixed_budget.timing_hardware]
+machine = "MacBook Pro Mac16,8"
+processor = "Apple M4 Pro; 14 cores (10 performance, 4 efficiency)"
+memory_gb = 48
+os = "macOS 26.5.2 (25F84)"
+architecture = "arm64"
+
+[stochastic_fixed_budget.optimized_neighbor_search]
+kind = "directed Verlet list built with a fine linked-cell grid"
+potential_cutoff_angstrom = 12.0
+skin_angstrom = 3.0
+list_radius_angstrom = 15.0
+average_candidates_per_atom = 738.4
+intra_epoch_rebuilds_observed = 0
+correctness = "brute-force energy-delta equivalence across periodic moves and rebuilds"
