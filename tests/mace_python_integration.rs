@@ -4,7 +4,7 @@ use std::path::Path;
 
 use rsmith::atoms::{Atom, Configuration};
 use rsmith::cells::CellList;
-use rsmith::config::{MlBackend, MlEnergyDelta, MlPotentialConfig};
+use rsmith::config::{MaceDtype, MlBackend, MlEnergyDelta, MlPotentialConfig};
 use rsmith::energy::EnergyModel;
 use rsmith::ml_potential::MacePythonModel;
 
@@ -59,6 +59,12 @@ fn mace_test_cfg(model_path: String, delta: Option<MlEnergyDelta>) -> MlPotentia
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
         .or(Some(1));
+    let dtype = match env::var("RSMITH_MACE_TEST_DTYPE").as_deref() {
+        Ok("float32") => Some(MaceDtype::Float32),
+        Ok("float64") => Some(MaceDtype::Float64),
+        Ok(value) => panic!("unsupported RSMITH_MACE_TEST_DTYPE: {value}"),
+        Err(_) => None,
+    };
 
     MlPotentialConfig {
         backend: MlBackend::MacePython,
@@ -71,6 +77,8 @@ fn mace_test_cfg(model_path: String, delta: Option<MlEnergyDelta>) -> MlPotentia
         delta,
         device: Some(device),
         torch_threads,
+        dtype,
+        compile_mode: None,
         python: Some(python),
         worker: None,
     }
@@ -149,7 +157,13 @@ fn mace_python_local_delta_matches_full_delta_when_configured() {
     )
     .unwrap();
     let mut local_model = MacePythonModel::from_config(
-        &mace_test_cfg(model_path, Some(MlEnergyDelta::Local)),
+        &mace_test_cfg(model_path.clone(), Some(MlEnergyDelta::Local)),
+        &config,
+        Path::new("."),
+    )
+    .unwrap();
+    let mut incremental_model = MacePythonModel::from_config(
+        &mace_test_cfg(model_path, Some(MlEnergyDelta::Incremental)),
         &config,
         Path::new("."),
     )
@@ -157,25 +171,41 @@ fn mace_python_local_delta_matches_full_delta_when_configured() {
 
     let initial_full = full_model.total_energy(&config, &cell_list);
     let initial_local = local_model.total_energy(&config, &cell_list);
+    let initial_incremental = incremental_model.total_energy(&config, &cell_list);
     assert!(
         (initial_local - initial_full).abs() < 1.0e-5,
         "local cache has the wrong initial energy: local={initial_local}, full={initial_full}"
+    );
+    assert!(
+        (initial_incremental - initial_full).abs() < 1.0e-5,
+        "incremental cache has the wrong initial energy: incremental={initial_incremental}, full={initial_full}"
     );
 
     let full_delta =
         full_model.energy_delta_atom(&config, atom_idx, &old_pos, &new_pos, &cell_list, 0, 0);
     let local_delta =
         local_model.energy_delta_atom(&config, atom_idx, &old_pos, &new_pos, &cell_list, 0, 0);
+    let incremental_delta = incremental_model
+        .energy_delta_atom(&config, atom_idx, &old_pos, &new_pos, &cell_list, 0, 0);
     assert!(
         (local_delta - full_delta).abs() < 1.0e-3,
         "local MACE delta differs from full delta: local={local_delta}, full={full_delta}"
     );
+    assert!(
+        (incremental_delta - full_delta).abs() < 1.0e-3,
+        "incremental MACE delta differs from full delta: incremental={incremental_delta}, full={full_delta}"
+    );
 
     full_model.reject_move(atom_idx, &old_pos);
     local_model.reject_move(atom_idx, &old_pos);
+    incremental_model.reject_move(atom_idx, &old_pos);
     assert!(
         (local_model.total_energy(&config, &cell_list) - initial_local).abs() < 1.0e-5,
         "reject changed the accepted local energy cache"
+    );
+    assert!(
+        (incremental_model.total_energy(&config, &cell_list) - initial_incremental).abs() < 1.0e-5,
+        "reject changed the accepted incremental energy cache"
     );
 
     let accepted_pos = [old_pos[0] + 0.02, old_pos[1] - 0.01, old_pos[2] + 0.015];
@@ -183,18 +213,37 @@ fn mace_python_local_delta_matches_full_delta_when_configured() {
         full_model.energy_delta_atom(&config, atom_idx, &old_pos, &accepted_pos, &cell_list, 0, 0);
     let accepted_local_delta =
         local_model.energy_delta_atom(&config, atom_idx, &old_pos, &accepted_pos, &cell_list, 0, 0);
+    let accepted_incremental_delta = incremental_model.energy_delta_atom(
+        &config,
+        atom_idx,
+        &old_pos,
+        &accepted_pos,
+        &cell_list,
+        0,
+        0,
+    );
     assert!(
         (accepted_local_delta - accepted_full_delta).abs() < 1.0e-3,
         "accepted local MACE delta differs from full delta: local={accepted_local_delta}, full={accepted_full_delta}"
     );
+    assert!(
+        (accepted_incremental_delta - accepted_full_delta).abs() < 1.0e-3,
+        "accepted incremental MACE delta differs from full delta: incremental={accepted_incremental_delta}, full={accepted_full_delta}"
+    );
     config.atoms[atom_idx].position = accepted_pos;
     full_model.accept_move(atom_idx, &accepted_pos);
     local_model.accept_move(atom_idx, &accepted_pos);
+    incremental_model.accept_move(atom_idx, &accepted_pos);
     let accepted_full = full_model.total_energy(&config, &cell_list);
     let accepted_local = local_model.total_energy(&config, &cell_list);
+    let accepted_incremental = incremental_model.total_energy(&config, &cell_list);
     assert!(
         (accepted_local - accepted_full).abs() < 1.0e-3,
         "accepted local energy cache differs from full energy: local={accepted_local}, full={accepted_full}"
+    );
+    assert!(
+        (accepted_incremental - accepted_full).abs() < 1.0e-3,
+        "accepted incremental energy cache differs from full energy: incremental={accepted_incremental}, full={accepted_full}"
     );
 
     let second_atom = 1;
@@ -222,10 +271,24 @@ fn mace_python_local_delta_matches_full_delta_when_configured() {
         0,
         0,
     );
+    let second_incremental_delta = incremental_model.energy_delta_atom(
+        &config,
+        second_atom,
+        &second_old,
+        &second_new,
+        &cell_list,
+        0,
+        0,
+    );
     assert!(
         (second_local_delta - second_full_delta).abs() < 1.0e-3,
         "local cache is stale after accept: local={second_local_delta}, full={second_full_delta}"
     );
+    assert!(
+        (second_incremental_delta - second_full_delta).abs() < 1.0e-3,
+        "incremental cache is stale after accept: incremental={second_incremental_delta}, full={second_full_delta}"
+    );
     full_model.reject_move(second_atom, &second_old);
     local_model.reject_move(second_atom, &second_old);
+    incremental_model.reject_move(second_atom, &second_old);
 }

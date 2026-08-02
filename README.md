@@ -356,9 +356,11 @@ backend = "mace_python"
 model = "mace.model"
 weight = 0.001
 cutoff = 5.0
-delta = "full"       # full or local; full is the correctness default
+delta = "full"       # full, local, or incremental
 device = "cpu"        # cpu, cuda, or mps
 torch_threads = 8     # optional CPU threading control
+dtype = "float32"     # optional; defaults to the checkpoint dtype
+compile_mode = "reduce_overhead" # optional torch.compile mode
 ```
 
 Create the optional MACE Python environment with uv:
@@ -388,9 +390,24 @@ discards them. The affected radius is `num_interactions * cutoff`, so at fixed
 density the trial cost becomes effectively independent of total atom count once
 the simulation cell is larger than the local cluster.
 
-Use local MACE deltas only for short-range models. Keep `delta = "full"` for
-models with explicit long-range electrostatics, global charge/spin coupling, or
-dispersion corrections unless the local delta has been separately validated.
+For standard short-range `MACE` and `ScaleShiftMACE` checkpoints,
+`delta = "incremental"` additionally caches the accepted hidden features after
+every interaction layer. A trial recomputes the first layer only for the moved
+atom and its immediate neighbours, then expands the dirty set by one neighbour
+shell per layer. Unchanged source features come from the accepted cache. This
+is exact message-passing inference rather than a truncated approximation.
+Incremental mode currently rejects models with pair-repulsion terms, joint
+embeddings, fused interaction kernels, or `compile_mode`.
+
+`dtype = "float32"` can materially improve CPU throughput, but changes the
+checkpoint's numerical precision and should be validated for the intended
+model. `compile_mode` accepts `default`, `reduce_overhead`, or `max_autotune`;
+whether compilation helps is hardware- and workload-dependent.
+
+Use local and incremental MACE deltas only for short-range models. Keep
+`delta = "full"` for models with explicit long-range electrostatics, global
+charge/spin coupling, or dispersion corrections unless the alternative delta
+has been separately validated.
 MACE code and MACE model files have separate licenses; check the license of the
 specific model before redistribution.
 
@@ -419,8 +436,9 @@ cargo run --release --example mace_scaling -- \
 By default this benchmarks 216-, 1,000-, and 1,728-atom diamond-Si cells with
 1, 2, 4, 8, 10, and 14 PyTorch threads. It prints CSV containing per-trial
 statistics, speedup relative to one thread, and parallel efficiency. Use
-`--delta full` or `--delta local` to select the energy-delta strategy, and use
-`--help` to change the system sizes, thread counts, warm-up, or sample count.
+`--delta full`, `--delta local`, or `--delta incremental` to select the
+energy-delta strategy, and use `--help` to change the system sizes, thread
+counts, precision, compilation mode, warm-up, or sample count.
 
 ### 5. Smoke-test the binding
 

@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 
 use crate::atoms::Configuration;
 use crate::cells::CellList;
-use crate::config::{MlEnergyDelta, MlPotentialConfig};
+use crate::config::{MaceCompileMode, MaceDtype, MlEnergyDelta, MlPotentialConfig};
 use crate::energy::EnergyModel;
 
 const MACE_WORKER: &str = include_str!("../../python/rsmith_mace_worker.py");
@@ -28,6 +28,7 @@ pub struct MacePythonModel {
     delta: MlEnergyDelta,
     local_cluster_builder: Option<MaceLocalClusterBuilder>,
     last_local_cluster_sizes: Option<(usize, usize)>,
+    last_incremental_timings: Option<(f64, f64, f64)>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -48,14 +49,23 @@ struct PeriodicImage {
 struct MaceLocalClusterBuilder {
     positions: Vec<[f64; 3]>,
     box_lengths: [f64; 3],
-    radius: f64,
+    central_radius: f64,
+    context_radius: f64,
     cell_list: MaceCellList,
 }
 
 impl MaceLocalClusterBuilder {
-    fn new(configuration: &Configuration, radius: f64) -> Result<Self, String> {
-        if !radius.is_finite() || radius <= 0.0 {
-            return Err("local MACE radius must be finite and positive".to_string());
+    fn new(
+        configuration: &Configuration,
+        central_radius: f64,
+        context_radius: f64,
+    ) -> Result<Self, String> {
+        if !central_radius.is_finite()
+            || central_radius <= 0.0
+            || !context_radius.is_finite()
+            || context_radius <= 0.0
+        {
+            return Err("local MACE radii must be finite and positive".to_string());
         }
         if configuration.atoms.is_empty() {
             return Err("local MACE requires at least one atom".to_string());
@@ -72,11 +82,12 @@ impl MaceLocalClusterBuilder {
             .iter()
             .map(|atom| wrap_position(atom.position, configuration.box_lengths))
             .collect::<Vec<_>>();
-        let cell_list = MaceCellList::new(&positions, configuration.box_lengths, radius);
+        let cell_list = MaceCellList::new(&positions, configuration.box_lengths, context_radius);
         Ok(Self {
             positions,
             box_lengths: configuration.box_lengths,
-            radius,
+            central_radius,
+            context_radius,
             cell_list,
         })
     }
@@ -121,7 +132,7 @@ impl MaceLocalClusterBuilder {
         old_position: [f64; 3],
         new_position: [f64; 3],
     ) -> Vec<usize> {
-        let radius_squared = self.radius * self.radius;
+        let radius_squared = self.central_radius * self.central_radius;
         self.positions
             .iter()
             .enumerate()
@@ -156,7 +167,7 @@ impl MaceLocalClusterBuilder {
         let needs_multiple_images = self
             .box_lengths
             .iter()
-            .any(|length| 2.0 * self.radius >= *length);
+            .any(|length| 2.0 * self.context_radius >= *length);
 
         let central_images = central_atoms
             .iter()
@@ -253,7 +264,7 @@ impl MaceLocalClusterBuilder {
             shift[axis] = -(raw / self.box_lengths[axis]).round() as i32;
             displacement[axis] = raw + shift[axis] as f64 * self.box_lengths[axis];
         }
-        if squared_norm(displacement) <= self.radius * self.radius + 1.0e-12 {
+        if squared_norm(displacement) <= self.context_radius * self.context_radius + 1.0e-12 {
             images.insert(PeriodicImage { atom, shift });
         }
     }
@@ -266,11 +277,13 @@ impl MaceLocalClusterBuilder {
         central_position: [f64; 3],
     ) {
         let minimum_shift: [i32; 3] = std::array::from_fn(|axis| {
-            ((central_position[axis] - atom_position[axis] - self.radius) / self.box_lengths[axis])
+            ((central_position[axis] - atom_position[axis] - self.context_radius)
+                / self.box_lengths[axis])
                 .ceil() as i32
         });
         let maximum_shift: [i32; 3] = std::array::from_fn(|axis| {
-            ((central_position[axis] - atom_position[axis] + self.radius) / self.box_lengths[axis])
+            ((central_position[axis] - atom_position[axis] + self.context_radius)
+                / self.box_lengths[axis])
                 .floor() as i32
         });
         for shift_x in minimum_shift[0]..=maximum_shift[0] {
@@ -281,7 +294,9 @@ impl MaceLocalClusterBuilder {
                         atom_position[axis] + shift[axis] as f64 * self.box_lengths[axis]
                             - central_position[axis]
                     });
-                    if squared_norm(displacement) <= self.radius * self.radius + 1.0e-12 {
+                    if squared_norm(displacement)
+                        <= self.context_radius * self.context_radius + 1.0e-12
+                    {
                         images.insert(PeriodicImage { atom, shift });
                     }
                 }
@@ -434,6 +449,12 @@ impl MacePythonModel {
         if cfg.torch_threads == Some(0) {
             return Err("[ml_potential] torch_threads must be greater than 0".into());
         }
+        if matches!(cfg.delta, Some(MlEnergyDelta::Incremental)) && cfg.compile_mode.is_some() {
+            return Err(
+                "[ml_potential] compile_mode is not yet supported with incremental MACE deltas"
+                    .into(),
+            );
+        }
 
         let model = cfg
             .model
@@ -477,6 +498,7 @@ impl MacePythonModel {
             delta: cfg.delta.unwrap_or(MlEnergyDelta::Full),
             local_cluster_builder: None,
             last_local_cluster_sizes: None,
+            last_incremental_timings: None,
         };
 
         let init = json!({
@@ -484,6 +506,8 @@ impl MacePythonModel {
             "model": model_path.to_string_lossy(),
             "device": cfg.device.as_deref().unwrap_or("cpu"),
             "torch_threads": cfg.torch_threads,
+            "dtype": cfg.dtype.map(dtype_label),
+            "compile_mode": cfg.compile_mode.map(compile_mode_label),
             "delta": delta_label(cfg.delta.unwrap_or(MlEnergyDelta::Full)),
             "species": config.atoms.iter().map(|atom| atom.species.as_str()).collect::<Vec<_>>(),
             "positions": config.atoms.iter().map(|atom| wrap_position(atom.position, config.box_lengths)).collect::<Vec<_>>(),
@@ -491,13 +515,24 @@ impl MacePythonModel {
         });
         model.request(init)?;
 
-        if matches!(model.delta, MlEnergyDelta::Local) {
+        if matches!(
+            model.delta,
+            MlEnergyDelta::Local | MlEnergyDelta::Incremental
+        ) {
             let metadata = model.request(json!({"cmd": "metadata"}))?;
-            let local_radius = metadata
+            let central_radius = metadata
+                .get("local_central_radius")
+                .and_then(Value::as_f64)
+                .ok_or("MACE Python worker metadata did not contain local_central_radius")?;
+            let context_radius = metadata
                 .get("local_context_radius")
                 .and_then(Value::as_f64)
                 .ok_or("MACE Python worker metadata did not contain local_context_radius")?;
-            model.local_cluster_builder = Some(MaceLocalClusterBuilder::new(config, local_radius)?);
+            model.local_cluster_builder = Some(MaceLocalClusterBuilder::new(
+                config,
+                central_radius,
+                context_radius,
+            )?);
         }
 
         Ok(model)
@@ -585,6 +620,16 @@ impl MacePythonModel {
                 .and_then(Value::as_u64)
                 .unwrap_or(0) as usize,
         ));
+        self.last_incremental_timings = match (
+            response
+                .get("incremental_assemble_ms")
+                .and_then(Value::as_f64),
+            response.get("incremental_graph_ms").and_then(Value::as_f64),
+            response.get("incremental_model_ms").and_then(Value::as_f64),
+        ) {
+            (Some(assemble), Some(graph), Some(model)) => Some((assemble, graph, model)),
+            _ => None,
+        };
         response
             .get("delta")
             .and_then(Value::as_f64)
@@ -595,6 +640,12 @@ impl MacePythonModel {
     /// and atoms (including periodic images) in the evaluated cluster.
     pub fn last_local_cluster_sizes(&self) -> Option<(usize, usize)> {
         self.last_local_cluster_sizes
+    }
+
+    /// Python-worker timing for the most recent incremental trial: cluster
+    /// assembly, ASE graph construction, and partial MACE inference.
+    pub fn last_incremental_timings(&self) -> Option<(f64, f64, f64)> {
+        self.last_incremental_timings
     }
 }
 
@@ -632,13 +683,18 @@ impl EnergyModel for MacePythonModel {
                 let new_energy = self.total_energy_or_panic();
                 new_energy - old_energy
             }
-            MlEnergyDelta::Local => self.local_delta_or_panic(atom_idx, old_pos, new_pos),
+            MlEnergyDelta::Local | MlEnergyDelta::Incremental => {
+                self.local_delta_or_panic(atom_idx, old_pos, new_pos)
+            }
         }
     }
 
     fn accept_move(&mut self, atom_idx: usize, new_pos: &[f64; 3]) {
         // The worker state was already moved during energy_delta_atom.
-        if matches!(self.delta, MlEnergyDelta::Local) {
+        if matches!(
+            self.delta,
+            MlEnergyDelta::Local | MlEnergyDelta::Incremental
+        ) {
             self.request(json!({"cmd": "accept_local"}))
                 .unwrap_or_else(|error| panic!("MACE Python local accept failed: {error}"));
         }
@@ -650,7 +706,7 @@ impl EnergyModel for MacePythonModel {
     fn reject_move(&mut self, atom_idx: usize, old_pos: &[f64; 3]) {
         match self.delta {
             MlEnergyDelta::Full => self.move_atom_or_panic(atom_idx, old_pos),
-            MlEnergyDelta::Local => {
+            MlEnergyDelta::Local | MlEnergyDelta::Incremental => {
                 let old_position = self
                     .local_cluster_builder
                     .as_ref()
@@ -705,6 +761,22 @@ fn delta_label(delta: MlEnergyDelta) -> &'static str {
     match delta {
         MlEnergyDelta::Full => "full",
         MlEnergyDelta::Local => "local",
+        MlEnergyDelta::Incremental => "incremental",
+    }
+}
+
+fn dtype_label(dtype: MaceDtype) -> &'static str {
+    match dtype {
+        MaceDtype::Float32 => "float32",
+        MaceDtype::Float64 => "float64",
+    }
+}
+
+fn compile_mode_label(mode: MaceCompileMode) -> &'static str {
+    match mode {
+        MaceCompileMode::Default => "default",
+        MaceCompileMode::ReduceOverhead => "reduce-overhead",
+        MaceCompileMode::MaxAutotune => "max-autotune",
     }
 }
 
@@ -789,7 +861,7 @@ mod tests {
             vec![[0.5, 0.5, 0.5], [10.0, 10.0, 10.0], [19.5, 0.5, 0.5]],
             [20.0; 3],
         );
-        let builder = MaceLocalClusterBuilder::new(&configuration, 2.0).unwrap();
+        let builder = MaceLocalClusterBuilder::new(&configuration, 2.0, 2.0).unwrap();
         let (central, cluster) = builder
             .trial_cluster(0, [0.5, 0.5, 0.5], [0.6, 0.5, 0.5])
             .unwrap();
@@ -809,7 +881,7 @@ mod tests {
     #[test]
     fn rust_local_cluster_keeps_multiple_images_in_small_boxes() {
         let configuration = silicon_config(vec![[0.0, 0.0, 0.0]], [5.0; 3]);
-        let builder = MaceLocalClusterBuilder::new(&configuration, 6.0).unwrap();
+        let builder = MaceLocalClusterBuilder::new(&configuration, 6.0, 6.0).unwrap();
         let (_, cluster) = builder
             .trial_cluster(0, [0.0, 0.0, 0.0], [0.1, 0.0, 0.0])
             .unwrap();
@@ -835,7 +907,7 @@ mod tests {
     #[test]
     fn rust_local_cluster_updates_accepted_positions() {
         let configuration = silicon_config(vec![[1.0, 1.0, 1.0]], [20.0; 3]);
-        let mut builder = MaceLocalClusterBuilder::new(&configuration, 3.0).unwrap();
+        let mut builder = MaceLocalClusterBuilder::new(&configuration, 3.0, 3.0).unwrap();
         builder.accept_move(0, [4.0, 1.0, 1.0]);
         assert!(builder
             .trial_cluster(0, [4.0, 1.0, 1.0], [4.1, 1.0, 1.0])
@@ -928,6 +1000,8 @@ for line in sys.stdin:
             delta: None,
             device: Some("cpu".to_string()),
             torch_threads: Some(1),
+            dtype: None,
+            compile_mode: None,
             python: Some("python3".to_string()),
             worker: Some(worker_path.to_string_lossy().to_string()),
         };

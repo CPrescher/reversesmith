@@ -53,6 +53,8 @@ fn gap_quip_backend_initializes_when_test_model_is_available() {
         delta: None,
         device: None,
         torch_threads: None,
+        dtype: None,
+        compile_mode: None,
         python: None,
         worker: None,
     };

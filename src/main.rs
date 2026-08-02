@@ -677,6 +677,9 @@ fn main() {
                     MlEnergyDelta::Local => log_println!(
                         "  Energy delta strategy: local MACE subgraph around each trial move"
                     ),
+                    MlEnergyDelta::Incremental => log_println!(
+                        "  Energy delta strategy: incremental cached MACE message passing"
+                    ),
                 }
                 match ml_potential::MacePythonModel::from_config(ml_cfg, &config, &config_dir) {
                     Ok(model) => Some(Box::new(model) as Box<dyn EnergyModel>),

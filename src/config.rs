@@ -231,6 +231,8 @@ pub struct MlPotentialConfig {
     pub delta: Option<MlEnergyDelta>,
     pub device: Option<String>,
     pub torch_threads: Option<usize>,
+    pub dtype: Option<MaceDtype>,
+    pub compile_mode: Option<MaceCompileMode>,
     pub python: Option<String>,
     pub worker: Option<String>,
 }
@@ -240,6 +242,22 @@ pub struct MlPotentialConfig {
 pub enum MlEnergyDelta {
     Full,
     Local,
+    Incremental,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MaceDtype {
+    Float32,
+    Float64,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MaceCompileMode {
+    Default,
+    ReduceOverhead,
+    MaxAutotune,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -284,6 +302,14 @@ impl Config {
             if ml.delta.is_some() && !matches!(ml.backend, MlBackend::MacePython) {
                 return Err("[ml_potential] delta is only supported for mace_python".into());
             }
+            if (ml.dtype.is_some() || ml.compile_mode.is_some())
+                && !matches!(ml.backend, MlBackend::MacePython)
+            {
+                return Err(
+                    "[ml_potential] dtype and compile_mode are only supported for mace_python"
+                        .into(),
+                );
+            }
             match ml.backend {
                 MlBackend::GapQuip | MlBackend::MacePython => {
                     if ml.model.is_none() {
@@ -294,6 +320,14 @@ impl Config {
                     }
                     if matches!(ml.backend, MlBackend::MacePython) && ml.torch_threads == Some(0) {
                         return Err("[ml_potential] torch_threads must be greater than 0".into());
+                    }
+                    if matches!(ml.delta, Some(MlEnergyDelta::Incremental))
+                        && ml.compile_mode.is_some()
+                    {
+                        return Err(
+                            "[ml_potential] compile_mode is not yet supported with incremental MACE deltas"
+                                .into(),
+                        );
                     }
                 }
                 MlBackend::SnapNative => {

@@ -337,14 +337,17 @@ cutoff = 5.0
 delta = "local"
 device = "cpu"
 torch_threads = 4
+dtype = "float32"
+compile_mode = "reduce_overhead"
 python = "python3"
 worker = "custom_worker.py"
 "#;
-    let result = load_toml(toml);
-    assert!(
-        result.is_ok(),
-        "Valid MACE/Python config should parse: {:?}",
-        result.err()
+    let config = load_toml(toml).expect("valid MACE/Python config should parse");
+    let ml = config.ml_potential.unwrap();
+    assert_eq!(ml.dtype, Some(rsmith::config::MaceDtype::Float32));
+    assert_eq!(
+        ml.compile_mode,
+        Some(rsmith::config::MaceCompileMode::ReduceOverhead)
     );
 }
 
@@ -387,12 +390,37 @@ format = "xyz"
 backend = "mace_python"
 model = "mace.model"
 cutoff = 5.0
-delta = "incremental"
+delta = "not_a_delta"
 "#;
     let err = load_toml(toml).unwrap_err();
     assert!(
         err.contains("unknown variant") || err.contains("expected"),
         "Expected unknown delta error, got: {err}"
+    );
+}
+
+#[test]
+fn incremental_mace_rejects_torch_compile() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "mace_python"
+model = "mace.model"
+cutoff = 5.0
+delta = "incremental"
+compile_mode = "reduce_overhead"
+"#;
+    let err = load_toml(toml).unwrap_err();
+    assert!(
+        err.contains("compile_mode is not yet supported with incremental"),
+        "expected incremental/compile validation error, got: {err}"
     );
 }
 

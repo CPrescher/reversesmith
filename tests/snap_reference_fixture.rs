@@ -685,6 +685,8 @@ fn config_constructor_loads_relative_fit_snap_files() {
         delta: None,
         device: None,
         torch_threads: None,
+        dtype: None,
+        compile_mode: None,
         python: None,
         worker: None,
     };

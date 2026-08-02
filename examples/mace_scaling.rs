@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use rsmith::atoms::{Atom, Configuration};
 use rsmith::cells::CellList;
-use rsmith::config::{MlBackend, MlEnergyDelta, MlPotentialConfig};
+use rsmith::config::{MaceCompileMode, MaceDtype, MlBackend, MlEnergyDelta, MlPotentialConfig};
 use rsmith::energy::EnergyModel;
 use rsmith::ml_potential::MacePythonModel;
 
@@ -25,6 +25,8 @@ struct Arguments {
     delta: MlEnergyDelta,
     cells: Vec<usize>,
     threads: Vec<usize>,
+    dtype: Option<MaceDtype>,
+    compile_mode: Option<MaceCompileMode>,
     warmup: usize,
     trials: usize,
 }
@@ -32,7 +34,7 @@ struct Arguments {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let arguments = parse_arguments()?;
     println!(
-        "delta,cells,atoms,threads,baseline_threads,init_ms,trials,central_atoms,cluster_atoms,mean_ms,median_ms,min_ms,max_ms,stddev_ms,speedup_vs_baseline,efficiency"
+        "delta,dtype,compile_mode,device,cells,atoms,threads,baseline_threads,init_ms,trials,central_atoms,cluster_atoms,assemble_ms,graph_ms,model_ms,mean_ms,median_ms,min_ms,max_ms,stddev_ms,speedup_vs_baseline,efficiency"
     );
 
     for &cells in &arguments.cells {
@@ -59,6 +61,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 delta: Some(arguments.delta),
                 device: Some(arguments.device.clone()),
                 torch_threads: Some(threads),
+                dtype: arguments.dtype,
+                compile_mode: arguments.compile_mode,
                 python: Some(arguments.python.clone()),
                 worker: None,
             };
@@ -83,6 +87,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 true,
             )?;
             let (central_atoms, cluster_atoms) = model.last_local_cluster_sizes().unwrap_or((0, 0));
+            let (assemble_ms, graph_ms, model_ms) =
+                model.last_incremental_timings().unwrap_or((0.0, 0.0, 0.0));
             samples.sort_by(f64::total_cmp);
 
             let mean = samples.iter().sum::<f64>() / samples.len() as f64;
@@ -106,8 +112,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let efficiency = speedup / (threads as f64 / baseline_threads as f64);
 
             println!(
-                "{},{cells},{atom_count},{threads},{baseline_threads},{initialization_ms:.3},{},{central_atoms},{cluster_atoms},{mean:.3},{median:.3},{:.3},{:.3},{standard_deviation:.3},{speedup:.3},{efficiency:.3}",
+                "{},{},{},{},{cells},{atom_count},{threads},{baseline_threads},{initialization_ms:.3},{},{central_atoms},{cluster_atoms},{assemble_ms:.3},{graph_ms:.3},{model_ms:.3},{mean:.3},{median:.3},{:.3},{:.3},{standard_deviation:.3},{speedup:.3},{efficiency:.3}",
                 delta_label(arguments.delta),
+                dtype_label(arguments.dtype),
+                compile_mode_label(arguments.compile_mode),
+                arguments.device,
                 arguments.trials,
                 samples[0],
                 samples[samples.len() - 1],
@@ -214,6 +223,8 @@ fn parse_arguments() -> Result<Arguments, Box<dyn std::error::Error>> {
     let mut delta = MlEnergyDelta::Full;
     let mut cells = DEFAULT_CELLS.to_vec();
     let mut threads = DEFAULT_THREADS.to_vec();
+    let mut dtype = None;
+    let mut compile_mode = None;
     let mut warmup = 2;
     let mut trials = 5;
 
@@ -226,6 +237,13 @@ fn parse_arguments() -> Result<Arguments, Box<dyn std::error::Error>> {
             "--delta" => delta = parse_delta(&next_value(&mut arguments, "--delta")?)?,
             "--cells" => cells = parse_list(&next_value(&mut arguments, "--cells")?)?,
             "--threads" => threads = parse_list(&next_value(&mut arguments, "--threads")?)?,
+            "--dtype" => dtype = Some(parse_dtype(&next_value(&mut arguments, "--dtype")?)?),
+            "--compile-mode" => {
+                compile_mode = Some(parse_compile_mode(&next_value(
+                    &mut arguments,
+                    "--compile-mode",
+                )?)?)
+            }
             "--warmup" => warmup = next_value(&mut arguments, "--warmup")?.parse()?,
             "--trials" => trials = next_value(&mut arguments, "--trials")?.parse()?,
             "-h" | "--help" => {
@@ -258,6 +276,8 @@ fn parse_arguments() -> Result<Arguments, Box<dyn std::error::Error>> {
         delta,
         cells,
         threads,
+        dtype,
+        compile_mode,
         warmup,
         trials,
     })
@@ -279,11 +299,34 @@ fn parse_list(value: &str) -> Result<Vec<usize>, Box<dyn std::error::Error>> {
         .collect()
 }
 
+fn parse_dtype(value: &str) -> Result<MaceDtype, Box<dyn std::error::Error>> {
+    match value {
+        "float32" => Ok(MaceDtype::Float32),
+        "float64" => Ok(MaceDtype::Float64),
+        _ => Err(format!("invalid --dtype value: {value}; expected float32 or float64").into()),
+    }
+}
+
+fn parse_compile_mode(value: &str) -> Result<MaceCompileMode, Box<dyn std::error::Error>> {
+    match value {
+        "default" => Ok(MaceCompileMode::Default),
+        "reduce-overhead" | "reduce_overhead" => Ok(MaceCompileMode::ReduceOverhead),
+        "max-autotune" | "max_autotune" => Ok(MaceCompileMode::MaxAutotune),
+        _ => Err(format!(
+            "invalid --compile-mode value: {value}; expected default, reduce-overhead, or max-autotune"
+        )
+        .into()),
+    }
+}
+
 fn parse_delta(value: &str) -> Result<MlEnergyDelta, Box<dyn std::error::Error>> {
     match value {
         "full" => Ok(MlEnergyDelta::Full),
         "local" => Ok(MlEnergyDelta::Local),
-        _ => Err(format!("unknown delta mode {value:?}; expected full or local").into()),
+        "incremental" => Ok(MlEnergyDelta::Incremental),
+        _ => Err(
+            format!("unknown delta mode {value:?}; expected full, local, or incremental").into(),
+        ),
     }
 }
 
@@ -291,6 +334,24 @@ fn delta_label(delta: MlEnergyDelta) -> &'static str {
     match delta {
         MlEnergyDelta::Full => "full",
         MlEnergyDelta::Local => "local",
+        MlEnergyDelta::Incremental => "incremental",
+    }
+}
+
+fn dtype_label(dtype: Option<MaceDtype>) -> &'static str {
+    match dtype {
+        None => "checkpoint",
+        Some(MaceDtype::Float32) => "float32",
+        Some(MaceDtype::Float64) => "float64",
+    }
+}
+
+fn compile_mode_label(mode: Option<MaceCompileMode>) -> &'static str {
+    match mode {
+        None => "disabled",
+        Some(MaceCompileMode::Default) => "default",
+        Some(MaceCompileMode::ReduceOverhead) => "reduce-overhead",
+        Some(MaceCompileMode::MaxAutotune) => "max-autotune",
     }
 }
 
@@ -302,10 +363,12 @@ Options:\n\
   --model PATH       MACE checkpoint (or RSMITH_MACE_TEST_MODEL)\n\
   --python PATH      Python with MACE installed [default: .venv/bin/python]\n\
   --device DEVICE    MACE device [default: cpu]\n\
-  --delta MODE       Energy delta: full or local [default: full]\n\
+  --delta MODE       Energy delta: full, local, or incremental [default: full]\n\
   --cells LIST       Diamond-Si supercell edges [default: 3,5,6]\n\
                      Atom count is 8*cells^3: 216,1000,1728\n\
   --threads LIST     PyTorch thread counts [default: 1,2,4,8,10,14]\n\
+  --dtype DTYPE      Model precision: float32 or float64 [default: checkpoint]\n\
+  --compile-mode M   torch.compile: default, reduce-overhead, or max-autotune\n\
   --warmup N         Unmeasured trial moves per case [default: 2]\n\
   --trials N         Measured trial moves per case [default: 5]\n"
     );

@@ -104,6 +104,8 @@ cutoff = 5.0
 delta = "full"
 device = "cpu"
 torch_threads = 8
+dtype = "float32"
+compile_mode = "reduce_overhead"
 ```
 
 | Field | Type | Default | Description |
@@ -112,9 +114,11 @@ torch_threads = 8
 | `model` | String | required | MACE model path, relative to the config file |
 | `weight` | Float | 0.001 | Scales the MACE energy contribution in the RMC cost |
 | `cutoff` | Float | required | Model cutoff in A; should match the MACE model cutoff |
-| `delta` | String | `full` | Energy delta mode: `full` or `local` |
+| `delta` | String | `full` | Energy delta mode: `full`, `local`, or `incremental` |
 | `device` | String | `cpu` | PyTorch device, e.g. `cpu`, `cuda`, or `mps` |
 | `torch_threads` | Integer | PyTorch default | Sets `torch.set_num_threads()` in the worker |
+| `dtype` | String | Checkpoint dtype | Optional `float32` or `float64` model conversion |
+| `compile_mode` | String | disabled | Optional PyTorch mode: `default`, `reduce_overhead`, or `max_autotune` |
 | `python` | String | `python3` | Python executable used to launch the worker |
 | `worker` | String | embedded worker | Optional custom worker script for testing or site integration |
 
@@ -155,11 +159,26 @@ once, without force/stress autograd. Accepting the trial commits its affected
 per-atom energies to the cache; rejecting it restores the position and drops
 the pending update.
 
-Use `delta = "local"` only for ordinary short-range MACE models. Do not use it
-for models with explicit long-range electrostatics, global charge/spin coupling,
-or dispersion corrections unless those terms are separately validated. The real
-MACE integration test compares local and full deltas when a test model is
-provided.
+For standard short-range `MACE` and `ScaleShiftMACE` checkpoints,
+`delta = "incremental"` caches the accepted hidden node features at every
+interaction layer. It recomputes only the moved atom's layer-by-layer causal
+cone and uses cached features for unchanged source atoms. Its context cluster
+therefore needs only one cutoff beyond the final affected atoms. The result is
+an exact message-passing update for supported models, not a reduced-cutoff
+approximation. Incremental mode currently rejects pair-repulsion terms, joint
+embeddings, fused interaction kernels, and `compile_mode`.
+
+`dtype = "float32"` converts the checkpoint for faster inference and must be
+validated against the desired numerical accuracy. `compile_mode` maps to
+PyTorch's `default`, `reduce-overhead`, or `max-autotune` modes; compilation can
+increase initialization time and is not guaranteed to improve small local
+graphs.
+
+Use `delta = "local"` and `delta = "incremental"` only for ordinary short-range
+MACE models. Do not use them for models with explicit long-range electrostatics,
+global charge/spin coupling, or dispersion corrections unless those terms are
+separately validated. The real MACE integration test compares local,
+incremental, and full deltas when a test model is provided.
 
 MACE code and MACE model files have separate licenses. Check the license of the
 specific model file before redistribution or publication.
