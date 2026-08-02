@@ -213,13 +213,27 @@ charges = { Ca = 1.2, Si = 2.4, O = -1.2 }   # Per-species charges (e)
 # [ml_potential] — ML-potential-regularized RMC (optional)
 # =============================================================================
 # Alternative to [potential] for normal RMC runs. Cannot be combined with
-# [potential] or [epsr] in v1. Requires building with --features gap-quip.
+# [potential] or [epsr] in v1. GAP requires building with --features gap-quip;
+# native SNAP and MACE/Python do not.
 # [ml_potential]
 # backend = "gap_quip"
 # model = "gap.xml"
 # init_args = "Potential xml_label=GAP_2026"  # Optional QUIP init string.
 # weight = 0.001
 # cutoff = 5.0  # Must be >= the maximum GAP descriptor cutoff.
+
+# MACE/Python example (requires `uv sync --group mace`, no Rust feature flag):
+# [ml_potential]
+# backend = "mace_python"
+# model = "mace.model"
+# weight = 0.001
+# cutoff = 5.0
+# delta = "incremental" # full=safest; local=fallback; incremental=fastest when supported
+# device = "cpu"
+# torch_threads = 8     # Benchmark on the target machine; more is not always faster.
+# dtype = "float32"     # Faster, but validate precision against the original checkpoint.
+# python = ".venv/bin/python"
+# `compile_mode` is optional for full/local and is not supported by incremental.
 
 # =============================================================================
 # [analysis] — Coordination number and bond angle analysis (optional)

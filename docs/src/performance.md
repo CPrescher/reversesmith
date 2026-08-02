@@ -23,6 +23,38 @@ The Delta-S(Q) computation dominates because nearly all histogram bins change pe
 
 When potentials are active, the energy computation adds O(N_neighbors) distance calculations and table lookups per move. For a 15 A cutoff, this is ~8000 neighbours, adding roughly 20-30 us per move (~5-8% overhead). The potential evaluation itself is a single linear interpolation per neighbour.
 
+## MACE energy-delta modes
+
+The MACE/Python backend offers three strategies for calculating the energy
+change of a single-atom proposal. `full` evaluates the entire system before and
+after every move and therefore grows with atom count. `local` evaluates one
+dense finite-range cluster and reaches a constant cost once the simulation box
+is larger than that cluster. `incremental` caches accepted hidden features and
+recomputes only the changed subgraph at each message-passing layer, giving the
+lowest constant local cost for supported models.
+
+Median times from the Apple M4 Pro benchmark using the small MACE-MP model,
+eight CPU threads, and rejected moves are:
+
+| Atoms | Full float64 | Local float64 | Incremental float64 | Incremental float32 |
+|------:|-------------:|--------------:|--------------------:|--------------------:|
+| 216 | 123.5 ms | 471.7 ms | 54.8 ms | 36.0 ms |
+| 1,000 | 501.5 ms | 577.4 ms | 80.5 ms | 52.8 ms |
+| 1,728 | 865.9 ms | 574.8 ms | 80.2 ms | 52.3 ms |
+| 4,096 | 2.060 s | 572.8 ms | 81.2 ms | 52.5 ms |
+| 8,000 | 4.308 s | 576.9 ms | 81.7 ms | 53.8 ms |
+
+The 216-atom local cluster contains many explicit periodic images, making dense
+`local` slower than `full`. This is why the correct mode should be chosen based
+on both checkpoint compatibility and the actual system size. See
+[ML Potentials](./config/ml-potential.md#choosing-the-mace-delta-mode) for the
+compatibility rules and selection workflow.
+
+For incremental float32 at 4,096 atoms, eight threads gave the best measured
+time (52.1 ms), compared with 105.3 ms for one thread. Ten and fourteen threads
+were slower. Thread scaling is therefore workload- and machine-specific rather
+than proportional to core count.
+
 ## Scaling
 
 - **Atom count**: O(N) per move (via cell list). Wall time scales linearly with system size for fixed number of moves per atom.

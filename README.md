@@ -378,6 +378,22 @@ default it computes full-system energy differences for correctness:
 delta_E = E_full(after move) - E_full(before move)
 ```
 
+The three `delta` modes change how rsmith evaluates this same energy
+difference; they do not change the MACE checkpoint, the RMC cost function, or
+the acceptance rule:
+
+| Mode | Work for one trial move | Scaling and intended use |
+|------|-------------------------|--------------------------|
+| `full` | Two complete system-energy evaluations | Safest and most broadly compatible. Cost grows with atom count. Use for validation, small cells, and models with long-range or global terms. |
+| `local` | One dense, energy-only evaluation of the exact finite-range cluster | Cost becomes independent of total atom count for sufficiently large cells, but the cluster can still contain thousands of images. Use as the short-range compatibility fallback. |
+| `incremental` | Recompute only the changed message-passing subgraph at each layer | Fastest supported CPU mode and effectively independent of total atom count. Use for compatible standard short-range `MACE` and `ScaleShiftMACE` checkpoints. |
+
+For a compatible finite-range model, `local` and `incremental` compute the
+same delta as `full` up to floating-point precision; they are not reduced-cutoff
+approximations. rsmith does not silently fall back between modes. An
+unsupported incremental checkpoint produces an initialization error so that
+the user can explicitly choose `local` or `full`.
+
 For ordinary short-range MACE models, `delta = "local"` evaluates a bounded
 local cluster with explicit periodic image atoms as context and sums only the
 affected per-atom energies. rsmith builds the cluster with a dedicated Rust
@@ -398,6 +414,14 @@ shell per layer. Unchanged source features come from the accepted cache. This
 is exact message-passing inference rather than a truncated approximation.
 Incremental mode currently rejects models with pair-repulsion terms, joint
 embeddings, fused interaction kernels, or `compile_mode`.
+
+A practical workflow is to first run a short calculation with `full`, compare
+several trial deltas with the intended accelerated mode, and then use
+`incremental` for production if the checkpoint is accepted. Choose `local`
+when incremental mode rejects an otherwise ordinary short-range model. Keep
+`full` when the model contains nonlocal physics or when the accelerated result
+has not been validated. For very small systems, benchmark `full` as its smaller
+graph can outweigh the caching advantages of `local`.
 
 `dtype = "float32"` can materially improve CPU throughput, but changes the
 checkpoint's numerical precision and should be validated for the intended

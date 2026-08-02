@@ -122,6 +122,45 @@ compile_mode = "reduce_overhead"
 | `python` | String | `python3` | Python executable used to launch the worker |
 | `worker` | String | embedded worker | Optional custom worker script for testing or site integration |
 
+### Choosing the MACE delta mode
+
+All three modes calculate the energy change used by the same RMC acceptance
+rule. The mode changes the evaluation strategy, not the potential or the
+definition of `delta_E`.
+
+| `delta` | Evaluation performed for each trial | Atom-count scaling | Compatibility | Recommended use |
+|---------|-------------------------------------|--------------------|---------------|-----------------|
+| `full` | Evaluate the complete system before and after the proposed move | Approximately linear in total atoms per trial | Widest; includes models with global or long-range terms | Reference calculations, small systems, unsupported models, and correctness checks |
+| `local` | Evaluate the proposed state once on a dense, exact finite-range cluster and compare its affected per-atom energies with the accepted cache | Flat once the cell is larger than the cluster | Ordinary finite-range models with a valid per-atom energy decomposition | Compatibility fallback when `incremental` is unavailable |
+| `incremental` | Recompute only the dirty message-passing subgraph at each interaction layer, taking unchanged features from the accepted cache | Flat once the local environment size stabilizes | Supported standard short-range `MACE` and `ScaleShiftMACE` checkpoints | Production single-atom RMC when supported |
+
+`local` and `incremental` are exact message-passing evaluations for compatible
+finite-range models, up to the configured floating-point precision. They do
+not reduce the model cutoff or discard changed interactions. Their result
+should therefore match `full` within a tolerance appropriate for `float32` or
+`float64`.
+
+There is no automatic fallback. If incremental mode encounters an unsupported
+checkpoint feature, worker initialization fails with an explanatory error.
+Choose `local` or `full` explicitly after reviewing the model.
+
+Use this selection procedure:
+
+1. Begin with `delta = "full"` for a short reference run.
+2. Test the desired accelerated mode against full deltas with representative
+   structures and moves. The real-model integration test below automates this
+   comparison for its test structure.
+3. Prefer `incremental` for a supported short-range checkpoint.
+4. Use `local` when incremental mode is unsupported but the model is still
+   strictly finite-range with decomposable per-atom energies.
+5. Retain `full` for explicit long-range electrostatics, dispersion corrections,
+   global charge/spin coupling, or any model whose accelerated result has not
+   been validated.
+
+Small periodic cells are an important exception to the performance ordering:
+the exact local cluster may contain many periodic images. In that case `full`
+can be faster than `local`, so benchmark the actual system size.
+
 Create the optional MACE Python environment with uv:
 
 ```bash
@@ -168,6 +207,10 @@ an exact message-passing update for supported models, not a reduced-cutoff
 approximation. Incremental mode currently rejects pair-repulsion terms, joint
 embeddings, fused interaction kernels, and `compile_mode`.
 
+The accepted-state caches are transactional. A rejected move discards the
+pending local features and energies; an accepted move commits them. This means
+subsequent trials see the same accepted structure in every mode.
+
 `dtype = "float32"` converts the checkpoint for faster inference and must be
 validated against the desired numerical accuracy. `compile_mode` maps to
 PyTorch's `default`, `reduce-overhead`, or `max-autotune` modes; compilation can
@@ -179,6 +222,30 @@ MACE models. Do not use them for models with explicit long-range electrostatics,
 global charge/spin coupling, or dispersion corrections unless those terms are
 separately validated. The real MACE integration test compares local,
 incremental, and full deltas when a test model is provided.
+
+### Performance expectations
+
+On an Apple M4 Pro using the small MACE-MP test model, float32 and eight CPU
+threads, the median rejected-move times at 4,096 atoms were approximately:
+
+| Mode | Median time per move |
+|------|---------------------:|
+| `full` | 1.04 s |
+| `local` | 314 ms |
+| `incremental` | 52 ms |
+
+These numbers are illustrative rather than promises: model width, number of
+interaction layers, chemistry, density, device, PyTorch version, and hardware
+all affect performance. In this test, incremental time stayed near 52--54 ms
+from 1,000 to 8,000 atoms, while full evaluation increased with atom count.
+Eight CPU threads were optimal; using additional cores slowed the calculation.
+Benchmark the intended model and machine with `examples/mace_scaling.rs`.
+
+`dtype = "float32"` is independent of the delta mode and was materially faster
+in this benchmark, but changes numerical precision. Validate its deltas before
+production use. `compile_mode` is available only with `full` and `local`; it is
+rejected with `incremental`. Compilation also has a substantial warm-up cost
+and can be slower for small local graphs.
 
 MACE code and MACE model files have separate licenses. Check the license of the
 specific model file before redistribution or publication.
