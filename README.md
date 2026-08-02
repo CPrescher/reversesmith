@@ -5,7 +5,7 @@ A Reverse Monte Carlo (RMC) structure refinement tool written in Rust. Refines a
 ## Features
 
 - **S(Q) and g(r) fitting** -- simultaneous refinement against structure factor and pair distribution function
-- **Hybrid RMC** -- pair potentials (Buckingham, Pedone, Coulomb DSF, tabulated) bias refinement toward energetically favorable configurations
+- **Hybrid RMC** -- pair potentials (Lennard-Jones, Buckingham, Pedone, Coulomb DSF, tabulated) bias refinement toward energetically favorable configurations
 - **ML-potential-regularized RMC** -- optional native SNAP, GAP/QUIP, or MACE energy regularizers
 - **Hard constraints** -- minimum interatomic distances and coordination number bounds
 - **Simulated annealing** -- exponential cooling schedule with adaptive step size

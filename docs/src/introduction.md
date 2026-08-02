@@ -8,7 +8,7 @@ Reversesmith iteratively displaces atoms in a model structure to minimize the di
 
 - **S(Q)** fitting -- total X-ray or neutron structure factor in reciprocal space
 - **g(r)** fitting -- total X-ray pair distribution function in real space
-- **Pair potential constraints** -- Buckingham, Pedone, Coulomb DSF, or tabulated potentials to bias refinement toward energetically favorable configurations (hybrid RMC / EPSR-like)
+- **Pair potential constraints** -- Lennard-Jones, Buckingham, Pedone, Coulomb DSF, or tabulated potentials to bias refinement toward energetically favorable configurations (hybrid RMC / EPSR-like)
 - **Structural constraints** -- minimum interatomic distances and coordination number bounds
 - **Simulated annealing** -- escape local minima and optimize systematically
 - **Structural analysis** -- coordination numbers and bond angle distributions for validation

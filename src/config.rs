@@ -178,10 +178,23 @@ pub struct EpsrConfig {
 pub struct PotentialConfig {
     pub weight: Option<f64>,
     pub cutoff: Option<f64>,
+    pub lennard_jones: Option<Vec<LennardJonesConfig>>,
     pub buckingham: Option<Vec<BuckinghamConfig>>,
     pub pedone: Option<Vec<PedoneConfig>>,
     pub coulomb: Option<CoulombConfig>,
     pub tabulated: Option<Vec<TabulatedConfig>>,
+}
+
+/// Lennard-Jones 12-6 potential: V(r) = 4 epsilon [(sigma/r)^12 - (sigma/r)^6].
+///
+/// Pair parameters are explicit so external mixing rules, including the EPSR
+/// Lorentz-Berthelot convention, can be reproduced without ambiguity.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LennardJonesConfig {
+    pub pair: String,
+    pub epsilon: f64,
+    pub sigma: f64,
 }
 
 /// Buckingham potential: V(r) = A exp(-r/rho) - C/r^6.
@@ -400,6 +413,39 @@ impl Config {
                 "[potential] and [ml_potential] cannot be used together in v1; choose one energy regularizer"
                     .into(),
             );
+        }
+
+        if let Some(potential) = &self.potential {
+            if potential
+                .weight
+                .is_some_and(|weight| !weight.is_finite() || weight < 0.0)
+            {
+                return Err("[potential] weight must be finite and non-negative".into());
+            }
+            if potential
+                .cutoff
+                .is_some_and(|cutoff| !cutoff.is_finite() || cutoff <= 0.0)
+            {
+                return Err("[potential] cutoff must be finite and greater than 0".into());
+            }
+            if let Some(terms) = &potential.lennard_jones {
+                for term in terms {
+                    if !term.epsilon.is_finite() || term.epsilon <= 0.0 {
+                        return Err(format!(
+                            "[potential.lennard_jones] epsilon for {} must be finite and greater than 0",
+                            term.pair
+                        )
+                        .into());
+                    }
+                    if !term.sigma.is_finite() || term.sigma <= 0.0 {
+                        return Err(format!(
+                            "[potential.lennard_jones] sigma for {} must be finite and greater than 0",
+                            term.pair
+                        )
+                        .into());
+                    }
+                }
+            }
         }
 
         if let Some(ml) = &self.ml_potential {

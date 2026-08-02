@@ -21,7 +21,19 @@ The Delta-S(Q) computation dominates because nearly all histogram bins change pe
 
 ## Pair potential overhead
 
-When potentials are active, the energy computation adds O(N_neighbors) distance calculations and table lookups per move. For a 15 A cutoff, this is ~8000 neighbours, adding roughly 20-30 us per move (~5-8% overhead). The potential evaluation itself is a single linear interpolation per neighbour.
+When potentials are active, the energy computation adds O(N_neighbors)
+distance calculations and table lookups per move. Pure EPSR mode stores the
+candidate indices in a directed cutoff-plus-skin Verlet list and rebuilds the
+list before accumulated displacements could invalidate its skin. The potential
+evaluation itself is a single linear interpolation for neighbors inside the
+physical cutoff.
+
+For the 5,000-atom EPSR26 LiquidGa50C example, a 12 A physical cutoff plus a
+3 A skin gives about 738 candidates per atom. The previous 3x3x3 cell stencil
+visited essentially all 5,000 atoms per trial. Replacing it with the Verlet
+list reduced the ten-seed, one-million-move median from 44.64 s to 16.71 s;
+native EPSR26 required 29.09 s under the same one-thread protocol. Acceptance,
+S(Q), and g(r) distributions were numerically unchanged.
 
 ## Delayed acceptance
 
@@ -115,10 +127,13 @@ additional cores after that point.
 
 ## Scaling
 
-- **Atom count**: O(N) per move (via cell list). Wall time scales linearly with system size for fixed number of moves per atom.
+- **Atom count**: at fixed density and cutoff, neighbor-based trial cost is
+  approximately independent of total atom count; a fixed number of moves per
+  atom therefore gives approximately O(N) total wall time.
 - **Q points**: O(N_Q) per move. Reducing Q points from 500 to 250 halves the dominant cost.
 - **RDF bins**: O(N_bins) per move. Fewer bins (e.g., 275 at 0.04 A resolution) can significantly reduce cost.
-- **Potential cutoff**: Larger cutoff = more neighbours = more overhead for both histograms and potentials.
+- **Potential cutoff**: larger cutoffs increase the Verlet-list population
+  approximately with the cutoff-plus-skin volume.
 
 ## RDF cutoff and performance
 

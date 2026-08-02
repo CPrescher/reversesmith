@@ -40,7 +40,11 @@ The energy change for a single atom move is computed efficiently:
 ```
 delta_E = E_new(atom_i) - E_old(atom_i)
 ```
-For pair potentials, `E(atom_i) = sum_j V(r_ij)` sums over all neighbours j within the potential cutoff. This uses the same cell list as the RDF computation, so the cost is O(N_neighbours) per move -- negligible compared to the S(Q) update.
+For pair potentials, `E(atom_i) = sum_j V(r_ij)` sums over all neighbours j
+within the potential cutoff. Pure EPSR mode uses a separate Verlet list with a
+conservative skin, so only nearby candidates are revisited for each trial. The
+list is rebuilt automatically when accumulated accepted displacements could
+allow a previously absent pair to enter the cutoff.
 
 For GAP/QUIP, the moved atom changes its own local energy and the local energies
 of nearby atoms whose descriptor environments include it. rsmith therefore
@@ -112,6 +116,19 @@ For pair-potential configuration details, see
 Use the **same potential that generated your starting structure**. If you ran MD with Pedone + Coulomb in LAMMPS, use Pedone + Coulomb in rsmith. This ensures the energy surface the RMC explores is consistent with the initial equilibrium structure.
 
 If you don't have analytical parameters, you can export tabulated potentials from LAMMPS using `pair_write` and use the `[[potential.tabulated]]` format.
+
+### Lennard-Jones 12-6
+
+The Lennard-Jones form is available for reference models such as EPSR that
+specify a 12-6 short-range interaction:
+
+```
+V(r) = 4 * epsilon * [(sigma/r)^12 - (sigma/r)^6]
+```
+
+rsmith takes explicit pair values for `epsilon` and `sigma`. When importing
+per-species EPSR parameters, first apply its Lorentz-Berthelot mixing rule and
+convert the resulting energy from kJ/mol to eV.
 
 ### Pedone + Coulomb (recommended for oxide glasses)
 

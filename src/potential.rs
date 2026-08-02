@@ -1,6 +1,7 @@
 //! Pair potential energy for hybrid RMC refinement.
 //!
-//! Supports Buckingham, Pedone (Morse + r⁻¹²), Coulomb DSF, and tabulated potentials.
+//! Supports Lennard-Jones 12-6, Buckingham, Pedone (Morse + r⁻¹²), Coulomb
+//! DSF, and tabulated potentials.
 //! All potentials are tabulated on a uniform grid (dr = 0.001 A) for fast lookup.
 //! Multiple potential types can be combined additively for the same pair.
 
@@ -8,7 +9,7 @@ use std::f64::consts::PI;
 use std::path::Path;
 
 use crate::atoms::Configuration;
-use crate::cells::CellList;
+use crate::cells::{CellList, VerletNeighborList};
 use crate::config::PotentialConfig;
 use crate::energy::EnergyModel;
 use crate::io;
@@ -18,7 +19,7 @@ const COULOMB_CONST: f64 = 14.3997;
 
 /// A single pair potential tabulated on a uniform grid.
 ///
-/// All analytical potentials (Buckingham, Pedone, Coulomb) are tabulated at
+/// All analytical potentials (Lennard-Jones, Buckingham, Pedone, Coulomb) are tabulated at
 /// construction time for consistent, fast evaluation. The potential is shifted
 /// so V(cutoff) = 0 to avoid energy discontinuities.
 #[derive(Clone)]
@@ -49,6 +50,40 @@ pub struct PotentialSet {
 }
 
 impl PairPotential {
+    /// Tabulate Lennard-Jones potential
+    /// V(r) = 4*epsilon*[(sigma/r)^12 - (sigma/r)^6].
+    pub fn from_lennard_jones(
+        pair_label: String,
+        type_a: usize,
+        type_b: usize,
+        epsilon: f64,
+        sigma: f64,
+        cutoff: f64,
+        dr: f64,
+    ) -> Self {
+        let n_bins = (cutoff / dr).ceil() as usize + 1;
+        let mut table = vec![0.0; n_bins];
+
+        let v_cut = lennard_jones_eval(cutoff, epsilon, sigma);
+        for (i, value) in table.iter_mut().enumerate() {
+            let r = (i as f64 * dr).max(0.5);
+            *value = lennard_jones_eval(r, epsilon, sigma) - v_cut;
+        }
+        if let Some(last) = table.last_mut() {
+            *last = 0.0;
+        }
+
+        PairPotential {
+            pair_label,
+            type_a,
+            type_b,
+            table,
+            dr,
+            n_bins,
+            cutoff,
+        }
+    }
+
     /// Tabulate Buckingham potential V(r) = A*exp(-r/rho) - C/r^6.
     pub fn from_buckingham(
         pair_label: String,
@@ -322,7 +357,24 @@ impl PotentialSet {
             }
         };
 
-        // 1. Buckingham potentials
+        // 1. Lennard-Jones potentials
+        if let Some(ref terms) = cfg.lennard_jones {
+            for term in terms {
+                let (a, b) = parse_pair(&term.pair)?;
+                let pot = PairPotential::from_lennard_jones(
+                    term.pair.clone(),
+                    a,
+                    b,
+                    term.epsilon,
+                    term.sigma,
+                    cutoff,
+                    dr,
+                );
+                find_or_push(&mut potentials, &mut defined_pairs, pot, a, b);
+            }
+        }
+
+        // 2. Buckingham potentials
         if let Some(ref bucks) = cfg.buckingham {
             for buck in bucks {
                 let (a, b) = parse_pair(&buck.pair)?;
@@ -340,7 +392,7 @@ impl PotentialSet {
             }
         }
 
-        // 2. Pedone potentials
+        // 3. Pedone potentials
         if let Some(ref peds) = cfg.pedone {
             for ped in peds {
                 let (a, b) = parse_pair(&ped.pair)?;
@@ -359,7 +411,7 @@ impl PotentialSet {
             }
         }
 
-        // 3. Coulomb DSF (applies to all pairs with nonzero qi*qj)
+        // 4. Coulomb DSF (applies to all pairs with nonzero qi*qj)
         if let Some(ref coul) = cfg.coulomb {
             for a in 0..n_types {
                 for b in a..n_types {
@@ -384,7 +436,7 @@ impl PotentialSet {
             }
         }
 
-        // 4. Tabulated potentials (override everything on conflict)
+        // 5. Tabulated potentials (override everything on conflict)
         if let Some(ref tabs) = cfg.tabulated {
             for tab in tabs {
                 let (a, b) = parse_pair(&tab.pair)?;
@@ -454,7 +506,6 @@ impl PotentialSet {
         pos_cell: usize,
     ) -> f64 {
         let ti = config.atoms[atom_idx].type_id;
-        let box_lengths = &config.box_lengths;
         let cutoff2 = self.cutoff * self.cutoff;
         let n_types = self.n_types;
 
@@ -472,14 +523,8 @@ impl PotentialSet {
                     continue;
                 }
 
-                let pj = &config.atoms[j].position;
-                let mut r2 = 0.0f64;
-                for d in 0..3 {
-                    let mut delta = pj[d] - pos[d];
-                    let l = box_lengths[d];
-                    delta -= l * (delta / l).round();
-                    r2 += delta * delta;
-                }
+                let r2 =
+                    periodic_distance_squared(&config.atoms[j].position, pos, &config.box_lengths);
 
                 if r2 < cutoff2 {
                     let r = r2.sqrt();
@@ -510,7 +555,6 @@ impl PotentialSet {
         }
 
         let ti = config.atoms[atom_idx].type_id;
-        let box_lengths = &config.box_lengths;
         let cutoff2 = self.cutoff * self.cutoff;
         let n_types = self.n_types;
 
@@ -528,20 +572,9 @@ impl PotentialSet {
                     continue;
                 }
 
-                let pj = &config.atoms[j].position;
-
-                // Old distance
-                let mut r2_old = 0.0f64;
-                let mut r2_new = 0.0f64;
-                for d in 0..3 {
-                    let l = box_lengths[d];
-                    let mut d_old = pj[d] - old_pos[d];
-                    d_old -= l * (d_old / l).round();
-                    r2_old += d_old * d_old;
-                    let mut d_new = pj[d] - new_pos[d];
-                    d_new -= l * (d_new / l).round();
-                    r2_new += d_new * d_new;
-                }
+                let position = &config.atoms[j].position;
+                let r2_old = periodic_distance_squared(position, old_pos, &config.box_lengths);
+                let r2_new = periodic_distance_squared(position, new_pos, &config.box_lengths);
 
                 let pot = &self.potentials[pot_idx];
                 let e_new = if r2_new < cutoff2 {
@@ -560,11 +593,88 @@ impl PotentialSet {
         delta
     }
 
+    /// Compute the energy delta from a pre-built cutoff-plus-skin neighbor
+    /// slice. This is the hot path used by pure EPSR Monte Carlo.
+    #[inline]
+    pub fn energy_delta_atom_neighbors(
+        &self,
+        config: &Configuration,
+        atom_idx: usize,
+        old_pos: &[f64; 3],
+        new_pos: &[f64; 3],
+        neighbors: &[usize],
+    ) -> f64 {
+        let ti = config.atoms[atom_idx].type_id;
+        let cutoff2 = self.cutoff * self.cutoff;
+        let n_types = self.n_types;
+        let mut delta = 0.0;
+
+        for &j in neighbors {
+            let tj = config.atoms[j].type_id;
+            let pot_idx = self.potential_index[ti * n_types + tj];
+            if pot_idx == usize::MAX {
+                continue;
+            }
+            let position = &config.atoms[j].position;
+            let r2_old = periodic_distance_squared(position, old_pos, &config.box_lengths);
+            let r2_new = periodic_distance_squared(position, new_pos, &config.box_lengths);
+            let potential = &self.potentials[pot_idx];
+            let new_energy = if r2_new < cutoff2 {
+                potential.evaluate(r2_new.sqrt())
+            } else {
+                0.0
+            };
+            let old_energy = if r2_old < cutoff2 {
+                potential.evaluate(r2_old.sqrt())
+            } else {
+                0.0
+            };
+            delta += new_energy - old_energy;
+        }
+        delta
+    }
+
+    /// Total pair energy using a directed Verlet list. Each physical pair is
+    /// counted once by retaining only neighbors with `j > i`.
+    pub fn total_energy_neighbors(
+        &self,
+        config: &Configuration,
+        neighbor_list: &VerletNeighborList,
+    ) -> f64 {
+        debug_assert!((neighbor_list.cutoff() - self.cutoff).abs() < 1.0e-12);
+        let cutoff2 = self.cutoff * self.cutoff;
+        let n_types = self.n_types;
+        let mut energy = 0.0;
+
+        for i in 0..config.atoms.len() {
+            let type_i = config.atoms[i].type_id;
+            let position_i = &config.atoms[i].position;
+            for &j in neighbor_list.neighbors(i) {
+                if j <= i {
+                    continue;
+                }
+                let type_j = config.atoms[j].type_id;
+                let potential_index = self.potential_index[type_i * n_types + type_j];
+                if potential_index == usize::MAX {
+                    continue;
+                }
+                let r2 = periodic_distance_squared(
+                    position_i,
+                    &config.atoms[j].position,
+                    &config.box_lengths,
+                );
+                if r2 < cutoff2 {
+                    energy += self.potentials[potential_index].evaluate(r2.sqrt());
+                }
+            }
+        }
+        energy
+    }
+
     /// Compute total pair potential energy of the configuration.
     /// Each pair is counted once (i < j).
     pub fn total_energy(&self, config: &Configuration, cell_list: &CellList) -> f64 {
         let n_atoms = config.atoms.len();
-        let box_lengths = &config.box_lengths;
         let cutoff2 = self.cutoff * self.cutoff;
         let n_types = self.n_types;
 
@@ -586,14 +696,11 @@ impl PotentialSet {
                         continue;
                     }
 
-                    let pj = &config.atoms[j].position;
-                    let mut r2 = 0.0f64;
-                    for d in 0..3 {
-                        let mut delta = pj[d] - pi[d];
-                        let l = box_lengths[d];
-                        delta -= l * (delta / l).round();
-                        r2 += delta * delta;
-                    }
+                    let r2 = periodic_distance_squared(
+                        &config.atoms[j].position,
+                        pi,
+                        &config.box_lengths,
+                    );
 
                     if r2 < cutoff2 {
                         let r = r2.sqrt();
@@ -647,6 +754,28 @@ fn buckingham_eval(r: f64, a: f64, rho: f64, c: f64) -> f64 {
 }
 
 #[inline]
+fn lennard_jones_eval(r: f64, epsilon: f64, sigma: f64) -> f64 {
+    let sr6 = (sigma / r).powi(6);
+    4.0 * epsilon * (sr6 * sr6 - sr6)
+}
+
+#[inline]
+fn periodic_distance_squared(a: &[f64; 3], b: &[f64; 3], box_lengths: &[f64; 3]) -> f64 {
+    let mut distance2 = 0.0;
+    for axis in 0..3 {
+        let mut delta = a[axis] - b[axis];
+        let half = 0.5 * box_lengths[axis];
+        if delta > half {
+            delta -= box_lengths[axis];
+        } else if delta < -half {
+            delta += box_lengths[axis];
+        }
+        distance2 += delta * delta;
+    }
+    distance2
+}
+
+#[inline]
 fn pedone_eval(r: f64, d0: f64, alpha: f64, r0: f64, c0: f64) -> f64 {
     let morse = 1.0 - (-alpha * (r - r0)).exp();
     d0 * morse * morse - d0 + c0 / r.powi(12)
@@ -688,4 +817,171 @@ fn interp(x: &[f64], y: &[f64], xi: f64) -> f64 {
     }
     let t = (xi - x[lo]) / (x[hi] - x[lo]);
     y[lo] + t * (y[hi] - y[lo])
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::{lennard_jones_eval, periodic_distance_squared, PairPotential, PotentialSet};
+    use crate::atoms::{Atom, Configuration};
+    use crate::cells::VerletNeighborList;
+
+    #[test]
+    fn lennard_jones_has_the_expected_zero_and_minimum_before_cutoff_shift() {
+        let epsilon = 0.125;
+        let sigma = 2.4;
+        let cutoff = 8.0;
+        let potential = PairPotential::from_lennard_jones(
+            "Si-O".to_string(),
+            0,
+            1,
+            epsilon,
+            sigma,
+            cutoff,
+            0.001,
+        );
+        let shift = lennard_jones_eval(cutoff, epsilon, sigma);
+
+        assert!((potential.evaluate(sigma) + shift).abs() < 1.0e-12);
+
+        let minimum = 2.0_f64.powf(1.0 / 6.0) * sigma;
+        assert!((potential.evaluate(minimum) - (-epsilon - shift)).abs() < 2.0e-7);
+        assert_eq!(potential.evaluate(cutoff), 0.0);
+    }
+
+    #[test]
+    fn lennard_jones_matches_lammps_lj_cut_with_energy_shift() {
+        // Oracle: LAMMPS 22 Jul 2025 Update 4, units metal,
+        // pair_style lj/cut 8.0; pair_coeff 1 1 0.010 3.0;
+        // pair_modify shift yes; two atoms separated by 3.0 A.
+        let potential =
+            PairPotential::from_lennard_jones("A-A".to_string(), 0, 0, 0.010, 3.0, 8.0, 0.001);
+        let lammps_energy = 0.000_110_927_232_890_385_65;
+        assert!((potential.evaluate(3.0) - lammps_energy).abs() < 1.0e-15);
+    }
+
+    fn two_species_fixture() -> (Configuration, PotentialSet) {
+        let box_lengths = [13.0, 14.0, 15.0];
+        let mut atoms = Vec::new();
+        for z in 0..3 {
+            for y in 0..4 {
+                for x in 0..4 {
+                    let type_id = (x + 2 * y + z) % 2;
+                    atoms.push(Atom {
+                        position: [
+                            0.35 + x as f64 * 2.9,
+                            0.45 + y as f64 * 3.1,
+                            0.55 + z as f64 * 4.0,
+                        ],
+                        species: if type_id == 0 { "A" } else { "B" }.to_string(),
+                        type_id,
+                    });
+                }
+            }
+        }
+        let mut composition = HashMap::new();
+        composition.insert(
+            "A".to_string(),
+            atoms.iter().filter(|atom| atom.type_id == 0).count(),
+        );
+        composition.insert(
+            "B".to_string(),
+            atoms.iter().filter(|atom| atom.type_id == 1).count(),
+        );
+        let config = Configuration {
+            atoms,
+            box_lengths,
+            species: vec!["A".to_string(), "B".to_string()],
+            composition,
+        };
+
+        let cutoff = 5.5;
+        let potentials = vec![
+            PairPotential::from_lennard_jones("A-A".to_string(), 0, 0, 0.010, 2.2, cutoff, 0.001),
+            PairPotential::from_lennard_jones("A-B".to_string(), 0, 1, 0.013, 2.1, cutoff, 0.001),
+            PairPotential::from_lennard_jones("B-B".to_string(), 1, 1, 0.008, 2.0, cutoff, 0.001),
+        ];
+        let potential_set = PotentialSet {
+            potentials,
+            weight: 1.0,
+            cutoff,
+            potential_index: vec![0, 1, 1, 2],
+            n_types: 2,
+        };
+        (config, potential_set)
+    }
+
+    fn brute_atom_energy(
+        potentials: &PotentialSet,
+        config: &Configuration,
+        atom_idx: usize,
+        position: &[f64; 3],
+    ) -> f64 {
+        let type_i = config.atoms[atom_idx].type_id;
+        let cutoff2 = potentials.cutoff * potentials.cutoff;
+        let mut energy = 0.0;
+        for (j, atom) in config.atoms.iter().enumerate() {
+            if j == atom_idx {
+                continue;
+            }
+            let potential_index =
+                potentials.potential_index[type_i * potentials.n_types + atom.type_id];
+            let r2 = periodic_distance_squared(position, &atom.position, &config.box_lengths);
+            if r2 < cutoff2 {
+                energy += potentials.potentials[potential_index].evaluate(r2.sqrt());
+            }
+        }
+        energy
+    }
+
+    #[test]
+    fn verlet_energy_deltas_match_brute_force_through_moves_and_rebuilds() {
+        let (mut config, potentials) = two_species_fixture();
+        let mut positions: Vec<[f64; 3]> = config.atoms.iter().map(|atom| atom.position).collect();
+        let mut neighbors =
+            VerletNeighborList::new(&positions, &config.box_lengths, potentials.cutoff, 1.0);
+
+        let brute_total: f64 = (0..config.atoms.len())
+            .map(|i| brute_atom_energy(&potentials, &config, i, &config.atoms[i].position))
+            .sum::<f64>()
+            * 0.5;
+        let listed_total = potentials.total_energy_neighbors(&config, &neighbors);
+        assert!((listed_total - brute_total).abs() < 1.0e-12 * (1.0 + brute_total.abs()));
+
+        for trial in 0..240 {
+            let atom_idx = trial * 17 % config.atoms.len();
+            let old_pos = config.atoms[atom_idx].position;
+            let displacement = [
+                ((trial * 13 % 19) as f64 - 9.0) * 0.055,
+                ((trial * 7 % 17) as f64 - 8.0) * 0.047,
+                ((trial * 11 % 23) as f64 - 11.0) * 0.039,
+            ];
+            let mut new_pos = [0.0; 3];
+            for axis in 0..3 {
+                new_pos[axis] =
+                    (old_pos[axis] + displacement[axis]).rem_euclid(config.box_lengths[axis]);
+            }
+
+            neighbors.prepare_trial(&positions, atom_idx, &new_pos);
+            let listed_delta = potentials.energy_delta_atom_neighbors(
+                &config,
+                atom_idx,
+                &old_pos,
+                &new_pos,
+                neighbors.neighbors(atom_idx),
+            );
+            let brute_delta = brute_atom_energy(&potentials, &config, atom_idx, &new_pos)
+                - brute_atom_energy(&potentials, &config, atom_idx, &old_pos);
+            assert!(
+                (listed_delta - brute_delta).abs() < 1.0e-12 * (1.0 + brute_delta.abs()),
+                "trial {trial}: listed={listed_delta}, brute={brute_delta}"
+            );
+
+            config.atoms[atom_idx].position = new_pos;
+            positions[atom_idx] = new_pos;
+            neighbors.accept_move(atom_idx, &new_pos);
+        }
+        assert!(neighbors.rebuilds() > 1, "test did not exercise rebuilds");
+    }
 }

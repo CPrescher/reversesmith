@@ -16,7 +16,10 @@ Moving a single atom i changes the energy by:
 delta_U = sum_j [V(r_ij_new) - V(r_ij_old)]
 ```
 
-where the sum runs over all neighbours j of atom i. This is O(N_neighbors), not O(N^2), using the cell list.
+where the sum runs over all neighbours j of atom i. In pure EPSR mode, rsmith
+uses a cutoff-plus-skin Verlet list, built through a fine linked-cell grid, so
+the repeated move cost is O(N_neighbors), not O(N). The list is rebuilt before
+the accumulated atomic displacements can invalidate its skin.
 
 ## Tabulation
 
@@ -36,11 +39,21 @@ V_shifted(r) = V(r) - V(r_cutoff)
 This avoids energy discontinuities when atoms cross the cutoff boundary. The shift is a constant offset that does not affect forces or relative energy differences between configurations. It does change the absolute energy, but since only delta_U matters for acceptance, this is immaterial.
 
 Short-range capping:
-- Analytical potentials (Buckingham, Pedone): capped at r = 0.5 A
+- Analytical short-range potentials (Lennard-Jones, Buckingham, Pedone): capped at r = 0.5 A
 - Coulomb DSF: capped at r = 0.3 A
 - Tabulated: extrapolated from the first data point
 
 These regions are normally excluded by minimum distance constraints.
+
+## Lennard-Jones 12-6 potential
+
+```
+V(r) = 4 * epsilon * [(sigma/r)^12 - (sigma/r)^6]
+```
+
+The potential crosses zero at `r = sigma` and has a minimum of `-epsilon` at
+`r = 2^(1/6) sigma`. rsmith accepts explicit pair parameters, which avoids
+silently imposing a mixing rule that may differ from the reference program.
 
 ## Buckingham potential
 

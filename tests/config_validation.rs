@@ -395,6 +395,32 @@ C0 = 1.0
 }
 
 #[test]
+fn lennard_jones_fields_are_parsed_and_validated() {
+    let valid = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[potential]
+cutoff = 10.0
+
+[[potential.lennard_jones]]
+pair = "Si-O"
+epsilon = 0.125
+sigma = 2.4
+"#;
+    assert!(load_toml(valid).is_ok());
+
+    let invalid = valid.replace("epsilon = 0.125", "epsilon = 0.0");
+    let err = load_toml(&invalid).unwrap_err().to_string();
+    assert!(err.contains("epsilon"), "unexpected error: {err}");
+}
+
+#[test]
 fn valid_ml_potential_fields_accepted() {
     let toml = r#"
 [system]

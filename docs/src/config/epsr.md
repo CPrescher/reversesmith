@@ -8,6 +8,7 @@ This produces thermodynamically consistent structures — configurations that ar
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
+| `mode` | string | `"hybrid"` | `"hybrid"` combines data and energy acceptance; `"pure"` performs energy-only equilibrium MC followed by an EPSR update |
 | `iterations` | integer | 10 | Number of outer EPSR iterations |
 | `feedback` | float | 0.2 | Feedback factor for EP update: `EP += feedback * kT * Δg(r)` |
 | `smooth_sigma` | float | 0.02 | Gaussian smoothing width (Å) applied to EP |
@@ -22,6 +23,7 @@ This produces thermodynamically consistent structures — configurations that ar
 
 ```toml
 [epsr]
+mode = "pure"
 iterations = 20
 feedback = 0.2
 smooth_sigma = 0.02
@@ -37,7 +39,7 @@ convergence_window = 3
 Each EPSR outer iteration:
 
 1. Build combined potential: `V_ref(r) + EP(r)`
-2. Run MC equilibration for `moves_per_iteration` moves
+2. Run the configured hybrid or pure MC epoch for `moves_per_iteration` moves
 3. Compute residual: `ΔS(Q) = S_exp(Q) - S_sim(Q)`
 4. Decompose to partials via proportional weighting: `ΔS_ab(Q) = w_ab(Q) * ΔS(Q) / Σ w_cd(Q)²`
 5. Sine transform each `ΔS_ab(Q)` to `Δg_ab(r)`
@@ -55,11 +57,18 @@ Log output per iteration:
 EPSR iter N: chi2 = X, max |ΔEP| = Y eV, acceptance = Z%
 ```
 
-## How EPSR iterations differ from standard RMC
+## Pure and hybrid modes
 
-The **first EPSR iteration** uses the full `[rmc]` settings — annealing, convergence checking, best-structure restoration, and `max_moves`. This ensures the structure is well-converged under the initial combined potential before equilibrium sampling begins.
+`mode = "pure"` follows the original EPSR separation: every epoch samples the
+combined reference-plus-empirical potential using energy-only Metropolis MC,
+then calculates S(Q) from the resulting configuration and updates the empirical
+potential. Pure mode uses an exact cutoff-plus-skin Verlet neighbor list for
+the analytical potential trials.
 
-**Subsequent iterations** (2, 3, ...) switch to equilibrium mode with key differences from standard RMC:
+`mode = "hybrid"` retains rsmith's data-plus-energy RMC acceptance. Its first
+iteration uses the full `[rmc]` settings, including annealing, convergence
+checking, and optional best-structure restoration. Subsequent iterations use
+equilibrium settings:
 
 - **No best-structure restoration**: The EP update needs the equilibrium S(Q), not a biased low-chi2 snapshot, because the goal is to shift the equilibrium itself.
 
@@ -67,11 +76,15 @@ The **first EPSR iteration** uses the full `[rmc]` settings — annealing, conve
 
 - **No annealing**: Iterations start from the equilibrated structure at `anneal_end` temperature.
 
-As a result, the chi2 reported for iterations 2+ is the **equilibrium chi2** under the current combined potential, not the best fluctuation. This value is typically higher than what iteration 1 reports (which uses best-structure restoration). The improvement across EPSR iterations comes from the cumulative EP steering the equilibrium S(Q) toward experiment.
+As a result, the chi2 reported for hybrid iterations 2+ is the **equilibrium
+chi2** under the current combined potential, not the best fluctuation. In pure
+mode, the reported post-epoch scattering residual is diagnostic: it does not
+participate directly in accepting the moves within that epoch.
 
 ## Notes
 
-- EPSR requires at least one X-ray S(Q) dataset for the EP decomposition
+- EPSR uses the first X-ray S(Q) dataset when available and otherwise falls
+  back to the first neutron S(Q) dataset
 - The reference potential from `[potential]` is preserved; EP is added on top
 - If no `[potential]` section exists, EP alone drives the simulation
 - The `feedback` parameter controls how aggressively the EP adapts; values of 0.1–0.3 are typical

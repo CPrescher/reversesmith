@@ -5,10 +5,31 @@ All notable changes to rsmith will be documented in this file.
 ## Unreleased
 
 ### Added
+- Lennard-Jones 12-6 reference pair potentials with explicit pair parameters,
+  shifted-cutoff tabulation, validation, and LAMMPS reference tests.
+- Pure EPSR refinement mode validated against the EPSR26 LiquidGa50C worked
+  example, including deterministic forward parity and a ten-seed stochastic
+  comparison.
+- Cutoff-plus-skin Verlet neighbor lists for analytical pair-potential Monte
+  Carlo, with conservative rebuild tracking and brute-force periodic tests.
 - Release-mode GAP/QUIP atom-count benchmark using the same diamond-Si
   structures and rejected single-atom trial path as the SNAP and MACE examples.
 
+### Fixed
+- Convert experimental `S(Q)`, `i(Q) = S(Q)-1`, and
+  `F(Q) = Q[S(Q)-1]` conventions back to internal `S(Q)` before empirical-
+  potential updates.
+
+### Performance
+- Reduced the ten-seed LiquidGa50C single-thread median from 44.64 s to
+  16.71 s without changing the accepted trajectories or scientific metrics.
+  On the same Apple M4 Pro, rsmith is 1.740x faster than native EPSR26 for the
+  fixed one-million-move protocol.
+
 ### Documentation
+- Added the EPSR benchmark ladder, local-only workshop-data import workflow,
+  frozen LiquidGa results, and the silica acquisition/publication-permission
+  protocol.
 - Documented current GAP/QUIP whole-system evaluation scaling and published Si
   GAP benchmark results alongside native SNAP and incremental MACE.
 

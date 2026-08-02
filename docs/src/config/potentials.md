@@ -21,11 +21,37 @@ cutoff = 8.0                 # Pair potential cutoff (A), default: rdf_cutoff
 | `weight` | Float | 0.001 | Scales the energy contribution in the cost function |
 | `cutoff` | Float | rdf_cutoff | Global cutoff for all pair potentials (A) |
 
-The cutoff must not exceed `rdf_cutoff` in `[sq]` (the same cell list is used).
+The cutoff must not exceed `rdf_cutoff` in `[sq]`. Pure EPSR energy moves use a
+separate cutoff-plus-skin Verlet list; the RDF grid still sets the maximum
+supported real-space range.
 
 ## Potential types
 
-Multiple potential types can be combined. For each pair, the contributions are **summed** (e.g., Pedone short-range + Coulomb). If a tabulated potential is also defined for the same pair, it **replaces** (not adds to) the analytical forms.
+Multiple potential types can be combined. For each pair, the contributions are **summed** (e.g., Lennard-Jones or Pedone short-range + Coulomb). If a tabulated potential is also defined for the same pair, it **replaces** (not adds to) the analytical forms.
+
+### Lennard-Jones 12-6
+
+V(r) = 4 epsilon [(sigma/r)^12 - (sigma/r)^6]
+
+```toml
+[[potential.lennard_jones]]
+pair = "A-B"
+epsilon = 0.010
+sigma = 3.0
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pair` | String | Species pair, e.g. `"Si-O"` |
+| `epsilon` | Float | Pair well depth in eV |
+| `sigma` | Float | Pair zero-crossing distance in A |
+
+Pair parameters are explicit. To reproduce a force field that specifies
+per-species values, calculate the mixed pair values using that force field's
+mixing rule first. For the Lorentz-Berthelot rule used by EPSR, use
+`epsilon_ij = sqrt(epsilon_i*epsilon_j)` and
+`sigma_ij = (sigma_i+sigma_j)/2`. Convert EPSR energies from kJ/mol to eV
+before entering them (`1 eV = 96.48533212 kJ/mol`).
 
 ### Buckingham
 
@@ -115,16 +141,17 @@ file = "CaO_potential.dat"
 | `pair` | String | Species pair |
 | `file` | String | Path to two-column potential file (relative to config) |
 
-Tabulated potentials **replace** any analytical form defined for the same pair (Buckingham, Pedone, Coulomb). Use this when you have effective potentials from LAMMPS `pair_write` or other sources.
+Tabulated potentials **replace** any analytical form defined for the same pair (Lennard-Jones, Buckingham, Pedone, Coulomb). Use this when you have effective potentials from LAMMPS `pair_write` or other sources.
 
 ## Combination rules
 
 For each pair, potentials are processed in order:
 
-1. Buckingham (if defined)
-2. Pedone (if defined, added to Buckingham)
-3. Coulomb DSF (added to whatever exists)
-4. Tabulated (**replaces** everything above)
+1. Lennard-Jones (if defined)
+2. Buckingham (if defined, added to Lennard-Jones)
+3. Pedone (if defined, added to existing analytical terms)
+4. Coulomb DSF (added to whatever exists)
+5. Tabulated (**replaces** everything above)
 
 Within a single pair, analytical forms are summed. This means Pedone + Coulomb gives the total interatomic potential -- exactly matching a LAMMPS `hybrid/overlay pedone coul/dsf` setup.
 

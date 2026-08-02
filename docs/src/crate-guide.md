@@ -84,7 +84,7 @@ landscape. It is a guardrail, not a guarantee: a poor potential, an out-of-domai
 ML model, or an excessive weight can bias the result away from the real material.
 
 Pair potentials are attractive because the energy change for a one-atom move only
-requires its neighbors. `rsmith` supports Buckingham, Pedone, damped shifted-force
+requires its neighbors. `rsmith` supports Lennard-Jones, Buckingham, Pedone, damped shifted-force
 Coulomb, and tabulated pair terms. Analytical contributions for the same species
 pair can be added, while a tabulated entry replaces them for that pair.
 

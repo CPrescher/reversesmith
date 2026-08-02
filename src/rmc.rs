@@ -4,7 +4,7 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
 use crate::atoms::Configuration;
-use crate::cells::CellList;
+use crate::cells::{CellList, VerletNeighborList};
 use crate::constraints::{Constraints, PrecomputedConstraints};
 use crate::czt::CztSineTransform;
 use crate::energy::EnergyModel;
@@ -126,6 +126,19 @@ impl SqConvention {
             .zip(q.iter())
             .map(|(&s, &qi)| self.transform(s, qi))
             .collect()
+    }
+
+    /// Convert an experimental value in this convention back to Faber-Ziman
+    /// S(Q), which is the internal representation used by EPSR updates.
+    #[inline(always)]
+    pub fn to_sq(self, value: f64, q: f64) -> f64 {
+        match self {
+            SqConvention::Sq => value,
+            SqConvention::Iq => value + 1.0,
+            SqConvention::Fq if q.abs() > 1.0e-12 => value / q + 1.0,
+            // F(Q)=Q[S(Q)-1] carries no finite-Q information at Q=0.
+            SqConvention::Fq => 1.0,
+        }
     }
 }
 
@@ -1671,17 +1684,19 @@ pub fn run_energy_mc(
     let mut rng = StdRng::seed_from_u64(params.seed);
     let n_atoms = config.atoms.len();
 
-    // Build cell list for neighbor lookups (use potential cutoff only — no RDF in energy MC)
-    let positions: Vec<[f64; 3]> = config.atoms.iter().map(|a| a.position).collect();
-    let cell_cutoff = potential.cutoff;
-    let mut cell_list = CellList::new(&positions, &config.box_lengths, cell_cutoff);
+    // A cutoff-plus-skin Verlet list avoids scanning the complete configuration
+    // for every analytical pair-potential trial. Three Angstrom matches the
+    // reference EPSR neighbor-list margin for this workflow.
+    let mut positions: Vec<[f64; 3]> = config.atoms.iter().map(|a| a.position).collect();
+    let mut neighbor_list =
+        VerletNeighborList::new(&positions, &config.box_lengths, potential.cutoff, 3.0);
+    let average_neighbors = neighbor_list.total_neighbors() as f64 / n_atoms.max(1) as f64;
     log_println!(
-        "Energy MC cell list: {}x{}x{} = {} cells (cutoff: {:.2} A)",
-        cell_list.nc[0],
-        cell_list.nc[1],
-        cell_list.nc[2],
-        cell_list.n_cells,
-        cell_cutoff
+        "Energy MC Verlet list: cutoff {:.2} A + skin {:.2} A, average {:.1} candidates/atom, max {}",
+        neighbor_list.cutoff(),
+        neighbor_list.skin(),
+        average_neighbors,
+        neighbor_list.max_neighbors()
     );
 
     // Constraint cell list
@@ -1703,7 +1718,7 @@ pub fn run_energy_mc(
     };
 
     // Initial energy
-    let mut current_energy = potential.total_energy(config, &cell_list);
+    let mut current_energy = potential.total_energy_neighbors(config, &neighbor_list);
     log_println!(
         "Initial potential energy = {:.6} eV, kT = {:.6} eV",
         current_energy,
@@ -1769,30 +1784,13 @@ pub fn run_energy_mc(
             }
         }
 
-        // Compute energy delta
-        let old_pos_cell = cell_list.cell_of[atom_idx];
-        let new_pos_cell = {
-            let cx = ((new_pos[0] / config.box_lengths[0]).fract() * cell_list.nc[0] as f64).floor()
-                as usize;
-            let cy = ((new_pos[1] / config.box_lengths[1]).fract() * cell_list.nc[1] as f64).floor()
-                as usize;
-            let cz = ((new_pos[2] / config.box_lengths[2]).fract() * cell_list.nc[2] as f64).floor()
-                as usize;
-            let cx = cx.min(cell_list.nc[0] - 1);
-            let cy = cy.min(cell_list.nc[1] - 1);
-            let cz = cz.min(cell_list.nc[2] - 1);
-            cz * cell_list.nc[0] * cell_list.nc[1] + cy * cell_list.nc[0] + cx
-        };
-
-        // Compute energy delta (single pass when atom stays in same cell)
-        let delta_energy = potential.energy_delta_atom(
+        neighbor_list.prepare_trial(&positions, atom_idx, &new_pos);
+        let delta_energy = potential.energy_delta_atom_neighbors(
             config,
             atom_idx,
             &old_pos,
             &new_pos,
-            &cell_list,
-            old_pos_cell,
-            new_pos_cell,
+            neighbor_list.neighbors(atom_idx),
         );
         config.atoms[atom_idx].position = new_pos;
 
@@ -1806,7 +1804,8 @@ pub fn run_energy_mc(
 
         if accept {
             current_energy += delta_energy;
-            cell_list.move_atom(atom_idx, &new_pos);
+            positions[atom_idx] = new_pos;
+            neighbor_list.accept_move(atom_idx, &new_pos);
             if let Some(ref mut ccl) = constr_cell_list {
                 ccl.move_atom(atom_idx, &new_pos);
             }
@@ -1860,10 +1859,11 @@ pub fn run_energy_mc(
 
     let acceptance = 100.0 * state.accepted as f64 / state.move_count.max(1) as f64;
     log_println!(
-        "\nEnergy MC complete: {} moves, E = {:.4} eV, accepted {:.1}%",
+        "\nEnergy MC complete: {} moves, E = {:.4} eV, accepted {:.1}%, neighbor rebuilds {}",
         state.move_count,
         current_energy,
-        acceptance
+        acceptance,
+        neighbor_list.rebuilds()
     );
 
     state
@@ -1975,6 +1975,17 @@ mod tests {
         assert_eq!(pdf_resolution_envelope(0.0, 50.0), 1.0);
         let expected = (-0.5_f64).exp();
         assert!((pdf_resolution_envelope(0.1, 10.0) - expected).abs() < 1e-15);
+    }
+
+    #[test]
+    fn scattering_conventions_roundtrip_to_internal_sq() {
+        let sq = 1.375;
+        let q = 2.5;
+        for convention in [SqConvention::Sq, SqConvention::Iq, SqConvention::Fq] {
+            let represented = convention.transform(sq, q);
+            assert!((convention.to_sq(represented, q) - sq).abs() < 1.0e-15);
+        }
+        assert_eq!(SqConvention::Fq.to_sq(0.0, 0.0), 1.0);
     }
 
     #[test]

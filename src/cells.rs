@@ -16,6 +16,23 @@ pub struct CellList {
     pub n_cells: usize,
 }
 
+/// Contiguous per-atom Verlet neighbor list for repeated short-range trials.
+///
+/// Pairs are included out to `cutoff + skin`. The list remains valid while
+/// the sum of the two largest atom displacements from the reference
+/// configuration does not exceed `skin`.
+pub struct VerletNeighborList {
+    cutoff: f64,
+    skin: f64,
+    list_radius: f64,
+    box_lengths: [f64; 3],
+    reference_positions: Vec<[f64; 3]>,
+    offsets: Vec<usize>,
+    neighbors: Vec<usize>,
+    max_displacement: f64,
+    rebuilds: u64,
+}
+
 impl CellList {
     /// Build a cell list for the given positions and box.
     pub fn new(positions: &[[f64; 3]], box_lengths: &[f64; 3], cutoff: f64) -> Self {
@@ -117,6 +134,168 @@ impl CellList {
     }
 }
 
+impl VerletNeighborList {
+    /// Build a directed neighbor list. Every atom owns a contiguous slice of
+    /// candidate indices, and every physical pair therefore appears twice.
+    pub fn new(positions: &[[f64; 3]], box_lengths: &[f64; 3], cutoff: f64, skin: f64) -> Self {
+        assert!(cutoff.is_finite() && cutoff > 0.0);
+        assert!(skin.is_finite() && skin > 0.0);
+        let mut list = Self {
+            cutoff,
+            skin,
+            list_radius: cutoff + skin,
+            box_lengths: *box_lengths,
+            reference_positions: Vec::new(),
+            offsets: Vec::new(),
+            neighbors: Vec::new(),
+            max_displacement: 0.0,
+            rebuilds: 0,
+        };
+        list.rebuild(positions);
+        list
+    }
+
+    /// Candidate atoms for `atom_idx`, including the Verlet skin.
+    #[inline]
+    pub fn neighbors(&self, atom_idx: usize) -> &[usize] {
+        &self.neighbors[self.offsets[atom_idx]..self.offsets[atom_idx + 1]]
+    }
+
+    /// Prepare the list for a proposed move. A rebuild is performed before
+    /// evaluating the trial whenever the current skin can no longer guarantee
+    /// that all cutoff pairs are present.
+    pub fn prepare_trial(&mut self, positions: &[[f64; 3]], atom_idx: usize, new_pos: &[f64; 3]) {
+        let trial_displacement = periodic_distance(
+            new_pos,
+            &self.reference_positions[atom_idx],
+            &self.box_lengths,
+        );
+        if trial_displacement + self.max_displacement <= self.skin {
+            return;
+        }
+
+        // If one proposed step itself exceeds the current skin, enlarge the
+        // skin before rebuilding. This is unusual for RMC but keeps the
+        // validity rule exact for arbitrary configured step sizes.
+        let step = periodic_distance(new_pos, &positions[atom_idx], &self.box_lengths);
+        if step >= self.skin {
+            self.skin = step * 1.05 + f64::EPSILON;
+            self.list_radius = self.cutoff + self.skin;
+        }
+        self.rebuild(positions);
+    }
+
+    /// Record an accepted coordinate for conservative rebuild tracking.
+    #[inline]
+    pub fn accept_move(&mut self, atom_idx: usize, new_pos: &[f64; 3]) {
+        let displacement = periodic_distance(
+            new_pos,
+            &self.reference_positions[atom_idx],
+            &self.box_lengths,
+        );
+        self.max_displacement = self.max_displacement.max(displacement);
+    }
+
+    pub fn cutoff(&self) -> f64 {
+        self.cutoff
+    }
+
+    pub fn skin(&self) -> f64 {
+        self.skin
+    }
+
+    pub fn list_radius(&self) -> f64 {
+        self.list_radius
+    }
+
+    pub fn rebuilds(&self) -> u64 {
+        self.rebuilds
+    }
+
+    pub fn total_neighbors(&self) -> usize {
+        self.neighbors.len()
+    }
+
+    pub fn max_neighbors(&self) -> usize {
+        self.offsets
+            .windows(2)
+            .map(|window| window[1] - window[0])
+            .max()
+            .unwrap_or(0)
+    }
+
+    fn rebuild(&mut self, positions: &[[f64; 3]]) {
+        self.reference_positions.clear();
+        self.reference_positions.extend_from_slice(positions);
+        self.offsets.clear();
+        self.offsets.reserve(positions.len() + 1);
+        self.neighbors.clear();
+        self.offsets.push(0);
+
+        // Three cells per list radius is a useful compromise: it keeps bucket
+        // occupancy low while making construction much cheaper than O(N^2).
+        let builder_width = self.list_radius / 3.0;
+        let cells = CellList::new(positions, &self.box_lengths, builder_width);
+        let cell_radius = [
+            (self.list_radius / cells.cell_size[0]).ceil() as i32,
+            (self.list_radius / cells.cell_size[1]).ceil() as i32,
+            (self.list_radius / cells.cell_size[2]).ceil() as i32,
+        ];
+        let list_radius2 = self.list_radius * self.list_radius;
+        let mut seen_cells = vec![0u32; cells.n_cells];
+        let mut stamp = 0u32;
+
+        for (atom_idx, pos) in positions.iter().enumerate() {
+            stamp = stamp.wrapping_add(1);
+            if stamp == 0 {
+                seen_cells.fill(0);
+                stamp = 1;
+            }
+            let center = cell_coordinates(cells.cell_of[atom_idx], &cells.nc);
+
+            for dz in -cell_radius[2]..=cell_radius[2] {
+                let min_z = minimum_cell_separation(dz, cells.cell_size[2]);
+                for dy in -cell_radius[1]..=cell_radius[1] {
+                    let min_y = minimum_cell_separation(dy, cells.cell_size[1]);
+                    for dx in -cell_radius[0]..=cell_radius[0] {
+                        let min_x = minimum_cell_separation(dx, cells.cell_size[0]);
+                        if min_x * min_x + min_y * min_y + min_z * min_z > list_radius2 {
+                            continue;
+                        }
+                        let coordinates = [
+                            periodic_cell(center[0], dx, cells.nc[0]),
+                            periodic_cell(center[1], dy, cells.nc[1]),
+                            periodic_cell(center[2], dz, cells.nc[2]),
+                        ];
+                        let cell = linear_cell(coordinates, &cells.nc);
+                        if seen_cells[cell] == stamp {
+                            continue;
+                        }
+                        seen_cells[cell] = stamp;
+
+                        for candidate in cells.atoms_in_cell(cell) {
+                            if candidate == atom_idx {
+                                continue;
+                            }
+                            if periodic_distance_squared(
+                                pos,
+                                &positions[candidate],
+                                &self.box_lengths,
+                            ) < list_radius2
+                            {
+                                self.neighbors.push(candidate);
+                            }
+                        }
+                    }
+                }
+            }
+            self.offsets.push(self.neighbors.len());
+        }
+        self.max_displacement = 0.0;
+        self.rebuilds += 1;
+    }
+}
+
 pub struct CellIter<'a> {
     cell_list: &'a CellList,
     current: usize,
@@ -151,4 +330,111 @@ fn cell_index(
     let cy = cy.min(nc[1] - 1);
     let cz = cz.min(nc[2] - 1);
     cz * nc[0] * nc[1] + cy * nc[0] + cx
+}
+
+#[inline]
+fn cell_coordinates(cell_idx: usize, nc: &[usize; 3]) -> [usize; 3] {
+    let xy = nc[0] * nc[1];
+    let z = cell_idx / xy;
+    let remainder = cell_idx % xy;
+    [remainder % nc[0], remainder / nc[0], z]
+}
+
+#[inline]
+fn linear_cell(coordinates: [usize; 3], nc: &[usize; 3]) -> usize {
+    coordinates[2] * nc[0] * nc[1] + coordinates[1] * nc[0] + coordinates[0]
+}
+
+#[inline]
+fn periodic_cell(cell: usize, offset: i32, count: usize) -> usize {
+    (cell as i32 + offset).rem_euclid(count as i32) as usize
+}
+
+#[inline]
+fn minimum_cell_separation(offset: i32, cell_size: f64) -> f64 {
+    (offset.abs() - 1).max(0) as f64 * cell_size
+}
+
+#[inline]
+fn periodic_distance(a: &[f64; 3], b: &[f64; 3], box_lengths: &[f64; 3]) -> f64 {
+    periodic_distance_squared(a, b, box_lengths).sqrt()
+}
+
+#[inline]
+fn periodic_distance_squared(a: &[f64; 3], b: &[f64; 3], box_lengths: &[f64; 3]) -> f64 {
+    let mut distance2 = 0.0;
+    for axis in 0..3 {
+        let mut delta = a[axis] - b[axis];
+        let half = 0.5 * box_lengths[axis];
+        if delta > half {
+            delta -= box_lengths[axis];
+        } else if delta < -half {
+            delta += box_lengths[axis];
+        }
+        distance2 += delta * delta;
+    }
+    distance2
+}
+
+#[cfg(test)]
+mod tests {
+    use super::VerletNeighborList;
+
+    fn distance2(a: &[f64; 3], b: &[f64; 3], box_lengths: &[f64; 3]) -> f64 {
+        super::periodic_distance_squared(a, b, box_lengths)
+    }
+
+    #[test]
+    fn verlet_list_contains_every_pair_inside_list_radius_without_duplicates() {
+        let box_lengths = [17.0, 19.0, 23.0];
+        let positions: Vec<[f64; 3]> = (0..91)
+            .map(|i| {
+                [
+                    (i * 37 % 169) as f64 / 169.0 * box_lengths[0],
+                    (i * 53 % 181) as f64 / 181.0 * box_lengths[1],
+                    (i * 71 % 211) as f64 / 211.0 * box_lengths[2],
+                ]
+            })
+            .collect();
+        let list = VerletNeighborList::new(&positions, &box_lengths, 4.0, 1.2);
+        let radius2 = list.list_radius().powi(2);
+
+        for i in 0..positions.len() {
+            let mut observed = list.neighbors(i).to_vec();
+            observed.sort_unstable();
+            let original_len = observed.len();
+            observed.dedup();
+            assert_eq!(
+                observed.len(),
+                original_len,
+                "duplicate neighbor for atom {i}"
+            );
+            assert!(!observed.contains(&i));
+
+            let expected: Vec<usize> = (0..positions.len())
+                .filter(|&j| {
+                    j != i && distance2(&positions[i], &positions[j], &box_lengths) < radius2
+                })
+                .collect();
+            assert_eq!(observed, expected, "neighbor mismatch for atom {i}");
+        }
+    }
+
+    #[test]
+    fn verlet_list_rebuilds_before_a_pair_can_enter_the_cutoff() {
+        let box_lengths = [20.0; 3];
+        let mut positions = vec![[1.0, 1.0, 1.0], [7.1, 1.0, 1.0], [15.0, 15.0, 15.0]];
+        let mut list = VerletNeighborList::new(&positions, &box_lengths, 5.0, 1.0);
+        assert!(!list.neighbors(0).contains(&1));
+
+        let first_move = [1.6, 1.0, 1.0];
+        list.prepare_trial(&positions, 0, &first_move);
+        positions[0] = first_move;
+        list.accept_move(0, &first_move);
+
+        let second_move = [6.6, 1.0, 1.0];
+        list.prepare_trial(&positions, 1, &second_move);
+        assert!(list.rebuilds() >= 2);
+        assert!(list.neighbors(1).contains(&0));
+    }
 }

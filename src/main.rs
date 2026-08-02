@@ -1097,8 +1097,13 @@ fn main() {
         };
 
         // Interpolate experimental S(Q) onto simulation Q grid
-        let exp_on_grid: Option<Vec<f64>> =
-            epsr_exp.map(|exp| epsr::interpolate_exp_to_grid(&exp.q, &exp.sq, &params.q_grid));
+        let exp_on_grid: Option<Vec<f64>> = epsr_exp.map(|exp| {
+            epsr::interpolate_exp_to_grid(&exp.q, &exp.sq, &params.q_grid)
+                .into_iter()
+                .zip(params.q_grid.iter())
+                .map(|(value, &q)| exp.convention.to_sq(value, q))
+                .collect()
+        });
 
         let mut last_state: Option<rmc::RmcState> = resume_state;
         let mut conv_streak: usize = 0;
