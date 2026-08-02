@@ -356,6 +356,7 @@ backend = "mace_python"
 model = "mace.model"
 weight = 0.001
 cutoff = 5.0
+delta = "full"       # full or local; full is the correctness default
 device = "cpu"        # cpu, cuda, or mps
 torch_threads = 8     # optional CPU threading control
 ```
@@ -368,10 +369,24 @@ cargo build --release
 ```
 
 `mace_python` does not require a Rust feature flag. rsmith launches an embedded
-Python worker, keeps the MACE calculator alive across trial moves, and computes
-full-system energy differences for correctness. MACE code and MACE model files
-have separate licenses; check the license of the specific model before
-redistribution.
+Python worker and keeps the MACE calculator alive across trial moves. By
+default it computes full-system energy differences for correctness:
+
+```text
+delta_E = E_full(after move) - E_full(before move)
+```
+
+For ordinary short-range MACE models, `delta = "local"` evaluates a bounded
+local cluster with explicit periodic image atoms as context and sums only the
+affected per-atom energies. The affected radius is `num_interactions * cutoff`,
+so at fixed density the trial cost is effectively independent of total atom
+count, though the constant can still be large.
+
+Use local MACE deltas only for short-range models. Keep `delta = "full"` for
+models with explicit long-range electrostatics, global charge/spin coupling, or
+dispersion corrections unless the local delta has been separately validated.
+MACE code and MACE model files have separate licenses; check the license of the
+specific model before redistribution.
 
 To run the real MACE integration test with the small MIT-licensed MACE-MP model:
 
@@ -381,8 +396,23 @@ RSMITH_MACE_TEST_MODEL="$MODEL" \
 RSMITH_MACE_TEST_PYTHON=.venv/bin/python \
 RSMITH_MACE_TEST_DEVICE=cpu \
 RSMITH_MACE_TEST_TORCH_THREADS=1 \
-cargo test mace_python_backend_runs_real_model_when_configured -- --nocapture
+cargo test mace_python -- --nocapture
 ```
+
+To measure CPU thread scaling through the same rejected single-atom trial path
+used by RMC, run the release-mode benchmark example:
+
+```bash
+MODEL=$(.venv/bin/python scripts/download_mace_test_model.py)
+cargo run --release --example mace_scaling -- \
+  --model "$MODEL" \
+  --python .venv/bin/python
+```
+
+By default this benchmarks 216-, 1,000-, and 1,728-atom diamond-Si cells with
+1, 2, 4, 8, 10, and 14 PyTorch threads. It prints CSV containing per-trial
+statistics, speedup relative to one thread, and parallel efficiency. Use
+`--help` to change the system sizes, thread counts, warm-up, or sample count.
 
 ### 5. Smoke-test the binding
 

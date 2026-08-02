@@ -1,8 +1,9 @@
 //! MACE energy backend through a small Python worker.
 //!
-//! The backend evaluates full-system energies for correctness. MACE is a
-//! message-passing model, so a single moved atom can affect atoms beyond one
-//! descriptor cutoff; local deltas can be added later with model-specific care.
+//! The default backend evaluates full-system energies for correctness. For
+//! ordinary short-range MACE models, `delta = "local"` asks the worker to build
+//! a bounded explicit-image cluster around the moved atom and sum the affected
+//! per-atom energies.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
