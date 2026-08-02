@@ -94,6 +94,14 @@ print_every = 1000
 # target_acceptance = 0.3
 # Adjust step size every N moves to approach target_acceptance.            (default: 5_000)
 # adjust_step_every = 5_000
+# Screen proposals with the experimental-data Metropolis test before
+# evaluating an active pair, SNAP, GAP, or MACE potential. This preserves the
+# target distribution but can reduce acceptance when data and energy changes
+# oppose one another. Most useful for expensive GAP/MACE backends.          (default: false)
+# delayed_acceptance = true
+# Full energy deltas used for weight calibration before screening starts.
+# Set to 0 when using an already calibrated energy weight.                 (default: 1_000)
+# energy_calibration_moves = 1_000
 
 # Simulated annealing: exponential cooling from anneal_start to anneal_end
 # over anneal_steps moves.

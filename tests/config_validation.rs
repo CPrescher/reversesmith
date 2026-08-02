@@ -39,6 +39,25 @@ fn minimal_config_is_valid() {
 }
 
 #[test]
+fn delayed_acceptance_fields_are_mapped_to_rmc_params() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+delayed_acceptance = true
+energy_calibration_moves = 25
+"#;
+    let config = load_toml(toml).expect("delayed-acceptance config should parse");
+    let params = config.rmc_params();
+    assert!(params.delayed_acceptance);
+    assert_eq!(params.energy_calibration_moves, 25);
+}
+
+#[test]
 fn unknown_system_field() {
     let toml = r#"
 [system]

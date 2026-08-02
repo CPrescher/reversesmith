@@ -77,6 +77,12 @@ pub struct RmcConfig {
     pub print_every: Option<u64>,
     pub target_acceptance: Option<f64>,
     pub adjust_step_every: Option<u64>,
+    /// Split hybrid RMC acceptance into a cheap data stage followed by the
+    /// configured potential-energy stage (default: false).
+    pub delayed_acceptance: Option<bool>,
+    /// Number of complete potential evaluations used to calibrate the energy
+    /// weight before delayed acceptance starts (default: 1000).
+    pub energy_calibration_moves: Option<u64>,
     pub anneal_start: Option<f64>,
     pub anneal_end: Option<f64>,
     pub anneal_steps: Option<u64>,
@@ -399,6 +405,12 @@ impl Config {
         }
         if let Some(v) = self.rmc.adjust_step_every {
             p.adjust_step_every = v;
+        }
+        if let Some(v) = self.rmc.delayed_acceptance {
+            p.delayed_acceptance = v;
+        }
+        if let Some(v) = self.rmc.energy_calibration_moves {
+            p.energy_calibration_moves = v;
         }
         if let Some(v) = self.rmc.anneal_start {
             p.anneal_start = v;

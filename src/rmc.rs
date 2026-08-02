@@ -161,6 +161,13 @@ pub struct RmcParams {
     pub print_every: u64,
     pub target_acceptance: f64,
     pub adjust_step_every: u64,
+    /// Use a cheap data-only Metropolis stage before evaluating the energy
+    /// model. This preserves the target distribution but changes the chain's
+    /// transition kernel.
+    pub delayed_acceptance: bool,
+    /// Complete energy evaluations used for the weight-calibration estimate.
+    /// Delayed screening begins after these evaluations.
+    pub energy_calibration_moves: u64,
     pub anneal_start: f64,
     pub anneal_end: f64,
     pub anneal_steps: u64,
@@ -187,6 +194,8 @@ impl Default for RmcParams {
             print_every: 1000,
             target_acceptance: 0.3,
             adjust_step_every: 5000,
+            delayed_acceptance: false,
+            energy_calibration_moves: 1000,
             anneal_start: 0.1,
             anneal_end: 0.1,
             anneal_steps: 0, // 0 = use max_moves
@@ -474,6 +483,24 @@ fn min_image_r2_inline(a: &[f64; 3], b: &[f64; 3], box_lengths: &[f64; 3]) -> f6
         r2 += delta * delta;
     }
     r2
+}
+
+#[inline]
+fn metropolis_probability(delta_cost: f64, temperature: f64) -> f64 {
+    if delta_cost <= 0.0 {
+        1.0
+    } else {
+        (-delta_cost / (2.0 * temperature)).exp()
+    }
+}
+
+#[inline]
+fn metropolis_accept<R: Rng + ?Sized>(delta_cost: f64, temperature: f64, rng: &mut R) -> bool {
+    if delta_cost <= 0.0 {
+        true
+    } else {
+        rng.gen::<f64>() < metropolis_probability(delta_cost, temperature)
+    }
 }
 
 /// Run the RMC refinement loop with incremental S(Q) updates.
@@ -930,6 +957,7 @@ pub fn run_rmc(
 
     // Potential energy initialization
     let has_energy_model = energy_model.is_some();
+    let delayed_acceptance = params.delayed_acceptance && has_energy_model;
     let energy_weight = energy_model.as_ref().map_or(0.0, |p| p.weight());
     let energy_label = energy_model
         .as_ref()
@@ -947,6 +975,17 @@ pub fn run_rmc(
     } else {
         0.0
     };
+    if delayed_acceptance {
+        log_println!(
+            "Delayed acceptance enabled: screen with chi2 before evaluating {} (after {} calibration evaluations)",
+            energy_label,
+            params.energy_calibration_moves
+        );
+    } else if params.delayed_acceptance {
+        log_println!(
+            "Delayed acceptance requested without an energy model; using standard RMC acceptance"
+        );
+    }
 
     // Annealing setup
     let annealing = (params.anneal_start - params.anneal_end).abs() > 1e-10;
@@ -988,10 +1027,17 @@ pub fn run_rmc(
     let mut conv_baseline_set = !annealing; // need to reset baseline after annealing ends
 
     // Calibration: accumulate |delta_chi2| and |delta_E| to suggest weight
-    let calibration_moves: u64 = if has_energy_model { 1000 } else { 0 };
+    let calibration_moves: u64 = if has_energy_model {
+        params.energy_calibration_moves
+    } else {
+        0
+    };
     let mut calib_sum_dchi2 = 0.0f64;
     let mut calib_sum_de = 0.0f64;
     let mut calib_count = 0u64;
+    let mut delayed_stage_one_trials = 0u64;
+    let mut delayed_stage_one_rejections = 0u64;
+    let mut delayed_energy_evaluations = 0u64;
 
     // === Main RMC loop ===
     let start_move = state.move_count;
@@ -1158,17 +1204,51 @@ pub fn run_rmc(
 
         let new_chi2 = new_sq_chi2 + new_gr_chi2;
 
-        // Compute potential energy delta if potential is active
-        let delta_energy = if let Some(model) = energy_model.as_deref_mut() {
-            model.energy_delta_atom(
-                config,
-                atom_idx,
-                &old_pos,
-                &new_pos,
-                &cell_list,
-                old_pos_cell,
-                new_pos_cell,
-            )
+        let delta_chi2 = new_chi2 - current_chi2;
+
+        // Exponential schedule: T(n) = T_start * (T_end/T_start)^(n/anneal_n).
+        // Delayed acceptance must use the same temperature in both stages.
+        let temperature = if annealing {
+            let frac = (move_num as f64 / anneal_n as f64).min(1.0);
+            params.anneal_start * (frac * anneal_log_ratio).exp()
+        } else {
+            params.anneal_end
+        };
+
+        // Calibration samples the unconditional energy-delta distribution, so
+        // delayed screening starts only after calibration is complete.
+        let delayed_active = delayed_acceptance && calib_count >= calibration_moves;
+        let data_stage_passed = if delayed_active {
+            delayed_stage_one_trials += 1;
+            let passed = metropolis_accept(delta_chi2, temperature, &mut rng);
+            if !passed {
+                delayed_stage_one_rejections += 1;
+            }
+            passed
+        } else {
+            true
+        };
+
+        // The energy backend remains in its accepted state when stage one
+        // rejects, so accept/reject hooks must only run after an evaluation.
+        let energy_was_evaluated = has_energy_model && data_stage_passed;
+        let delta_energy = if data_stage_passed {
+            if let Some(model) = energy_model.as_deref_mut() {
+                if delayed_active {
+                    delayed_energy_evaluations += 1;
+                }
+                model.energy_delta_atom(
+                    config,
+                    atom_idx,
+                    &old_pos,
+                    &new_pos,
+                    &cell_list,
+                    old_pos_cell,
+                    new_pos_cell,
+                )
+            } else {
+                0.0
+            }
         } else {
             0.0
         };
@@ -1206,22 +1286,18 @@ pub fn run_rmc(
             }
         }
 
-        // Metropolis acceptance (with optional annealing temperature)
-        // Exponential schedule: T(n) = T_start * (T_end/T_start)^(n/anneal_n)
-        // After anneal_n moves, T stays at anneal_end
-        let temperature = if annealing {
-            let frac = (move_num as f64 / anneal_n as f64).min(1.0);
-            params.anneal_start * (frac * anneal_log_ratio).exp()
+        // Standard mode applies one Metropolis test to the combined cost.
+        // Delayed mode applies two tests whose forward/reverse probability
+        // ratios multiply to the same target distribution.
+        let accept = if delayed_active {
+            data_stage_passed
+                && metropolis_accept(energy_weight * delta_energy, temperature, &mut rng)
         } else {
-            params.anneal_end
-        };
-        let delta_chi2 = new_chi2 - current_chi2;
-        let delta_cost = delta_chi2 + energy_weight * delta_energy;
-        let accept = if delta_cost < 0.0 {
-            true
-        } else {
-            let prob = (-delta_cost / (2.0 * temperature)).exp();
-            rng.gen::<f64>() < prob
+            metropolis_accept(
+                delta_chi2 + energy_weight * delta_energy,
+                temperature,
+                &mut rng,
+            )
         };
 
         if accept {
@@ -1248,7 +1324,10 @@ pub fn run_rmc(
             if let Some(ref mut ccl) = constr_cell_list {
                 ccl.move_atom(atom_idx, &new_pos);
             }
-            if let Some(model) = energy_model.as_deref_mut() {
+            if energy_was_evaluated {
+                let model = energy_model
+                    .as_deref_mut()
+                    .expect("evaluated energy model is missing");
                 model.accept_move(atom_idx, &new_pos);
             }
             state.accepted += 1;
@@ -1265,7 +1344,10 @@ pub fn run_rmc(
         } else {
             // Revert atom position
             config.atoms[atom_idx].position = old_pos;
-            if let Some(model) = energy_model.as_deref_mut() {
+            if energy_was_evaluated {
+                let model = energy_model
+                    .as_deref_mut()
+                    .expect("evaluated energy model is missing");
                 model.reject_move(atom_idx, &old_pos);
             }
         }
@@ -1315,15 +1397,24 @@ pub fn run_rmc(
             } else {
                 String::new()
             };
+            let delayed_str = if delayed_stage_one_trials > 0 {
+                format!(
+                    ", potential skip = {:.1}%",
+                    100.0 * delayed_stage_one_rejections as f64 / delayed_stage_one_trials as f64
+                )
+            } else {
+                String::new()
+            };
             log_println!(
-                "Move {}/{}: {}, accept = {:.3} (recent {:.3}), step = {:.4} A{}",
+                "Move {}/{}: {}, accept = {:.3} (recent {:.3}), step = {:.4} A{}{}",
                 state.move_count,
                 params.max_moves,
                 chi2_str,
                 overall_ratio,
                 ratio,
                 state.max_step,
-                temp_str
+                temp_str,
+                delayed_str
             );
         }
 
@@ -1432,6 +1523,15 @@ pub fn run_rmc(
         state.move_count,
         100.0 * state.accepted as f64 / state.move_count.max(1) as f64
     );
+    if delayed_stage_one_trials > 0 {
+        log_println!(
+            "Delayed acceptance: skipped {}/{} potential evaluations ({:.1}%); evaluated {} after the data stage",
+            delayed_stage_one_rejections,
+            delayed_stage_one_trials,
+            100.0 * delayed_stage_one_rejections as f64 / delayed_stage_one_trials as f64,
+            delayed_energy_evaluations
+        );
+    }
 
     // Store final partial and total S(Q) for EPSR outer loop
     // Use primary experiment's total S(Q) (experiment 0)
@@ -1669,11 +1769,14 @@ mod tests {
     use crate::constraints::Constraints;
     use crate::energy::EnergyModel;
 
-    use super::{run_rmc, RmcParams};
+    use super::{
+        metropolis_probability, run_rmc, DataKind, ExperimentalData, RmcParams, SqConvention,
+    };
 
     struct RejectingEnergyModel {
         accepted: usize,
         rejected: usize,
+        delta_evaluations: usize,
     }
 
     impl EnergyModel for RejectingEnergyModel {
@@ -1703,6 +1806,7 @@ mod tests {
             _old_cell: usize,
             _new_cell: usize,
         ) -> f64 {
+            self.delta_evaluations += 1;
             1.0e300
         }
 
@@ -1754,6 +1858,8 @@ mod tests {
             print_every: 1000,
             target_acceptance: 0.5,
             adjust_step_every: 1000,
+            delayed_acceptance: false,
+            energy_calibration_moves: 1000,
             anneal_start: 1.0,
             anneal_end: 1.0,
             anneal_steps: 0,
@@ -1765,6 +1871,7 @@ mod tests {
         let mut model = RejectingEnergyModel {
             accepted: 0,
             rejected: 0,
+            delta_evaluations: 0,
         };
 
         let state = run_rmc(
@@ -1781,5 +1888,107 @@ mod tests {
         assert_eq!(state.accepted, 0);
         assert_eq!(model.accepted, 0);
         assert_eq!(model.rejected, params.max_moves as usize);
+        assert_eq!(model.delta_evaluations, params.max_moves as usize);
+    }
+
+    #[test]
+    fn delayed_acceptance_satisfies_the_combined_detailed_balance_ratio() {
+        let temperature = 0.7;
+        for (delta_chi2, weighted_delta_energy) in
+            [(2.0, 3.0), (2.0, -3.0), (-2.0, 3.0), (-2.0, -3.0)]
+        {
+            let forward = metropolis_probability(delta_chi2, temperature)
+                * metropolis_probability(weighted_delta_energy, temperature);
+            let reverse = metropolis_probability(-delta_chi2, temperature)
+                * metropolis_probability(-weighted_delta_energy, temperature);
+            let target_ratio = (-(delta_chi2 + weighted_delta_energy) / (2.0 * temperature)).exp();
+            assert!((forward / reverse - target_ratio).abs() < 1.0e-12);
+        }
+    }
+
+    #[test]
+    fn delayed_acceptance_skips_energy_backend_after_data_rejection() {
+        let mut config = small_config();
+        let mut params = RmcParams {
+            max_moves: 0,
+            max_step: 0.5,
+            checkpoint_every: 1000,
+            seed: 1234,
+            rdf_cutoff: 4.0,
+            rdf_nbins: 256,
+            q_grid: vec![0.5, 1.0, 1.5],
+            lorch: false,
+            print_every: 1000,
+            target_acceptance: 0.5,
+            adjust_step_every: 1000,
+            delayed_acceptance: false,
+            energy_calibration_moves: 0,
+            anneal_start: 1.0e-12,
+            anneal_end: 1.0e-12,
+            anneal_steps: 0,
+            convergence_threshold: 0.0,
+            convergence_window: 1000,
+            restore_best: false,
+        };
+        let constraints = Constraints::new();
+        let probe = ExperimentalData {
+            q: vec![0.75, 1.25],
+            sq: vec![0.0, 0.0],
+            sigma: vec![1.0, 1.0],
+            weight: 1.0,
+            kind: DataKind::Xray,
+            fit_min: 0.5,
+            fit_max: 1.5,
+            convention: SqConvention::Sq,
+        };
+        let initial = run_rmc(
+            &mut config,
+            &[probe],
+            &[],
+            &constraints,
+            &params,
+            None,
+            None,
+            None,
+        );
+        let total_sq = initial
+            .total_sq
+            .expect("probe run did not return total S(Q)");
+        let exact = ExperimentalData {
+            q: vec![0.75, 1.25],
+            sq: vec![
+                0.5 * (total_sq[0] + total_sq[1]),
+                0.5 * (total_sq[1] + total_sq[2]),
+            ],
+            sigma: vec![1.0e-12, 1.0e-12],
+            weight: 1.0,
+            kind: DataKind::Xray,
+            fit_min: 0.5,
+            fit_max: 1.5,
+            convention: SqConvention::Sq,
+        };
+
+        params.max_moves = 1;
+        params.delayed_acceptance = true;
+        let mut model = RejectingEnergyModel {
+            accepted: 0,
+            rejected: 0,
+            delta_evaluations: 0,
+        };
+        let state = run_rmc(
+            &mut config,
+            &[exact],
+            &[],
+            &constraints,
+            &params,
+            Some(&mut model),
+            None,
+            None,
+        );
+
+        assert_eq!(state.accepted, 0);
+        assert_eq!(model.delta_evaluations, 0);
+        assert_eq!(model.accepted, 0);
+        assert_eq!(model.rejected, 0);
     }
 }

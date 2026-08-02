@@ -1017,6 +1017,8 @@ fn main() {
                     print_every: params.print_every,
                     target_acceptance: params.target_acceptance,
                     adjust_step_every: params.adjust_step_every,
+                    delayed_acceptance: params.delayed_acceptance,
+                    energy_calibration_moves: params.energy_calibration_moves,
                     anneal_start: params.anneal_end, // no annealing
                     anneal_end: params.anneal_end,
                     anneal_steps: 0,

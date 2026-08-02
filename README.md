@@ -9,6 +9,7 @@ A Reverse Monte Carlo (RMC) structure refinement tool written in Rust. Refines a
 - **ML-potential-regularized RMC** -- optional native SNAP, GAP/QUIP, or MACE energy regularizers
 - **Hard constraints** -- minimum interatomic distances and coordination number bounds
 - **Simulated annealing** -- exponential cooling schedule with adaptive step size
+- **Delayed acceptance** -- optionally screen proposals against experimental data before invoking GAP, MACE, SNAP, or pair potentials
 - **Structural analysis** -- coordination numbers and bond angle distributions for validation
 - **Incremental updates** -- O(N_neighbors) per move via cell lists and precomputed lookup tables
 
