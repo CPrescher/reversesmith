@@ -440,6 +440,16 @@ statistics, speedup relative to one thread, and parallel efficiency. Use
 energy-delta strategy, and use `--help` to change the system sizes, thread
 counts, precision, compilation mode, warm-up, or sample count.
 
+For a directly comparable native-SNAP atom-count sweep using the same
+diamond-Si structures, run:
+
+```bash
+cargo run --release --example snap_scaling -- \
+  --coeff /path/to/Si_Zuo_JPCA2020.snapcoeff \
+  --param /path/to/Si_Zuo_JPCA2020.snapparam \
+  --cells 3,5,6,8,10
+```
+
 ### 5. Smoke-test the binding
 
 If you have a small GAP XML test model, the feature-gated integration test can
