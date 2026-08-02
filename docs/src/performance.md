@@ -55,6 +55,43 @@ time (52.1 ms), compared with 105.3 ms for one thread. Ten and fourteen threads
 were slower. Thread scaling is therefore workload- and machine-specific rather
 than proportional to core count.
 
+## GAP/QUIP performance
+
+The GAP backend currently calculates the correct affected-atom energy sum but
+does not restrict QUIP's computational work to those atoms. Each trial invokes
+the LAMMPS-style QUIP wrapper for the complete old and new systems. The shim
+also constructs the full neighbor list with a direct atom-pair loop for each
+evaluation. Consequently, current GAP cost grows with total atom count rather
+than flattening like native SNAP or incremental MACE.
+
+The following Apple M4 Pro measurements use the published general-purpose Si
+PRX GAP (`GAP_2017_6_17_60_4_3_56_165`): a 5 A SOAP descriptor with 9,000
+sparse points plus its repulsive core potential. Times are medians of three
+rejected single-atom trials after one warm-up. The structures and displacement
+sequence match the SNAP and MACE benchmarks.
+
+| Atoms | GAP/QUIP | SNAP native | MACE incremental float32 |
+|------:|---------:|------------:|--------------------------:|
+| 216 | 1.090 s | 2.415 ms | 36.0 ms |
+| 1,000 | 5.295 s | 2.377 ms | 52.8 ms |
+| 1,728 | 9.309 s | 2.387 ms | 52.3 ms |
+| 4,096 | 22.583 s | 2.399 ms | 52.5 ms |
+| 8,000 | 44.456 s | 2.407 ms | 53.8 ms |
+
+These potentials are not equivalent in complexity or accuracy. In particular,
+the benchmark GAP has 9,000 SOAP sparse points, while the MACE result uses the
+small MACE-MP test checkpoint and the SNAP result uses the linear
+`Si_Zuo_JPCA2020` model. The table measures current rsmith backend cost on a
+common structure, not scientific model quality.
+
+The installed QUIP build showed little CPU scaling at 1,000 atoms. A longer
+repeat measured 5.456 s with one thread and 4.949 s with fourteen OpenMP
+threads: only 1.10x speedup and about 8% parallel efficiency. OpenBLAS-only
+thread changes did not help; the small gain followed `OMP_NUM_THREADS` and is
+likely in the OpenBLAS fraction because this QUIP architecture was not compiled
+with OpenMP flags. Independent RMC replicas are therefore a better way to use
+additional cores with this build.
+
 ## Scaling
 
 - **Atom count**: O(N) per move (via cell list). Wall time scales linearly with system size for fixed number of moves per atom.

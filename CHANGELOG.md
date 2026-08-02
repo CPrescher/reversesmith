@@ -2,6 +2,16 @@
 
 All notable changes to rsmith will be documented in this file.
 
+## Unreleased
+
+### Added
+- Release-mode GAP/QUIP atom-count benchmark using the same diamond-Si
+  structures and rejected single-atom trial path as the SNAP and MACE examples.
+
+### Documentation
+- Documented current GAP/QUIP whole-system evaluation scaling and published Si
+  GAP benchmark results alongside native SNAP and incremental MACE.
+
 ## [1.4.0] - 2026-08-02
 
 ### Added

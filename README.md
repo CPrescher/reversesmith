@@ -474,6 +474,25 @@ cargo run --release --example snap_scaling -- \
   --cells 3,5,6,8,10
 ```
 
+With an external QUIP build configured, benchmark GAP through the same rejected
+single-atom trial path with:
+
+```bash
+. $HOME/Software/rsmith-gap-quip/env.sh
+cargo run --release --features gap-quip --example gap_scaling -- \
+  --model /path/to/gap.xml \
+  --init-args "Potential xml_label=GAP_LABEL" \
+  --cutoff 5.0 \
+  --cells 3,5,6,8,10
+```
+
+The current GAP shim selects the correct affected per-atom energies for the
+delta, but QUIP's LAMMPS wrapper still builds a whole-system neighbor list and
+evaluates the full system twice per trial. GAP timing therefore grows with atom
+count. It also depends strongly on descriptor complexity and the number of
+sparse points, so comparisons between different GAP, SNAP, and MACE models are
+implementation benchmarks rather than accuracy rankings.
+
 ### 5. Smoke-test the binding
 
 If you have a small GAP XML test model, the feature-gated integration test can

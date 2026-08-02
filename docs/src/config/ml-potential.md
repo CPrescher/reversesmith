@@ -34,6 +34,14 @@ cutoff = 5.0
 If it is too small, local energy deltas will be wrong because some changed
 atomic environments will be missed.
 
+rsmith sums only the per-atom GAP energies whose finite-range environments can
+change. However, the current C shim uses QUIP's LAMMPS wrapper, which constructs
+a whole-system neighbor list and evaluates all atoms on both sides of every
+trial move before rsmith selects those affected energies. This preserves the
+correct local energy delta but does **not** currently give local computational
+scaling. Expect the runtime to grow with total atom count; see
+[Performance Notes](../performance.md#gapquip-performance).
+
 ## Building With QUIP
 
 The default build does not require QUIP. The `gap-quip` feature links to an
@@ -88,6 +96,20 @@ pointer and should use its own safe default for the supplied GAP XML.
 
 The backend fails at startup if GAP/QUIP support is requested but the binary was
 not built with `--features gap-quip`.
+
+To benchmark the exact GAP path used by RMC, run:
+
+```bash
+. $HOME/Software/rsmith-gap-quip/env.sh
+cargo run --release --features gap-quip --example gap_scaling -- \
+  --model /path/to/gap.xml \
+  --init-args "Potential xml_label=GAP_LABEL" \
+  --cutoff 5.0
+```
+
+The example prints CSV timing statistics for identical rejected single-atom
+moves across configurable diamond-Si supercells. The model must support Si;
+use `--help` to change sizes, warm-up count, and sample count.
 
 ## MACE/Python
 

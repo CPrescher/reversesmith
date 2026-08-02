@@ -44,7 +44,10 @@ For pair potentials, `E(atom_i) = sum_j V(r_ij)` sums over all neighbours j with
 
 For GAP/QUIP, the moved atom changes its own local energy and the local energies
 of nearby atoms whose descriptor environments include it. rsmith therefore
-computes the GAP energy delta from the affected local atomic environments.
+forms the GAP energy delta from the affected local atomic environments. The
+current QUIP shim nevertheless evaluates the complete old and new systems to
+obtain those per-atom energies, so this locality is mathematical rather than a
+runtime optimization. See [Performance Notes](./performance.md#gapquip-performance).
 
 ### Best-structure tracking
 
