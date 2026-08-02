@@ -1,0 +1,27 @@
+[system]
+structure = "ni_12x12x12.data"
+format = "lammps"
+types = { "1" = "Ni" }
+
+[data]
+[data.xray_fr]
+file = "../reference/ni-xray-r-G-sigma.dat"
+sigma_column = 3
+weight = 1.0
+fit_min = 1.7
+fit_max = 20.0
+qmax = 27.0
+lorch = false
+qdamp = 0.08
+
+[rmc]
+max_moves = 0
+seed = 20260802
+
+[sq]
+qmin = 0.01
+qmax = 27.0
+nq = 2700
+lorch = false
+rdf_cutoff = 20.0
+rdf_nbins = 2000

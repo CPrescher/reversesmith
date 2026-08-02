@@ -1,0 +1,51 @@
+# Frozen regression record from scripts/run_qmax_series.py (2026-08-02).
+# This validates rsmith's reconstruction of the published Figure 11 protocol.
+# It is not a pointwise comparison with native RMCProfile output.
+
+fit_min_angstrom = 1.5
+fit_max_angstrom = 15.0
+strictly_decreasing_rms_with_qmax = true
+qmax_30_rms_over_dynamic_range_max = 0.0035
+qmax_12_to_30_rms_ratio_min = 10.0
+
+[[case]]
+qmax_inverse_angstrom = 12.0
+rms_over_dynamic_range = 0.05890252
+max_over_dynamic_range = 0.16050436
+rms_regression_max = 0.060
+max_regression_max = 0.17
+
+[[case]]
+qmax_inverse_angstrom = 14.0
+rms_over_dynamic_range = 0.04775654
+max_over_dynamic_range = 0.13414240
+rms_regression_max = 0.049
+max_regression_max = 0.14
+
+[[case]]
+qmax_inverse_angstrom = 16.0
+rms_over_dynamic_range = 0.03725670
+max_over_dynamic_range = 0.12531146
+rms_regression_max = 0.039
+max_regression_max = 0.13
+
+[[case]]
+qmax_inverse_angstrom = 18.0
+rms_over_dynamic_range = 0.02473419
+max_over_dynamic_range = 0.07470587
+rms_regression_max = 0.026
+max_regression_max = 0.08
+
+[[case]]
+qmax_inverse_angstrom = 20.0
+rms_over_dynamic_range = 0.01371639
+max_over_dynamic_range = 0.04258520
+rms_regression_max = 0.015
+max_regression_max = 0.05
+
+[[case]]
+qmax_inverse_angstrom = 30.0
+rms_over_dynamic_range = 0.00275276
+max_over_dynamic_range = 0.01375491
+rms_regression_max = 0.0035
+max_regression_max = 0.016

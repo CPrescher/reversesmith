@@ -1,0 +1,23 @@
+status = "diagnostic_only"
+date = "2026-08-02"
+fit_min_angstrom = 1.7
+fit_max_angstrom = 20.0
+
+[single_replica]
+seed = 20260802
+rms_error_inverse_angstrom_squared = 0.2675117128
+max_absolute_error_inverse_angstrom_squared = 1.0261426460
+rms_error_over_dynamic_range = 0.0054981660
+max_absolute_error_over_dynamic_range = 0.0210903012
+
+[ten_replica_mean]
+first_seed = 20260802
+replicas = 10
+rms_error_inverse_angstrom_squared = 0.2675667551
+max_absolute_error_inverse_angstrom_squared = 1.0343438460
+rms_error_over_dynamic_range = 0.0054992973
+max_absolute_error_over_dynamic_range = 0.0212588604
+
+[interpretation]
+sampling_noise_dominates = false
+note = "Ten-replica averaging did not reduce the discrepancy, so tolerances must not be frozen. Investigate the histogram/finite-r forward model against PDFfit2's analytic peak treatment."

@@ -50,6 +50,16 @@ pub struct DatasetConfig {
     pub file: String,
     pub weight: Option<f64>,
     pub sigma: Option<f64>,
+    /// One-based column containing per-point uncertainties. Mutually exclusive
+    /// with a constant `sigma`; columns 1 and 2 are the coordinate and value.
+    pub sigma_column: Option<usize>,
+    /// Optional coherent neutron scattering lengths in fm, keyed by the
+    /// structure species. Valid only for `[data.neutron_sq]` and useful for
+    /// isotope-substitution contrasts.
+    pub scattering_lengths: Option<HashMap<String, f64>>,
+    /// Gaussian real-space resolution envelope used by PDF/PDFgui:
+    /// signal(r) *= exp[-0.5 * (qdamp * r)^2].
+    pub qdamp: Option<f64>,
     /// Linear Q-dependent scaling for sigma: sigma(Q) *= 1 + sigma_alpha * Q.
     /// At Q=0 sigma is unchanged; at Q=20 with sigma_alpha=0.05 sigma doubles.
     /// Default: 0.0 (no Q-scaling). Only applies to S(Q) datasets, ignored for g(r).
@@ -283,6 +293,108 @@ impl Config {
     }
 
     fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
+        if self
+            .system
+            .density
+            .is_some_and(|density| !density.is_finite() || density <= 0.0)
+        {
+            return Err("[system] density must be finite and greater than 0".into());
+        }
+
+        for (name, dataset) in [
+            ("data.xray_sq", self.data.xray_sq.as_ref()),
+            ("data.neutron_sq", self.data.neutron_sq.as_ref()),
+            ("data.xray_gr", self.data.xray_gr.as_ref()),
+            ("data.xray_fr", self.data.xray_fr.as_ref()),
+        ] {
+            let Some(dataset) = dataset else { continue };
+            if dataset.sigma.is_some() && dataset.sigma_column.is_some() {
+                return Err(
+                    format!("[{name}] sigma and sigma_column are mutually exclusive").into(),
+                );
+            }
+            if name != "data.neutron_sq" && dataset.scattering_lengths.is_some() {
+                return Err(format!(
+                    "[{name}] scattering_lengths is only valid for [data.neutron_sq]"
+                )
+                .into());
+            }
+            if !matches!(name, "data.xray_gr" | "data.xray_fr") && dataset.qdamp.is_some() {
+                return Err(
+                    format!("[{name}] qdamp is only valid for real-space PDF datasets").into(),
+                );
+            }
+            if dataset
+                .qdamp
+                .is_some_and(|qdamp| !qdamp.is_finite() || qdamp < 0.0)
+            {
+                return Err(format!("[{name}] qdamp must be finite and non-negative").into());
+            }
+            if let Some(lengths) = &dataset.scattering_lengths {
+                if lengths.values().any(|length| !length.is_finite()) {
+                    return Err(format!(
+                        "[{name}] scattering lengths must contain only finite values"
+                    )
+                    .into());
+                }
+            }
+            if dataset
+                .sigma
+                .is_some_and(|sigma| !sigma.is_finite() || sigma <= 0.0)
+            {
+                return Err(format!("[{name}] sigma must be finite and greater than 0").into());
+            }
+            if dataset.sigma_column.is_some_and(|column| column < 3) {
+                return Err(format!("[{name}] sigma_column must be 3 or greater").into());
+            }
+            if dataset
+                .weight
+                .is_some_and(|weight| !weight.is_finite() || weight < 0.0)
+            {
+                return Err(format!("[{name}] weight must be finite and non-negative").into());
+            }
+            if dataset
+                .sigma_alpha
+                .is_some_and(|alpha| !alpha.is_finite() || alpha < 0.0)
+            {
+                return Err(format!("[{name}] sigma_alpha must be finite and non-negative").into());
+            }
+            if dataset.fit_min.is_some_and(|v| !v.is_finite())
+                || dataset.fit_max.is_some_and(|v| !v.is_finite())
+            {
+                return Err(format!("[{name}] fit bounds must be finite").into());
+            }
+            if let (Some(min), Some(max)) = (dataset.fit_min, dataset.fit_max) {
+                if min >= max {
+                    return Err(format!("[{name}] fit_min must be less than fit_max").into());
+                }
+            }
+        }
+
+        if let Some(sq) = &self.sq {
+            let qmin = sq.qmin.unwrap_or(0.3);
+            let qmax = sq.qmax.unwrap_or(20.0);
+            let nq = sq.nq.unwrap_or(500);
+            if !qmin.is_finite() || qmin < 0.0 {
+                return Err("[sq] qmin must be finite and non-negative".into());
+            }
+            if !qmax.is_finite() || qmax <= qmin {
+                return Err("[sq] qmax must be finite and greater than qmin".into());
+            }
+            if nq < 2 {
+                return Err("[sq] nq must be at least 2".into());
+            }
+            if sq
+                .rdf_cutoff
+                .is_some_and(|cutoff| !cutoff.is_finite() || cutoff <= 0.0)
+            {
+                return Err("[sq] rdf_cutoff must be finite and greater than 0".into());
+            }
+            if sq.rdf_nbins == Some(0) {
+                return Err("[sq] rdf_nbins must be greater than 0".into());
+            }
+        }
+
         if self.potential.is_some() && self.ml_potential.is_some() {
             return Err(
                 "[potential] and [ml_potential] cannot be used together in v1; choose one energy regularizer"

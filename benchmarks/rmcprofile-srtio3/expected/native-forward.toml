@@ -1,0 +1,23 @@
+# Frozen regression record from the native RMCProfile7b.35 comparison
+# (2026-08-02). These are post-result engineering regression limits.
+
+fq_rms_over_dynamic_range_max = 0.012
+fq_max_over_dynamic_range_max = 0.055
+total_gr_rebinned_rms_over_dynamic_range_max = 0.027
+total_gr_rebinned_max_over_dynamic_range_max = 0.15
+partial_gr_rebinned_rms_over_dynamic_range_max = 0.05
+partial_gr_rebinned_max_over_dynamic_range_max = 0.35
+
+[observed]
+fq_rms_over_dynamic_range = 0.010304181525862799
+fq_max_over_dynamic_range = 0.049851123628190525
+total_gr_rebinned_rms_over_dynamic_range = 0.024112025812007613
+total_gr_rebinned_max_over_dynamic_range = 0.1386515882852474
+
+[observed.partial_gr_rebinned_rms_over_dynamic_range]
+O_O = 0.02139969242287732
+O_Ti = 0.021963328417135917
+O_Sr = 0.04858576049369269
+Ti_Ti = 0.04309565985903598
+Ti_Sr = 0.0005572030377467674
+Sr_Sr = 0.04309565985903598

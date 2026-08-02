@@ -9,6 +9,7 @@ Each dataset is a two-column whitespace-separated file. Lines starting with `#` 
 file = "experimental.sq"    # Two columns: Q (1/A), S(Q)
 weight = 1.0                # Relative weight in total chi2 (default: 1.0)
 sigma = 0.02                # Uncertainty in S(Q) units (omit to auto-estimate from data)
+# sigma_column = 3          # Or read a per-point uncertainty from this 1-based column
 sigma_alpha = 0.05          # Linear Q-scaling: sigma *= 1 + alpha*Q (default: 0)
 fit_min = 0.5               # Only fit Q > fit_min (default: 0, fit all)
 fit_max = 18.0              # Only fit Q < fit_max (default: inf, fit all)
@@ -25,6 +26,7 @@ file = "neutron.sq"
 weight = 1.0
 sigma = 0.02
 sigma_alpha = 0.05
+scattering_lengths = { Ge = 10.0, O = 5.803 } # fm; optional isotope contrast
 ```
 
 Both X-ray and neutron S(Q) can be fitted simultaneously.
@@ -40,6 +42,7 @@ fit_min = 0.0               # Only fit r > fit_min (default: 0)
 fit_max = 7.0               # Only fit r < fit_max (default: inf)
 qmax = 17.97                # Q_max for inverse FT (default: experimental S(Q) Qmax)
 lorch = true                # Apply Lorch window in Q-space (default: true)
+qdamp = 0.04                # Gaussian PDF resolution damping in 1/A (default: 0)
 ```
 
 ## `[data.xray_fr]` -- X-ray Reduced Pair Distribution Function
@@ -72,17 +75,25 @@ lorch = true                # Apply Lorch window in Q-space (default: true)
 | `file` | String | Required | Path to data file (relative to config) |
 | `weight` | Float | 1.0 | Relative weight in total chi2 |
 | `sigma` | Float | auto | Per-point uncertainty in absolute units (same units as S(Q) or g(r)). If omitted, estimated from data noise using windowed second finite differences |
+| `sigma_column` | Integer | none | One-based column containing a positive per-point uncertainty (3 or greater). Mutually exclusive with `sigma` |
 | `sigma_alpha` | Float | 0.0 | Linear Q-scaling factor alpha: `sigma(Q) *= 1 + alpha * Q`. Only applies to S(Q) datasets |
 | `fit_min` | Float | 0.0 | Lower bound of fitting range |
 | `fit_max` | Float | inf | Upper bound of fitting range |
 | `qmax` | Float | auto | Q_max for g(r) inverse FT (g(r) only) |
 | `lorch` | Bool | true | Lorch window in Q-space (g(r) only) |
+| `qdamp` | Float | 0.0 | PDF resolution envelope in 1/A: the real-space signal is multiplied by `exp[-0.5*(qdamp*r)^2]`. Valid for `xray_gr` and `xray_fr` |
 | `convention` | String | `"sq"` | Reciprocal-space input convention: `"sq"` for S(Q), `"iq"` for S(Q)-1, or `"fq"` for Q[S(Q)-1] |
+| `scattering_lengths` | Table | natural elements | Coherent neutron scattering lengths in fm, keyed by structure species. Valid only for `neutron_sq`; unspecified species use built-in natural-element values |
 
 `convention` applies to X-ray and neutron reciprocal-space datasets. It lets
 `rsmith` transform its calculated Faber-Ziman S(Q) before evaluating the residual,
 so the experimental file does not need to be pre-converted. It is ignored for
 real-space datasets.
+
+For isotope-substitution measurements, define `scattering_lengths` separately
+for the neutron dataset. Values are effective coherent scattering lengths for
+that sample, in fm. Every key must match a species in the loaded structure;
+species omitted from the table use the natural-element value.
 
 ## Sigma estimation
 
@@ -92,7 +103,14 @@ Sigma is in **absolute units** -- the same units as the data it applies to (dime
 chi2 += (S_calc(Q) - S_exp(Q))^2 / sigma(Q)^2
 ```
 
-When `sigma` is omitted, rsmith estimates per-point uncertainties directly from the data using windowed second finite differences. The second difference `d2[i] = y[i+1] - 2y[i] + y[i-1]` removes the smooth signal and isolates noise. The local RMS of d2 in a sliding window, scaled by 1/sqrt(6), gives the noise estimate at each point.
+When `sigma_column` is set, rsmith reads one positive uncertainty for each data
+point from that column. This is preferred for quantitative comparisons when the
+experimental reduction provides uncertainties. If neither `sigma` nor
+`sigma_column` is given, rsmith estimates per-point uncertainties directly from
+the data using windowed second finite differences. The second difference `d2[i]
+= y[i+1] - 2y[i] + y[i-1]` removes the smooth signal and isolates noise. The
+local RMS of d2 in a sliding window, scaled by 1/sqrt(6), gives the noise estimate
+at each point.
 
 This automatically produces larger sigma where the data is noisy (typically at high Q) and smaller sigma where it is smooth.
 

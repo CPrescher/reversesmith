@@ -89,6 +89,9 @@ pub struct ExperimentalData {
     pub sigma: Vec<f64>,
     pub weight: f64,
     pub kind: DataKind,
+    /// Coherent neutron scattering lengths in species order. `None` uses the
+    /// natural-element defaults and is required for X-ray data.
+    pub neutron_scattering_lengths: Option<Vec<f64>>,
     pub fit_min: f64,
     pub fit_max: f64,
     /// Data convention: determines how computed S(Q) is transformed before comparison.
@@ -143,6 +146,8 @@ pub struct ExperimentalGrData {
     pub qmax: f64,
     /// Apply Lorch modification W(Q) = sin(πQ/Qmax)/(πQ/Qmax) in inverse FT.
     pub lorch: bool,
+    /// Gaussian PDF resolution damping in inverse angstroms.
+    pub qdamp: f64,
     /// Baseline after inverse FT: 1.0 for g(r), 0.0 for f(r).
     pub baseline: f64,
 }
@@ -207,6 +212,59 @@ impl Default for RmcParams {
 }
 
 pub type StatusCallback = Box<dyn Fn(u64, u64, f64, f64, f64)>;
+
+/// Validate numerical grids against an already-loaded, possibly density-scaled
+/// periodic configuration.
+pub fn validate_rmc_geometry(config: &Configuration, params: &RmcParams) -> Result<(), String> {
+    if config.atoms.is_empty() {
+        return Err("the structure contains no atoms".to_string());
+    }
+    for (axis, length) in ["x", "y", "z"].into_iter().zip(config.box_lengths) {
+        if !length.is_finite() || length <= 0.0 {
+            return Err(format!(
+                "the {axis} box length must be finite and greater than 0 (got {length})"
+            ));
+        }
+    }
+    if !params.rdf_cutoff.is_finite() || params.rdf_cutoff <= 0.0 {
+        return Err("rdf_cutoff must be finite and greater than 0".to_string());
+    }
+    if params.rdf_nbins == 0 {
+        return Err("rdf_nbins must be greater than 0".to_string());
+    }
+    let half_shortest_box = 0.5
+        * config
+            .box_lengths
+            .iter()
+            .copied()
+            .fold(f64::INFINITY, f64::min);
+    if params.rdf_cutoff > half_shortest_box + 1e-12 {
+        return Err(format!(
+            "rdf_cutoff ({:.6} A) exceeds half the shortest periodic box length ({:.6} A); reduce the cutoff or use a larger supercell",
+            params.rdf_cutoff, half_shortest_box
+        ));
+    }
+    if params.q_grid.len() < 2 {
+        return Err("the Q grid must contain at least 2 points".to_string());
+    }
+    for (index, q) in params.q_grid.iter().copied().enumerate() {
+        if !q.is_finite() || q < 0.0 {
+            return Err(format!("Q-grid value {} is invalid: {}", index + 1, q));
+        }
+        if index > 0 && q <= params.q_grid[index - 1] {
+            return Err("Q-grid values must be strictly increasing".to_string());
+        }
+    }
+    Ok(())
+}
+
+/// PDFgui-compatible Gaussian damping envelope for finite instrumental Q
+/// resolution.
+#[inline]
+pub fn pdf_resolution_envelope(qdamp: f64, r: f64) -> f64 {
+    let qr = qdamp * r;
+    (-0.5 * qr * qr).exp()
+}
 
 /// Compute histogram delta from a single atom move in one pass.
 /// For each neighbor: compute old and new distances, subtract old bin, add new bin.
@@ -594,7 +652,7 @@ pub fn run_rmc(
         .collect();
 
     let n_exp = experiments.len();
-    let mut exp_w: Vec<Vec<f64>> = Vec::with_capacity(n_exp);
+    let mut exp_w: Vec<Vec<f64>> = Vec::with_capacity(n_exp.max(1));
 
     for exp in experiments.iter() {
         let mut w = vec![0.0f64; n_pairs * nq];
@@ -618,13 +676,24 @@ pub fn run_rmc(
                 }
             }
             DataKind::Neutron => {
-                let b: Vec<f64> = config
-                    .species
-                    .iter()
-                    .map(|s| neutron_scattering_length(s))
-                    .collect();
+                let b: Vec<f64> = exp.neutron_scattering_lengths.clone().unwrap_or_else(|| {
+                    config
+                        .species
+                        .iter()
+                        .map(|s| neutron_scattering_length(s))
+                        .collect()
+                });
+                assert_eq!(
+                    b.len(),
+                    n_types,
+                    "one neutron scattering length per species"
+                );
                 let b_avg: f64 = (0..n_types).map(|a| conc[a] * b[a]).sum();
                 let b_avg_sq = b_avg * b_avg;
+                assert!(
+                    b_avg_sq > 1e-30,
+                    "the concentration-weighted mean neutron scattering length is zero"
+                );
                 for a in 0..n_types {
                     for b_idx in a..n_types {
                         let pair_idx = config.pair_index(a, b_idx);
@@ -639,6 +708,30 @@ pub fn run_rmc(
         }
         exp_w.push(w);
     }
+
+    // Real-space X-ray PDF data can be refined without also supplying S(Q).
+    // In that case, create the X-ray weight set needed for the inverse transform.
+    if exp_w.is_empty() && has_gr_data(gr_data) {
+        let mut w = vec![0.0f64; n_pairs * nq];
+        for k in 0..nq {
+            let f_avg: f64 = (0..n_types).map(|a| conc[a] * form_factors[a][k]).sum();
+            let f_avg_sq = f_avg * f_avg;
+            if f_avg_sq < 1e-30 {
+                continue;
+            }
+            for a in 0..n_types {
+                for b in a..n_types {
+                    let pair_idx = config.pair_index(a, b);
+                    let dab = if a == b { 1.0 } else { 2.0 };
+                    w[pair_idx * nq + k] =
+                        dab * conc[a] * conc[b] * form_factors[a][k] * form_factors[b][k]
+                            / f_avg_sq;
+                }
+            }
+        }
+        exp_w.push(w);
+    }
+    let n_weight_sets = exp_w.len();
 
     // Precompute experimental interpolation indices
     let mut exp_interp: Vec<Vec<(usize, f64, usize)>> = Vec::new(); // (lo, t, exp_idx)
@@ -706,7 +799,7 @@ pub fn run_rmc(
     }
 
     // Compute initial per-experiment total S(Q) and chi2
-    let mut exp_total_sq: Vec<Vec<f64>> = (0..n_exp)
+    let mut exp_total_sq: Vec<Vec<f64>> = (0..n_weight_sets)
         .map(|ei| {
             let mut tsq = vec![0.0f64; nq];
             for k in 0..nq {
@@ -793,7 +886,7 @@ pub fn run_rmc(
         // Per-r prefactors:
         //   g(r): dq / (2π²ρ₀r_i) — per-r, density-dependent
         //   f(r): 2*dq / π — constant, density-independent
-        let r_prefactors: Vec<f64> = if gd.baseline == 1.0 {
+        let mut r_prefactors: Vec<f64> = if gd.baseline == 1.0 {
             fit_indices
                 .iter()
                 .map(|&orig_i| {
@@ -808,6 +901,11 @@ pub fn run_rmc(
         } else {
             vec![2.0 * dq / PI; fit_indices.len()]
         };
+        if gd.qdamp > 0.0 {
+            for (prefactor, &orig_i) in r_prefactors.iter_mut().zip(fit_indices.iter()) {
+                *prefactor *= pdf_resolution_envelope(gd.qdamp, gd.r[orig_i]);
+            }
+        }
 
         // Fit-range r-grid (must be uniformly spaced for CZT)
         let r_fit: Vec<f64> = fit_indices.iter().map(|&i| gd.r[i]).collect();
@@ -917,7 +1015,8 @@ pub fn run_rmc(
 
     // Scratch buffers for incremental updates
     let mut delta_partial_sq = vec![0.0f64; n_pairs * nq];
-    let mut exp_new_total_sq: Vec<Vec<f64>> = (0..n_exp).map(|_| vec![0.0f64; nq]).collect();
+    let mut exp_new_total_sq: Vec<Vec<f64>> =
+        (0..n_weight_sets).map(|_| vec![0.0f64; nq]).collect();
     let mut hist_delta_buf = vec![0.0f64; n_pairs * nbins];
     let mut delta_sq_buf = vec![0.0f64; nq];
 
@@ -1151,9 +1250,9 @@ pub fn run_rmc(
             }
         }
 
-        // Compute per-experiment new total S(Q) and chi2
-        let mut new_sq_chi2 = 0.0;
-        for (ei, exp) in experiments.iter().enumerate() {
+        // Compute all weighted total S(Q) curves, including the synthetic
+        // X-ray weight set used for real-space-only fits.
+        for ei in 0..n_weight_sets {
             for k in 0..nq {
                 let mut s = 0.0;
                 for p in 0..n_pairs {
@@ -1162,6 +1261,11 @@ pub fn run_rmc(
                 }
                 exp_new_total_sq[ei][k] = s;
             }
+        }
+
+        // Compute reciprocal-space chi2 for actual experimental datasets.
+        let mut new_sq_chi2 = 0.0;
+        for (ei, exp) in experiments.iter().enumerate() {
             let conv = exp.convention;
             let mut chi2 = 0.0;
             for &(lo, t, i) in &exp_interp[ei] {
@@ -1312,7 +1416,7 @@ pub fn run_rmc(
             for i in 0..n_pairs * nq {
                 partial_sq[i] += delta_partial_sq[i];
             }
-            for ei in 0..n_exp {
+            for ei in 0..n_weight_sets {
                 exp_total_sq[ei].copy_from_slice(&exp_new_total_sq[ei]);
             }
             // Commit g(r) updates
@@ -1503,7 +1607,7 @@ pub fn run_rmc(
                 partial_sq[sq_base + k] = 1.0 + prefactor_sq * partial_sq[sq_base + k] * inv_q[k];
             }
         }
-        for ei in 0..n_exp {
+        for ei in 0..n_weight_sets {
             for k in 0..nq {
                 let mut s = 0.0;
                 for p in 0..n_pairs {
@@ -1543,6 +1647,11 @@ pub fn run_rmc(
     };
 
     state
+}
+
+#[inline]
+fn has_gr_data(gr_data: &[ExperimentalGrData]) -> bool {
+    !gr_data.is_empty()
 }
 
 /// Run energy-only Metropolis Monte Carlo (pure EPSR mode).
@@ -1764,13 +1873,19 @@ pub fn run_energy_mc(
 mod tests {
     use std::collections::HashMap;
 
+    use rand::rngs::StdRng;
+    use rand::{Rng, SeedableRng};
+
     use crate::atoms::{Atom, Configuration};
     use crate::cells::CellList;
     use crate::constraints::Constraints;
     use crate::energy::EnergyModel;
+    use crate::rdf::compute_histograms;
 
     use super::{
-        metropolis_probability, run_rmc, DataKind, ExperimentalData, RmcParams, SqConvention,
+        atom_histogram_delta, metropolis_probability, pdf_resolution_envelope, run_rmc,
+        validate_rmc_geometry, DataKind, ExperimentalData, ExperimentalGrData, RmcParams,
+        SqConvention,
     };
 
     struct RejectingEnergyModel {
@@ -1841,6 +1956,61 @@ mod tests {
             species: vec!["Si".to_string(), "O".to_string()],
             composition,
         }
+    }
+
+    #[test]
+    fn geometry_validation_enforces_minimum_image_cutoff() {
+        let config = small_config();
+        let mut params = RmcParams::default();
+        params.rdf_cutoff = 5.0;
+        assert!(validate_rmc_geometry(&config, &params).is_ok());
+
+        params.rdf_cutoff = 5.0001;
+        let error = validate_rmc_geometry(&config, &params).unwrap_err();
+        assert!(error.contains("half the shortest periodic box length"));
+    }
+
+    #[test]
+    fn pdf_resolution_envelope_matches_pdfgui_qdamp_definition() {
+        assert_eq!(pdf_resolution_envelope(0.0, 50.0), 1.0);
+        let expected = (-0.5_f64).exp();
+        assert!((pdf_resolution_envelope(0.1, 10.0) - expected).abs() < 1e-15);
+    }
+
+    #[test]
+    fn real_space_only_xray_dataset_initializes_without_sq_data() {
+        let mut config = small_config();
+        let mut params = RmcParams::default();
+        params.max_moves = 0;
+        params.rdf_cutoff = 4.0;
+        params.rdf_nbins = 128;
+        params.q_grid = vec![0.5, 1.0, 1.5, 2.0];
+        params.lorch = false;
+        params.restore_best = false;
+        let pdf = ExperimentalGrData {
+            r: vec![0.5, 1.0, 1.5],
+            gr: vec![0.0, 0.0, 0.0],
+            sigma: vec![1.0, 1.0, 1.0],
+            weight: 1.0,
+            fit_min: 0.5,
+            fit_max: 1.5,
+            qmax: 2.0,
+            lorch: false,
+            qdamp: 0.04,
+            baseline: 0.0,
+        };
+
+        let state = run_rmc(
+            &mut config,
+            &[],
+            &[pdf],
+            &Constraints::new(),
+            &params,
+            None,
+            None,
+            None,
+        );
+        assert!(state.chi2.is_finite());
     }
 
     #[test]
@@ -1937,6 +2107,7 @@ mod tests {
             sigma: vec![1.0, 1.0],
             weight: 1.0,
             kind: DataKind::Xray,
+            neutron_scattering_lengths: None,
             fit_min: 0.5,
             fit_max: 1.5,
             convention: SqConvention::Sq,
@@ -1963,6 +2134,7 @@ mod tests {
             sigma: vec![1.0e-12, 1.0e-12],
             weight: 1.0,
             kind: DataKind::Xray,
+            neutron_scattering_lengths: None,
             fit_min: 0.5,
             fit_max: 1.5,
             convention: SqConvention::Sq,
@@ -1990,5 +2162,114 @@ mod tests {
         assert_eq!(model.delta_evaluations, 0);
         assert_eq!(model.accepted, 0);
         assert_eq!(model.rejected, 0);
+    }
+
+    fn histogram_drift_config() -> Configuration {
+        let mut atoms = Vec::new();
+        let mut si = 0;
+        let mut oxygen = 0;
+        for iz in 0..3 {
+            for iy in 0..3 {
+                for ix in 0..3 {
+                    let type_id = (ix + iy + iz) % 2;
+                    let species = if type_id == 0 {
+                        si += 1;
+                        "Si"
+                    } else {
+                        oxygen += 1;
+                        "O"
+                    };
+                    atoms.push(Atom {
+                        position: [
+                            1.5 + ix as f64 * 3.0,
+                            1.5 + iy as f64 * 3.0,
+                            1.5 + iz as f64 * 3.0,
+                        ],
+                        species: species.to_string(),
+                        type_id,
+                    });
+                }
+            }
+        }
+        Configuration {
+            atoms,
+            box_lengths: [10.0, 10.0, 10.0],
+            species: vec!["Si".to_string(), "O".to_string()],
+            composition: HashMap::from([("Si".to_string(), si), ("O".to_string(), oxygen)]),
+        }
+    }
+
+    fn flattened_histograms(config: &Configuration, nbins: usize, cutoff: f64) -> Vec<f64> {
+        let map = compute_histograms(config, nbins, cutoff);
+        let mut flat = vec![0.0; config.num_type_pairs() * nbins];
+        for pair in 0..config.num_type_pairs() {
+            flat[pair * nbins..(pair + 1) * nbins].copy_from_slice(&map[&pair]);
+        }
+        flat
+    }
+
+    fn cell_for_position(cell_list: &CellList, position: &[f64; 3]) -> usize {
+        let cell: [usize; 3] = std::array::from_fn(|axis| {
+            ((position[axis] / cell_list.box_lengths[axis]).fract() * cell_list.nc[axis] as f64)
+                .floor() as usize
+        });
+        cell[2] * cell_list.nc[0] * cell_list.nc[1] + cell[1] * cell_list.nc[0] + cell[0]
+    }
+
+    #[test]
+    fn incremental_histograms_do_not_drift_over_long_move_sequences() {
+        let mut config = histogram_drift_config();
+        let nbins = 96;
+        let cutoff = 3.2;
+        let dr = cutoff / nbins as f64;
+        let cutoff2 = cutoff * cutoff;
+        let n_species = config.species.len();
+        let positions: Vec<[f64; 3]> = config.atoms.iter().map(|atom| atom.position).collect();
+        let mut cell_list = CellList::new(&positions, &config.box_lengths, cutoff);
+        let mut incremental = flattened_histograms(&config, nbins, cutoff);
+        let mut delta = vec![0.0; incremental.len()];
+        let mut rng = StdRng::seed_from_u64(0x5CA7_7E12);
+
+        for step in 0..5_000 {
+            let atom_idx = rng.gen_range(0..config.atoms.len());
+            let old_pos = config.atoms[atom_idx].position;
+            let mut new_pos = old_pos;
+            for axis in 0..3 {
+                new_pos[axis] += rng.gen_range(-0.12..0.12);
+                new_pos[axis] = new_pos[axis].rem_euclid(config.box_lengths[axis]);
+            }
+
+            let old_cell = cell_list.cell_of[atom_idx];
+            let new_cell = cell_for_position(&cell_list, &new_pos);
+            delta.fill(0.0);
+            atom_histogram_delta(
+                &config,
+                atom_idx,
+                &old_pos,
+                &new_pos,
+                nbins,
+                cutoff2,
+                1.0 / dr,
+                n_species,
+                &mut delta,
+                &cell_list,
+                old_cell,
+                new_cell,
+            );
+            for (value, change) in incremental.iter_mut().zip(&delta) {
+                *value += change;
+            }
+            config.atoms[atom_idx].position = new_pos;
+            cell_list.move_atom(atom_idx, &new_pos);
+
+            if step % 25 == 24 {
+                assert_eq!(
+                    incremental,
+                    flattened_histograms(&config, nbins, cutoff),
+                    "incremental histogram drift after {} accepted moves",
+                    step + 1
+                );
+            }
+        }
     }
 }

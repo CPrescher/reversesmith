@@ -1,0 +1,38 @@
+id = "pdfgui-ni"
+status = "forward_convergence_validated"
+reference_program = "PDFgui / PDFfit2"
+reference_repository = "https://github.com/diffpy/cmi_exchange"
+reference_commit = "b76dda7dd899b0a391009225d11cf5651295e887"
+observable = "X-ray G(r)"
+fit_min_angstrom = 1.7
+fit_max_angstrom = 20.0
+qmax_inverse_angstrom = 27.0
+supercell_repetitions = 12
+atom_count = 6912
+lattice_angstrom = 3.52
+uiso_square_angstrom = 0.00126651
+qdamp_inverse_angstrom = 0.08
+structure_seed = 20260802
+refinement_moves = 0
+tolerances_frozen = true
+tolerance_provenance = "post-result engineering regression envelope"
+rms_over_dynamic_range_max = 0.006
+max_over_dynamic_range_max = 0.022
+
+[pdfgui_structure]
+repository = "https://github.com/diffpy/diffpy.pdfgui"
+commit = "9496a699c130efaa9ce620c29e7fe95b88fcad6f"
+path = "tests/testdata/Ni.stru"
+
+[reference_files]
+"ni.cif" = "ee4d128747da0e0ab8cb0deca8170d9f39d612f5756a08007348d1d96f31b1b3"
+"ni-q27r60-xray.gr" = "87c484a36e2a6f987381b586fb7e124139830a897c2b7d4c7c7857c7128e93f2"
+"Ni.stru" = "fd5a6ef34f723e6d06c6edccd4fd48344972de87f08adcccb97ad6a0d9ca29ab"
+
+[convergence]
+replicas = 3
+first_seed = 20260802
+box_cells = [12, 14, 16]
+rdf_dr_angstrom = [0.02, 0.01, 0.005]
+nominal_dq_inverse_angstrom = [0.019992592592592593, 0.009996296296296297, 0.004998148148148148]
+record = "expected/convergence.toml"

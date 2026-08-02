@@ -1,0 +1,8 @@
+id = "hp-geo2"
+status = "design_complete_inputs_pending"
+methods = ["RMC", "EPSR_or_Dissolve", "pair_HRMC", "MLIP_HRMC"]
+replicas_per_method_pressure = 10
+requires_isotope_contrasts = true
+requires_held_out_validation = true
+requires_mlip_domain_audit = true
+tolerances_frozen = false

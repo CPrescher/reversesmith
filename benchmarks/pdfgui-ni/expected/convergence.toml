@@ -1,0 +1,66 @@
+# Frozen regression record from scripts/run_convergence.py (2026-08-02).
+# These bounds were selected after inspecting the convergence study. They are
+# engineering regression limits, not preregistered hypothesis-test thresholds.
+
+replicas = 3
+first_seed = 20260802
+fit_min_angstrom = 1.7
+fit_max_angstrom = 20.0
+rms_over_dynamic_range_max = 0.006
+max_over_dynamic_range_max = 0.022
+
+[[case]]
+id = "base"
+atom_count = 6912
+rdf_dr_angstrom = 0.01
+nominal_dq_inverse_angstrom = 0.009996296296296297
+rms_over_dynamic_range = 0.005492940283037869
+max_over_dynamic_range = 0.021251152368466236
+
+[[case]]
+id = "box-14"
+atom_count = 10976
+rdf_dr_angstrom = 0.01
+nominal_dq_inverse_angstrom = 0.009996296296296297
+rms_over_dynamic_range = 0.005490370847867827
+max_over_dynamic_range = 0.021261905008594935
+
+[[case]]
+id = "box-16"
+atom_count = 16384
+rdf_dr_angstrom = 0.01
+nominal_dq_inverse_angstrom = 0.009996296296296297
+rms_over_dynamic_range = 0.005502572973191939
+max_over_dynamic_range = 0.021287373590741104
+
+[[case]]
+id = "dr-0.020"
+atom_count = 6912
+rdf_dr_angstrom = 0.02
+nominal_dq_inverse_angstrom = 0.009996296296296297
+rms_over_dynamic_range = 0.005798154738229173
+max_over_dynamic_range = 0.02120359617130171
+
+[[case]]
+id = "dr-0.005"
+atom_count = 6912
+rdf_dr_angstrom = 0.005
+nominal_dq_inverse_angstrom = 0.009996296296296297
+rms_over_dynamic_range = 0.005497839609170032
+max_over_dynamic_range = 0.02131031758041361
+
+[[case]]
+id = "dq-0.020"
+atom_count = 6912
+rdf_dr_angstrom = 0.01
+nominal_dq_inverse_angstrom = 0.019992592592592593
+rms_over_dynamic_range = 0.005367805375453261
+max_over_dynamic_range = 0.021313510145115743
+
+[[case]]
+id = "dq-0.005"
+atom_count = 6912
+rdf_dr_angstrom = 0.01
+nominal_dq_inverse_angstrom = 0.004998148148148148
+rms_over_dynamic_range = 0.00555030068569796
+max_over_dynamic_range = 0.021223563402682066

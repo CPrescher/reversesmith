@@ -145,3 +145,50 @@ impl CztSineTransform {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::CztSineTransform;
+
+    fn compare_with_direct(q: &[f64], r: &[f64], input: &[f64]) {
+        let mut czt = CztSineTransform::new(q, r);
+        let mut actual = vec![0.0; q.len()];
+        czt.transform(input, &mut actual);
+
+        for (k, &qk) in q.iter().enumerate() {
+            let expected: f64 = input
+                .iter()
+                .zip(r)
+                .map(|(&value, &ri)| value * (qk * ri).sin())
+                .sum();
+            let scale = expected.abs().max(1.0);
+            assert!(
+                (actual[k] - expected).abs() < 2.0e-12 * scale,
+                "CZT mismatch at k={k}: actual={}, expected={expected}",
+                actual[k]
+            );
+        }
+    }
+
+    #[test]
+    fn czt_matches_direct_summation_on_bin_centres() {
+        let r: Vec<f64> = (0..37).map(|i| (i as f64 + 0.5) * 0.037).collect();
+        let q: Vec<f64> = (0..29).map(|k| 0.3 + k as f64 * 0.113).collect();
+        let input: Vec<f64> = (0..r.len())
+            .map(|i| ((i * 17 % 23) as f64 - 11.0) / 7.0)
+            .collect();
+        compare_with_direct(&q, &r, &input);
+    }
+
+    #[test]
+    fn czt_matches_direct_summation_for_non_bin_centred_grid() {
+        let r: Vec<f64> = (0..31).map(|i| 0.173 + i as f64 * 0.041).collect();
+        let q: Vec<f64> = (0..41).map(|k| 0.217 + k as f64 * 0.079).collect();
+        let input: Vec<f64> = r
+            .iter()
+            .enumerate()
+            .map(|(i, &ri)| (1.7 * ri).cos() + i as f64 * 0.003)
+            .collect();
+        compare_with_direct(&q, &r, &input);
+    }
+}

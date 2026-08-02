@@ -3,6 +3,8 @@
 
 # Local Python environments
 .venv/
+__pycache__/
+*.pyc
 
 # Local benchmark/profile sandboxes
 benchmark_sio2/

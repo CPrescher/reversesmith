@@ -228,6 +228,89 @@ weigth = 1.0
 }
 
 #[test]
+fn per_point_sigma_column_is_validated() {
+    let valid = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+[data.xray_sq]
+file = "test.sq"
+sigma_column = 3
+
+[rmc]
+"#;
+    load_toml(valid).expect("third-column uncertainties should be accepted");
+
+    let conflicting = valid.replace("sigma_column = 3", "sigma_column = 3\nsigma = 0.02");
+    let err = load_toml(&conflicting).unwrap_err();
+    assert!(
+        err.contains("mutually exclusive"),
+        "unexpected error: {err}"
+    );
+
+    let invalid_column = valid.replace("sigma_column = 3", "sigma_column = 2");
+    let err = load_toml(&invalid_column).unwrap_err();
+    assert!(
+        err.contains("must be 3 or greater"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn neutron_scattering_length_overrides_are_neutron_only() {
+    let valid = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+[data.neutron_sq]
+file = "test.sq"
+scattering_lengths = { Ge = 10.0, O = 5.803 }
+
+[rmc]
+"#;
+    load_toml(valid).expect("isotope contrast should be accepted for neutron data");
+
+    let invalid = valid.replace("data.neutron_sq", "data.xray_sq");
+    let err = load_toml(&invalid).unwrap_err();
+    assert!(
+        err.contains("only valid for [data.neutron_sq]"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn invalid_sq_grid_is_rejected() {
+    for settings in [
+        "qmin = 20.0\nqmax = 10.0",
+        "nq = 1",
+        "rdf_cutoff = 0.0",
+        "rdf_nbins = 0",
+    ] {
+        let toml = format!(
+            r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+[rmc]
+
+[sq]
+{settings}
+"#
+        );
+        assert!(
+            load_toml(&toml).is_err(),
+            "invalid [sq] settings should fail: {settings}"
+        );
+    }
+}
+
+#[test]
 fn unknown_top_level_section() {
     let toml = r#"
 [system]

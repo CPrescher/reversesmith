@@ -413,15 +413,117 @@ pub fn write_poscar(path: &Path, config: &Configuration, comment: &str) -> io::R
     Ok(())
 }
 
-/// Read two-column Q, S(Q) experimental data (whitespace-separated, # comments).
+/// Read coordinate, value, and optional uncertainty columns.
+///
+/// `sigma_column` is one-based to match how columns are described in data-file
+/// documentation. Non-empty, non-comment rows are parsed strictly so malformed
+/// benchmark input cannot be silently discarded.
+pub fn read_data_columns(
+    path: &Path,
+    sigma_column: Option<usize>,
+) -> io::Result<(Vec<f64>, Vec<f64>, Option<Vec<f64>>)> {
+    if sigma_column.is_some_and(|column| column < 3) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "sigma column must be 3 or greater",
+        ));
+    }
+
+    let file = fs::File::open(path)?;
+    let reader = io::BufReader::new(file);
+    let mut x_vals = Vec::new();
+    let mut y_vals = Vec::new();
+    let mut sigma_vals = sigma_column.map(|_| Vec::new());
+
+    for (line_index, line) in reader.lines().enumerate() {
+        let line = line?;
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        let required_columns = sigma_column.unwrap_or(2).max(2);
+        if parts.len() < required_columns {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{}:{} has {} columns; expected at least {}",
+                    path.display(),
+                    line_index + 1,
+                    parts.len(),
+                    required_columns
+                ),
+            ));
+        }
+        let parse = |column: usize, label: &str| -> io::Result<f64> {
+            let value = parts[column].parse::<f64>().map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "{}:{} contains an invalid {} in column {}",
+                        path.display(),
+                        line_index + 1,
+                        label,
+                        column + 1
+                    ),
+                )
+            })?;
+            if !value.is_finite() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "{}:{} contains a non-finite {} in column {}",
+                        path.display(),
+                        line_index + 1,
+                        label,
+                        column + 1
+                    ),
+                ));
+            }
+            Ok(value)
+        };
+
+        x_vals.push(parse(0, "coordinate")?);
+        y_vals.push(parse(1, "value")?);
+        if let (Some(column), Some(sigmas)) = (sigma_column, sigma_vals.as_mut()) {
+            let sigma = parse(column - 1, "uncertainty")?;
+            if sigma <= 0.0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "{}:{} contains a non-positive uncertainty in column {}",
+                        path.display(),
+                        line_index + 1,
+                        column
+                    ),
+                ));
+            }
+            sigmas.push(sigma);
+        }
+    }
+
+    if x_vals.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{} contains no numeric data rows", path.display()),
+        ));
+    }
+
+    Ok((x_vals, y_vals, sigma_vals))
+}
+
+/// Read two-column Q, S(Q) data (whitespace-separated, `#` comments).
 pub fn read_sq_data(path: &Path) -> io::Result<(Vec<f64>, Vec<f64>)> {
+    // Preserve the permissive legacy reader for tabulated potential files,
+    // which may contain un-commented format headers. Experimental datasets
+    // use `read_data_columns` and are parsed strictly.
     let file = fs::File::open(path)?;
     let reader = io::BufReader::new(file);
     let mut q_vals = Vec::new();
     let mut sq_vals = Vec::new();
     for line in reader.lines() {
         let line = line?;
-        let line = line.trim().to_string();
+        let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
@@ -576,6 +678,35 @@ pub fn read_checkpoint(path: &Path, species: &[String]) -> io::Result<(RmcState,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_explicit_uncertainty_column() {
+        let path = std::env::temp_dir().join("rsmith_data_columns_valid.dat");
+        std::fs::write(
+            &path,
+            "# Q S(Q) ignored sigma\n0.5 1.1 99 0.02\n1.0 0.9 98 0.03\n",
+        )
+        .unwrap();
+
+        let (x, y, sigma) = read_data_columns(&path, Some(4)).unwrap();
+        assert_eq!(x, vec![0.5, 1.0]);
+        assert_eq!(y, vec![1.1, 0.9]);
+        assert_eq!(sigma.unwrap(), vec![0.02, 0.03]);
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn rejects_non_positive_or_missing_uncertainty() {
+        let path = std::env::temp_dir().join("rsmith_data_columns_invalid.dat");
+        std::fs::write(&path, "0.5 1.1 0.0\n").unwrap();
+        let err = read_data_columns(&path, Some(3)).unwrap_err();
+        assert!(err.to_string().contains("non-positive uncertainty"));
+
+        std::fs::write(&path, "0.5 1.1\n").unwrap();
+        let err = read_data_columns(&path, Some(3)).unwrap_err();
+        assert!(err.to_string().contains("expected at least 3"));
+        std::fs::remove_file(path).ok();
+    }
 
     #[test]
     fn poscar_roundtrip() {

@@ -103,16 +103,38 @@ pub fn compute_sq(
     partial_sq: &HashMap<usize, Vec<f64>>,
     q: &[f64],
 ) -> Vec<f64> {
-    let n_types = config.species.len();
-    let conc: Vec<f64> = (0..n_types).map(|t| config.concentration(t)).collect();
     let b: Vec<f64> = config
         .species
         .iter()
         .map(|s| scattering_length(s))
         .collect();
+    compute_sq_with_lengths(config, partial_sq, q, &b)
+}
+
+/// Compute a total neutron structure factor with caller-supplied coherent
+/// scattering lengths. This supports isotope-enriched and null-scattering
+/// contrasts without pretending that all samples have natural isotopic abundance.
+pub fn compute_sq_with_lengths(
+    config: &Configuration,
+    partial_sq: &HashMap<usize, Vec<f64>>,
+    q: &[f64],
+    scattering_lengths: &[f64],
+) -> Vec<f64> {
+    let n_types = config.species.len();
+    assert_eq!(
+        scattering_lengths.len(),
+        n_types,
+        "one neutron scattering length is required per species"
+    );
+    let conc: Vec<f64> = (0..n_types).map(|t| config.concentration(t)).collect();
+    let b = scattering_lengths;
 
     let b_avg: f64 = (0..n_types).map(|a| conc[a] * b[a]).sum();
     let b_avg_sq = b_avg * b_avg;
+    assert!(
+        b_avg_sq > 1e-30,
+        "the concentration-weighted mean neutron scattering length is zero"
+    );
 
     let mut pairs: Vec<(usize, f64)> = Vec::new();
     for a in 0..n_types {
@@ -135,4 +157,42 @@ pub fn compute_sq(
             total
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::atoms::{Atom, Configuration};
+
+    #[test]
+    fn isotope_contrast_uses_supplied_scattering_lengths() {
+        let config = Configuration {
+            atoms: vec![
+                Atom {
+                    position: [0.0; 3],
+                    species: "Ge".to_string(),
+                    type_id: 0,
+                },
+                Atom {
+                    position: [1.0; 3],
+                    species: "O".to_string(),
+                    type_id: 1,
+                },
+            ],
+            box_lengths: [10.0; 3],
+            species: vec!["Ge".to_string(), "O".to_string()],
+            composition: HashMap::from([("Ge".to_string(), 1), ("O".to_string(), 1)]),
+        };
+        let partials = HashMap::from([
+            (config.pair_index(0, 0), vec![2.0]),
+            (config.pair_index(0, 1), vec![3.0]),
+            (config.pair_index(1, 1), vec![4.0]),
+        ]);
+
+        let result = compute_sq_with_lengths(&config, &partials, &[1.0], &[10.0, 5.0]);
+        // c_Ge = c_O = 0.5 and <b> = 7.5:
+        // weights are 25/56.25, 25/56.25, and 6.25/56.25.
+        let expected = (25.0 * 2.0 + 25.0 * 3.0 + 6.25 * 4.0) / 56.25;
+        assert!((result[0] - expected).abs() < 1e-12);
+    }
 }

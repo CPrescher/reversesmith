@@ -1,0 +1,17 @@
+id = "rmcprofile-srtio3"
+status = "native_forward_parity_validated"
+reference_program = "RMCProfile7"
+reference_version = "7b.35"
+source = "official tutorial Exercise 4, 5 K SrTiO3, 01small"
+archive_sha256 = "828b9292167a6691e02d1a9073006a42be7300ce770309702a827e5886b105c3"
+atom_count = 2880
+box_angstrom = [33.06996, 33.06996, 31.21856]
+rdf_dr_angstrom = 0.02
+rdf_cutoff_angstrom = 15.6
+qmin_inverse_angstrom = 0.02
+qmax_inverse_angstrom = 39.96
+nq = 1997
+refinement_moves = 0
+tolerances_frozen = true
+tolerance_provenance = "post-result engineering regression envelope"
+expected_record = "expected/native-forward.toml"

@@ -1,0 +1,8 @@
+id = "epsr-silica"
+status = "permission_required"
+reference_program = "EPSR26"
+reference_download = "https://www.isis.stfc.ac.uk/Pages/Empirical-Potential-Structure-Refinement.aspx"
+reference_package = "EPSR26-Workshop-2024.zip"
+observable = ["total_scattering", "partial_rdf", "coordination", "bond_angles"]
+replicas = 10
+tolerances_frozen = false

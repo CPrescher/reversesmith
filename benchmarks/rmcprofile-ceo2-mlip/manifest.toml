@@ -1,0 +1,9 @@
+id = "rmcprofile-ceo2-mlip"
+status = "blocked_by_swap_moves_and_upstream_inputs"
+doi = "10.1107/S1600576724009282"
+reference_program = "RMCProfile with LAMMPS/FLARE"
+atom_count = 6144
+composition = "CeO1.71"
+primary_observable = "<100> oxygen-vacancy pair count"
+replicas = 10
+tolerances_frozen = false

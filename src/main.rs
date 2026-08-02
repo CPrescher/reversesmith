@@ -230,6 +230,10 @@ fn main() {
     // --- Optional density rescaling (CLI --density overrides config) ---
     let target_density = cli_density.or(cfg.system.density);
     if let Some(target_density) = target_density {
+        if !target_density.is_finite() || target_density <= 0.0 {
+            log_eprintln!("Error: target density must be finite and greater than 0");
+            process::exit(1);
+        }
         let current_density = config.mass_density();
         let scale = (current_density / target_density).cbrt();
         log_println!(
@@ -341,20 +345,36 @@ fn main() {
         return;
     }
 
+    if let Err(error) = rmc::validate_rmc_geometry(&config, &params) {
+        log_eprintln!("Error: invalid RMC geometry or grid: {}", error);
+        process::exit(1);
+    }
+
     // --- Load experimental data ---
     let mut experiments: Vec<ExperimentalData> = Vec::new();
 
     if let Some(ref xray_cfg) = cfg.data.xray_sq {
         let path = resolve_path(&config_dir, &xray_cfg.file);
         log_println!("Loading X-ray S(Q) from {:?} ...", path);
-        let (q, sq) = io::read_sq_data(&path).unwrap_or_else(|e| {
-            log_eprintln!("Error reading X-ray S(Q): {}", e);
-            process::exit(1);
-        });
+        let (q, sq, file_sigma) = io::read_data_columns(&path, xray_cfg.sigma_column)
+            .unwrap_or_else(|e| {
+                log_eprintln!("Error reading X-ray S(Q): {}", e);
+                process::exit(1);
+            });
         let mut sigma = match xray_cfg.sigma {
             Some(val) => {
                 log_println!("  Using constant sigma = {:.4}", val);
                 vec![val; sq.len()]
+            }
+            None if file_sigma.is_some() => {
+                let values = file_sigma.expect("checked per-point uncertainties");
+                log_println!(
+                    "  Using per-point sigma from column {}: min={:.4}, max={:.4}",
+                    xray_cfg.sigma_column.expect("validated sigma column"),
+                    values.iter().cloned().fold(f64::INFINITY, f64::min),
+                    values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                );
+                values
             }
             None => {
                 let s = rmc::estimate_sigma(&sq, 10);
@@ -399,6 +419,7 @@ fn main() {
             sigma,
             weight,
             kind: DataKind::Xray,
+            neutron_scattering_lengths: None,
             fit_min,
             fit_max,
             convention,
@@ -408,14 +429,25 @@ fn main() {
     if let Some(ref neutron_cfg) = cfg.data.neutron_sq {
         let path = resolve_path(&config_dir, &neutron_cfg.file);
         log_println!("Loading neutron S(Q) from {:?} ...", path);
-        let (q, sq) = io::read_sq_data(&path).unwrap_or_else(|e| {
-            log_eprintln!("Error reading neutron S(Q): {}", e);
-            process::exit(1);
-        });
+        let (q, sq, file_sigma) = io::read_data_columns(&path, neutron_cfg.sigma_column)
+            .unwrap_or_else(|e| {
+                log_eprintln!("Error reading neutron S(Q): {}", e);
+                process::exit(1);
+            });
         let mut sigma = match neutron_cfg.sigma {
             Some(val) => {
                 log_println!("  Using constant sigma = {:.4}", val);
                 vec![val; sq.len()]
+            }
+            None if file_sigma.is_some() => {
+                let values = file_sigma.expect("checked per-point uncertainties");
+                log_println!(
+                    "  Using per-point sigma from column {}: min={:.4}, max={:.4}",
+                    neutron_cfg.sigma_column.expect("validated sigma column"),
+                    values.iter().cloned().fold(f64::INFINITY, f64::min),
+                    values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                );
+                values
             }
             None => {
                 let s = rmc::estimate_sigma(&sq, 10);
@@ -446,12 +478,51 @@ fn main() {
         if convention != SqConvention::Sq {
             log_println!("  Convention: {:?}", convention);
         }
+        let neutron_scattering_lengths = neutron_cfg.scattering_lengths.as_ref().map(|overrides| {
+            if let Some(unknown) = overrides
+                .keys()
+                .find(|species| !config.species.contains(species))
+            {
+                log_eprintln!(
+                    "Error: neutron scattering-length species '{}' is not present in the structure",
+                    unknown
+                );
+                process::exit(1);
+            }
+            let values: Vec<f64> = config
+                .species
+                .iter()
+                .map(|species| {
+                    overrides
+                        .get(species)
+                        .copied()
+                        .unwrap_or_else(|| neutron::scattering_length(species))
+                })
+                .collect();
+            let mean: f64 = values
+                .iter()
+                .enumerate()
+                .map(|(type_id, value)| config.concentration(type_id) * value)
+                .sum();
+            if mean.abs() <= 1e-15 {
+                log_eprintln!(
+                    "Error: neutron contrast has zero concentration-weighted mean scattering length"
+                );
+                process::exit(1);
+            }
+            log_println!("  Coherent scattering lengths (fm):");
+            for (species, value) in config.species.iter().zip(values.iter()) {
+                log_println!("    {} = {:.6}", species, value);
+            }
+            values
+        });
         experiments.push(ExperimentalData {
             q,
             sq,
             sigma,
             weight,
             kind: DataKind::Neutron,
+            neutron_scattering_lengths,
             fit_min,
             fit_max,
             convention,
@@ -464,14 +535,25 @@ fn main() {
     if let Some(ref gr_cfg) = cfg.data.xray_gr {
         let path = resolve_path(&config_dir, &gr_cfg.file);
         log_println!("Loading X-ray g(r) from {:?} ...", path);
-        let (r, gr) = io::read_sq_data(&path).unwrap_or_else(|e| {
-            log_eprintln!("Error reading X-ray g(r): {}", e);
-            process::exit(1);
-        });
+        let (r, gr, file_sigma) =
+            io::read_data_columns(&path, gr_cfg.sigma_column).unwrap_or_else(|e| {
+                log_eprintln!("Error reading X-ray g(r): {}", e);
+                process::exit(1);
+            });
         let sigma = match gr_cfg.sigma {
             Some(val) => {
                 log_println!("  Using constant sigma = {:.4}", val);
                 vec![val; gr.len()]
+            }
+            None if file_sigma.is_some() => {
+                let values = file_sigma.expect("checked per-point uncertainties");
+                log_println!(
+                    "  Using per-point sigma from column {}: min={:.4}, max={:.4}",
+                    gr_cfg.sigma_column.expect("validated sigma column"),
+                    values.iter().cloned().fold(f64::INFINITY, f64::min),
+                    values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                );
+                values
             }
             None => {
                 let s = rmc::estimate_sigma(&gr, 10);
@@ -495,8 +577,12 @@ fn main() {
             }
         });
         let lorch = gr_cfg.lorch.unwrap_or(true);
+        let qdamp = gr_cfg.qdamp.unwrap_or(0.0);
         log_println!("  {} r points, r range: {:.2} - {:.2} A, fit range: [{:.2}, {:.2}], FT Qmax: {:.2}, Lorch: {}",
             r.len(), r[0], r[r.len() - 1], fit_min, fit_max, qmax, lorch);
+        if qdamp > 0.0 {
+            log_println!("  PDF resolution damping Qdamp = {:.6} 1/A", qdamp);
+        }
         gr_datasets.push(ExperimentalGrData {
             r,
             gr,
@@ -506,6 +592,7 @@ fn main() {
             fit_max,
             qmax,
             lorch,
+            qdamp,
             baseline: 1.0,
         });
     }
@@ -514,14 +601,25 @@ fn main() {
     if let Some(ref fr_cfg) = cfg.data.xray_fr {
         let path = resolve_path(&config_dir, &fr_cfg.file);
         log_println!("Loading X-ray f(r) from {:?} ...", path);
-        let (r, fr) = io::read_sq_data(&path).unwrap_or_else(|e| {
-            log_eprintln!("Error reading X-ray f(r): {}", e);
-            process::exit(1);
-        });
+        let (r, fr, file_sigma) =
+            io::read_data_columns(&path, fr_cfg.sigma_column).unwrap_or_else(|e| {
+                log_eprintln!("Error reading X-ray f(r): {}", e);
+                process::exit(1);
+            });
         let sigma = match fr_cfg.sigma {
             Some(val) => {
                 log_println!("  Using constant sigma = {:.4}", val);
                 vec![val; fr.len()]
+            }
+            None if file_sigma.is_some() => {
+                let values = file_sigma.expect("checked per-point uncertainties");
+                log_println!(
+                    "  Using per-point sigma from column {}: min={:.4}, max={:.4}",
+                    fr_cfg.sigma_column.expect("validated sigma column"),
+                    values.iter().cloned().fold(f64::INFINITY, f64::min),
+                    values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                );
+                values
             }
             None => {
                 let s = rmc::estimate_sigma(&fr, 10);
@@ -544,8 +642,12 @@ fn main() {
             }
         });
         let lorch = fr_cfg.lorch.unwrap_or(true);
+        let qdamp = fr_cfg.qdamp.unwrap_or(0.0);
         log_println!("  {} r points, r range: {:.2} - {:.2} A, fit range: [{:.2}, {:.2}], FT Qmax: {:.2}, Lorch: {}",
             r.len(), r[0], r[r.len() - 1], fit_min, fit_max, qmax, lorch);
+        if qdamp > 0.0 {
+            log_println!("  PDF resolution damping Qdamp = {:.6} 1/A", qdamp);
+        }
         gr_datasets.push(ExperimentalGrData {
             r,
             gr: fr,
@@ -555,6 +657,7 @@ fn main() {
             fit_max,
             qmax,
             lorch,
+            qdamp,
             baseline: 0.0,
         });
     }
@@ -746,7 +849,15 @@ fn main() {
                     "xray",
                 ),
                 DataKind::Neutron => (
-                    neutron::compute_sq(&config, &partial_sq, &params.q_grid),
+                    match exp.neutron_scattering_lengths.as_deref() {
+                        Some(lengths) => neutron::compute_sq_with_lengths(
+                            &config,
+                            &partial_sq,
+                            &params.q_grid,
+                            lengths,
+                        ),
+                        None => neutron::compute_sq(&config, &partial_sq, &params.q_grid),
+                    },
                     "neutron",
                 ),
             };
@@ -815,6 +926,7 @@ fn main() {
                         // f(r): 2*dq / π (constant)
                         2.0 * dq / std::f64::consts::PI
                     };
+                    let pref = pref * rmc::pdf_resolution_envelope(gd0.qdamp, ri);
                     let mut val = baseline;
                     for (k, &qk) in params.q_grid.iter().enumerate() {
                         if qk > qmax_gr {
@@ -1109,7 +1221,17 @@ fn main() {
                             "xray",
                         ),
                         DataKind::Neutron => (
-                            neutron::compute_sq(&config, &partial_sq_map, &params.q_grid),
+                            match exp.neutron_scattering_lengths.as_deref() {
+                                Some(lengths) => neutron::compute_sq_with_lengths(
+                                    &config,
+                                    &partial_sq_map,
+                                    &params.q_grid,
+                                    lengths,
+                                ),
+                                None => {
+                                    neutron::compute_sq(&config, &partial_sq_map, &params.q_grid)
+                                }
+                            },
                             "neutron",
                         ),
                     };
@@ -1312,7 +1434,15 @@ fn main() {
                 "xray",
             ),
             DataKind::Neutron => (
-                neutron::compute_sq(&config, &partial_sq, &params.q_grid),
+                match exp.neutron_scattering_lengths.as_deref() {
+                    Some(lengths) => neutron::compute_sq_with_lengths(
+                        &config,
+                        &partial_sq,
+                        &params.q_grid,
+                        lengths,
+                    ),
+                    None => neutron::compute_sq(&config, &partial_sq, &params.q_grid),
+                },
                 "neutron",
             ),
         };
@@ -1382,6 +1512,7 @@ fn main() {
                 } else {
                     2.0 * dq / std::f64::consts::PI
                 };
+                let pref = pref * rmc::pdf_resolution_envelope(gd0.qdamp, ri);
                 let mut val = baseline;
                 for (k, &qk) in params.q_grid.iter().enumerate() {
                     if qk > qmax_gr {
