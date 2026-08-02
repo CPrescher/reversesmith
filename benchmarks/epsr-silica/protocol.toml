@@ -1,0 +1,102 @@
+# Preregistered comparison design for the canonical EPSR26 silica exercise.
+# Do not change outcome definitions after rsmith results have been inspected.
+
+[provenance]
+reference_program = "EPSR26"
+reference_package = "EPSR26-Workshop-2024.zip"
+manual = "EPSR26 Manual 2019-11-27, section 8.3"
+official_page = "https://www.isis.stfc.ac.uk/Pages/Empirical-Potential-Structure-Refinement.aspx"
+
+[system]
+formula = "SiO2"
+number_density_atoms_per_a3 = 0.06834
+initial_temperature_k = 10000.0
+production_temperature_k = 300.0
+replicas = 10
+seeds = [20260802, 20260803, 20260804, 20260805, 20260806, 20260807, 20260808, 20260809, 20260810, 20260811]
+
+[data.neutron]
+enabled = true
+normalization = "sum_of_neutron_weights"
+epsr_nrtype = 3
+
+[data.xray]
+enabled = true
+normalization = "single_atom_scattering"
+
+[stages]
+order = [
+  "randomize_at_10000_k",
+  "reference_potential_equilibration",
+  "cool_and_equilibrate_at_300_k",
+  "empirical_potential_refinement",
+  "production_ensemble",
+]
+match_native_step_counts = true
+match_native_atom_count = true
+save_native_ensemble = true
+save_every_accepted_moves = "set_from_native_input"
+
+[methods.native_epsr]
+purpose = "reference implementation"
+fit = ["neutron", "xray"]
+
+[methods.rsmith_epsr]
+purpose = "reproduction gate before superiority claims"
+fit = ["neutron", "xray"]
+reference_potential = "exact_native_epsr_convention"
+
+[methods.rsmith_rmc]
+purpose = "unregularized control"
+fit = ["neutron", "xray"]
+
+[methods.rsmith_pair_hrmc]
+purpose = "fixed_pair_potential_control"
+fit = ["neutron", "xray"]
+
+[methods.rsmith_mlip_hrmc]
+purpose = "proposed method"
+fit = ["neutron", "xray"]
+
+[comparison.primary_reproduction_gate]
+methods = ["native_epsr", "rsmith_epsr"]
+matched_data_fit = true
+metrics = [
+  "neutron_residual",
+  "xray_residual",
+  "g_SiSi",
+  "g_SiO",
+  "g_OO",
+  "Si_coordination_distribution",
+  "O_Si_O_angle_distribution",
+  "Si_O_Si_angle_distribution",
+  "ring_size_distribution",
+]
+
+[comparison.superiority_test]
+reference = "native_epsr"
+candidate = "rsmith_mlip_hrmc"
+matched_data_fit = true
+primary_metrics = [
+  "held_out_total_scattering",
+  "coordination_defect_fraction",
+  "angle_distribution_distance",
+  "ring_distribution_distance",
+]
+secondary_metrics = ["wall_time", "acceptance_rate", "seed_variability"]
+
+[held_out_protocol]
+runs = [
+  "fit_neutron_predict_xray",
+  "fit_xray_predict_neutron",
+  "fit_both",
+]
+
+[statistics]
+report_all_seeds = true
+report = ["median", "interquartile_range", "min", "max", "bootstrap_95pct_ci"]
+selected_best_run_only = false
+
+[tolerances]
+status = "not_yet_frozen"
+rule = "Estimate native EPSR seed-to-seed spread, then freeze equivalence margins before running rsmith."

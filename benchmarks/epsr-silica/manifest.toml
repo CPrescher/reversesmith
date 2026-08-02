@@ -1,8 +1,23 @@
 id = "epsr-silica"
-status = "permission_required"
+status = "protocol_frozen_official_download_unavailable"
 reference_program = "EPSR26"
 reference_download = "https://www.isis.stfc.ac.uk/Pages/Empirical-Potential-Structure-Refinement.aspx"
 reference_package = "EPSR26-Workshop-2024.zip"
-observable = ["total_scattering", "partial_rdf", "coordination", "bond_angles"]
+manual = "EPSR26 Manual 2019-11-27, section 8.3"
+observable = [
+  "neutron_total_scattering",
+  "xray_total_scattering",
+  "partial_rdf",
+  "coordination",
+  "bond_angles",
+  "ring_topology",
+  "wall_time",
+]
 replicas = 10
 tolerances_frozen = false
+protocol_frozen = true
+publication_permission = false
+download_terms_accepted = true
+download_terms_accepted_date = "2026-08-02"
+official_download_attempted_date = "2026-08-02"
+official_download_http_status = 404
