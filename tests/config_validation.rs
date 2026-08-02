@@ -334,6 +334,7 @@ backend = "mace_python"
 model = "mace.model"
 weight = 0.001
 cutoff = 5.0
+delta = "local"
 device = "cpu"
 torch_threads = 4
 python = "python3"
@@ -344,6 +345,54 @@ worker = "custom_worker.py"
         result.is_ok(),
         "Valid MACE/Python config should parse: {:?}",
         result.err()
+    );
+}
+
+#[test]
+fn ml_delta_is_only_supported_for_mace_python() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "gap_quip"
+model = "gap.xml"
+cutoff = 5.0
+delta = "local"
+"#;
+    let err = load_toml(toml).unwrap_err();
+    assert!(
+        err.contains("delta is only supported for mace_python"),
+        "expected MACE-only delta validation error, got: {err}"
+    );
+}
+
+#[test]
+fn unknown_ml_delta_rejected() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "mace_python"
+model = "mace.model"
+cutoff = 5.0
+delta = "incremental"
+"#;
+    let err = load_toml(toml).unwrap_err();
+    assert!(
+        err.contains("unknown variant") || err.contains("expected"),
+        "Expected unknown delta error, got: {err}"
     );
 }
 

@@ -682,6 +682,7 @@ fn config_constructor_loads_relative_fit_snap_files() {
         init_args: None,
         weight: Some(0.75),
         cutoff: None,
+        delta: None,
         device: None,
         torch_threads: None,
         python: None,

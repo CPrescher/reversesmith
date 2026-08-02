@@ -4,7 +4,7 @@ use std::path::Path;
 
 use rsmith::atoms::{Atom, Configuration};
 use rsmith::cells::CellList;
-use rsmith::config::{MlBackend, MlPotentialConfig};
+use rsmith::config::{MlBackend, MlEnergyDelta, MlPotentialConfig};
 use rsmith::energy::EnergyModel;
 use rsmith::ml_potential::MacePythonModel;
 
@@ -38,6 +38,30 @@ fn diamond_si_config() -> Configuration {
     }
 }
 
+fn mace_test_cfg(model_path: String, delta: Option<MlEnergyDelta>) -> MlPotentialConfig {
+    let python = env::var("RSMITH_MACE_TEST_PYTHON").unwrap_or_else(|_| "python3".to_string());
+    let device = env::var("RSMITH_MACE_TEST_DEVICE").unwrap_or_else(|_| "cpu".to_string());
+    let torch_threads = env::var("RSMITH_MACE_TEST_TORCH_THREADS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .or(Some(1));
+
+    MlPotentialConfig {
+        backend: MlBackend::MacePython,
+        model: Some(model_path),
+        coefficient_file: None,
+        parameter_file: None,
+        init_args: None,
+        weight: Some(0.001),
+        cutoff: Some(5.0),
+        delta,
+        device: Some(device),
+        torch_threads,
+        python: Some(python),
+        worker: None,
+    }
+}
+
 #[test]
 fn mace_python_backend_runs_real_model_when_configured() {
     let Ok(model_path) = env::var("RSMITH_MACE_TEST_MODEL") else {
@@ -55,26 +79,7 @@ fn mace_python_backend_runs_real_model_when_configured() {
         .map(|atom| atom.position)
         .collect::<Vec<_>>();
     let cell_list = CellList::new(&positions, &config.box_lengths, 5.0);
-    let python = env::var("RSMITH_MACE_TEST_PYTHON").unwrap_or_else(|_| "python3".to_string());
-    let device = env::var("RSMITH_MACE_TEST_DEVICE").unwrap_or_else(|_| "cpu".to_string());
-    let torch_threads = env::var("RSMITH_MACE_TEST_TORCH_THREADS")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .or(Some(1));
-
-    let cfg = MlPotentialConfig {
-        backend: MlBackend::MacePython,
-        model: Some(model_path),
-        coefficient_file: None,
-        parameter_file: None,
-        init_args: None,
-        weight: Some(0.001),
-        cutoff: Some(5.0),
-        device: Some(device),
-        torch_threads,
-        python: Some(python),
-        worker: None,
-    };
+    let cfg = mace_test_cfg(model_path, None);
 
     let mut model = MacePythonModel::from_config(&cfg, &config, Path::new(".")).unwrap();
     let initial = model.total_energy(&config, &cell_list);
@@ -99,5 +104,49 @@ fn mace_python_backend_runs_real_model_when_configured() {
     assert!(
         (reverted - initial).abs() < 1.0e-5,
         "reject did not restore worker energy: initial={initial}, reverted={reverted}"
+    );
+}
+
+#[test]
+fn mace_python_local_delta_matches_full_delta_when_configured() {
+    let Ok(model_path) = env::var("RSMITH_MACE_TEST_MODEL") else {
+        eprintln!("skipping real MACE local delta test because RSMITH_MACE_TEST_MODEL is not set");
+        return;
+    };
+    if !Path::new(&model_path).exists() {
+        panic!("RSMITH_MACE_TEST_MODEL does not exist: {model_path}");
+    }
+
+    let config = diamond_si_config();
+    let positions = config
+        .atoms
+        .iter()
+        .map(|atom| atom.position)
+        .collect::<Vec<_>>();
+    let cell_list = CellList::new(&positions, &config.box_lengths, 5.0);
+    let atom_idx = 0;
+    let old_pos = config.atoms[atom_idx].position;
+    let new_pos = [old_pos[0] + 0.03, old_pos[1] + 0.02, old_pos[2] + 0.01];
+
+    let mut full_model = MacePythonModel::from_config(
+        &mace_test_cfg(model_path.clone(), None),
+        &config,
+        Path::new("."),
+    )
+    .unwrap();
+    let mut local_model = MacePythonModel::from_config(
+        &mace_test_cfg(model_path, Some(MlEnergyDelta::Local)),
+        &config,
+        Path::new("."),
+    )
+    .unwrap();
+
+    let full_delta =
+        full_model.energy_delta_atom(&config, atom_idx, &old_pos, &new_pos, &cell_list, 0, 0);
+    let local_delta =
+        local_model.energy_delta_atom(&config, atom_idx, &old_pos, &new_pos, &cell_list, 0, 0);
+    assert!(
+        (local_delta - full_delta).abs() < 1.0e-3,
+        "local MACE delta differs from full delta: local={local_delta}, full={full_delta}"
     );
 }

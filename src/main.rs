@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use rsmith::analyze;
-use rsmith::config::{Config, MlBackend};
+use rsmith::config::{Config, MlBackend, MlEnergyDelta};
 use rsmith::energy::EnergyModel;
 use rsmith::epsr::{self, EpsrState};
 use rsmith::io;
@@ -670,9 +670,14 @@ fn main() {
                 if let Some(threads) = ml_cfg.torch_threads {
                     log_println!("  Torch threads: {}", threads);
                 }
-                log_println!(
-                    "  Energy delta strategy: full-system energy difference for correctness"
-                );
+                match ml_cfg.delta.unwrap_or(MlEnergyDelta::Full) {
+                    MlEnergyDelta::Full => log_println!(
+                        "  Energy delta strategy: full-system energy difference for correctness"
+                    ),
+                    MlEnergyDelta::Local => log_println!(
+                        "  Energy delta strategy: local MACE subgraph around each trial move"
+                    ),
+                }
                 match ml_potential::MacePythonModel::from_config(ml_cfg, &config, &config_dir) {
                     Ok(model) => Some(Box::new(model) as Box<dyn EnergyModel>),
                     Err(e) => {

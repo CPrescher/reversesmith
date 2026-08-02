@@ -101,6 +101,7 @@ backend = "mace_python"
 model = "mace.model"
 weight = 0.001
 cutoff = 5.0
+delta = "full"
 device = "cpu"
 torch_threads = 8
 ```
@@ -110,7 +111,8 @@ torch_threads = 8
 | `backend` | String | required | `mace_python` |
 | `model` | String | required | MACE model path, relative to the config file |
 | `weight` | Float | 0.001 | Scales the MACE energy contribution in the RMC cost |
-| `cutoff` | Float | required | Model cutoff in A; retained for logging and future local-delta support |
+| `cutoff` | Float | required | Model cutoff in A; should match the MACE model cutoff |
+| `delta` | String | `full` | Energy delta mode: `full` or `local` |
 | `device` | String | `cpu` | PyTorch device, e.g. `cpu`, `cuda`, or `mps` |
 | `torch_threads` | Integer | PyTorch default | Sets `torch.set_num_threads()` in the worker |
 | `python` | String | `python3` | Python executable used to launch the worker |
@@ -127,16 +129,30 @@ Then point rsmith at `.venv/bin/python`, or set `python = ".venv/bin/python"` in
 `[ml_potential]`. No Rust feature flag is required for `mace_python` because
 MACE is loaded by the Python worker at runtime.
 
-For correctness, the first MACE backend computes:
+The default MACE backend computes:
 
 ```text
 delta_E = E_full(after move) - E_full(before move)
 ```
 
-This is slower than a local delta, but it is robust for message-passing models
-where a moved atom can affect neighbors beyond one cutoff. Parallelism comes
-from PyTorch inside each energy evaluation through `torch_threads` or the
-selected accelerator device.
+This is slower, but it is robust for message-passing models where a moved atom
+can affect neighbors beyond one cutoff. Parallelism comes from PyTorch inside
+each energy evaluation through `torch_threads` or the selected accelerator
+device.
+
+For short-range MACE models, `delta = "local"` evaluates a local non-periodic
+cluster with explicit periodic image atoms as context. It sums MACE per-atom
+energies only for atoms within `num_interactions * cutoff` of the moved atom
+before or after the trial move. Context atoms are included out to the same
+message-passing radius around those central atoms. At fixed density this makes
+the cost effectively independent of total atom count, but the constant can be
+large.
+
+Use `delta = "local"` only for ordinary short-range MACE models. Do not use it
+for models with explicit long-range electrostatics, global charge/spin coupling,
+or dispersion corrections unless those terms are separately validated. The real
+MACE integration test compares local and full deltas when a test model is
+provided.
 
 MACE code and MACE model files have separate licenses. Check the license of the
 specific model file before redistribution or publication.
@@ -154,7 +170,7 @@ RSMITH_MACE_TEST_MODEL="$MODEL" \
 RSMITH_MACE_TEST_PYTHON=.venv/bin/python \
 RSMITH_MACE_TEST_DEVICE=cpu \
 RSMITH_MACE_TEST_TORCH_THREADS=1 \
-cargo test mace_python_backend_runs_real_model_when_configured -- --nocapture
+cargo test mace_python -- --nocapture
 ```
 
-If `RSMITH_MACE_TEST_MODEL` is not set, the real-model test skips itself.
+If `RSMITH_MACE_TEST_MODEL` is not set, the real-model tests skip themselves.

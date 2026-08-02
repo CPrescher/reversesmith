@@ -50,6 +50,7 @@ fn gap_quip_backend_initializes_when_test_model_is_available() {
         init_args,
         weight: Some(0.001),
         cutoff: Some(5.0),
+        delta: None,
         device: None,
         torch_threads: None,
         python: None,

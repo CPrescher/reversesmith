@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 
 use crate::atoms::Configuration;
 use crate::cells::CellList;
-use crate::config::MlPotentialConfig;
+use crate::config::{MlEnergyDelta, MlPotentialConfig};
 use crate::energy::EnergyModel;
 
 const MACE_WORKER: &str = include_str!("../../python/rsmith_mace_worker.py");
@@ -23,6 +23,7 @@ pub struct MacePythonModel {
     stdout: BufReader<ChildStdout>,
     weight: f64,
     cutoff: f64,
+    delta: MlEnergyDelta,
 }
 
 impl MacePythonModel {
@@ -80,6 +81,7 @@ impl MacePythonModel {
             stdout: BufReader::new(child_stdout),
             weight: cfg.weight.unwrap_or(0.001),
             cutoff,
+            delta: cfg.delta.unwrap_or(MlEnergyDelta::Full),
         };
 
         let init = json!({
@@ -87,6 +89,7 @@ impl MacePythonModel {
             "model": model_path.to_string_lossy(),
             "device": cfg.device.as_deref().unwrap_or("cpu"),
             "torch_threads": cfg.torch_threads,
+            "delta": delta_label(cfg.delta.unwrap_or(MlEnergyDelta::Full)),
             "species": config.atoms.iter().map(|atom| atom.species.as_str()).collect::<Vec<_>>(),
             "positions": config.atoms.iter().map(|atom| atom.position).collect::<Vec<_>>(),
             "box": config.box_lengths,
@@ -137,6 +140,26 @@ impl MacePythonModel {
         }))
         .unwrap_or_else(|e| panic!("MACE Python failed to move atom {atom_idx}: {e}"));
     }
+
+    fn local_delta_or_panic(
+        &mut self,
+        atom_idx: usize,
+        old_pos: &[f64; 3],
+        new_pos: &[f64; 3],
+    ) -> f64 {
+        let response = self
+            .request(json!({
+                "cmd": "local_delta",
+                "atom": atom_idx,
+                "old_position": old_pos,
+                "new_position": new_pos,
+            }))
+            .unwrap_or_else(|e| panic!("MACE Python local delta failed: {e}"));
+        response
+            .get("delta")
+            .and_then(Value::as_f64)
+            .unwrap_or_else(|| panic!("MACE Python worker response did not contain numeric delta"))
+    }
 }
 
 impl EnergyModel for MacePythonModel {
@@ -160,16 +183,21 @@ impl EnergyModel for MacePythonModel {
         &mut self,
         _config: &Configuration,
         atom_idx: usize,
-        _old_pos: &[f64; 3],
+        old_pos: &[f64; 3],
         new_pos: &[f64; 3],
         _cell_list: &CellList,
         _old_cell: usize,
         _new_cell: usize,
     ) -> f64 {
-        let old_energy = self.total_energy_or_panic();
-        self.move_atom_or_panic(atom_idx, new_pos);
-        let new_energy = self.total_energy_or_panic();
-        new_energy - old_energy
+        match self.delta {
+            MlEnergyDelta::Full => {
+                let old_energy = self.total_energy_or_panic();
+                self.move_atom_or_panic(atom_idx, new_pos);
+                let new_energy = self.total_energy_or_panic();
+                new_energy - old_energy
+            }
+            MlEnergyDelta::Local => self.local_delta_or_panic(atom_idx, old_pos, new_pos),
+        }
     }
 
     fn accept_move(&mut self, _atom_idx: usize, _new_pos: &[f64; 3]) {
@@ -215,6 +243,13 @@ fn resolve_path(base_dir: &Path, path: &str) -> PathBuf {
     }
 }
 
+fn delta_label(delta: MlEnergyDelta) -> &'static str {
+    match delta {
+        MlEnergyDelta::Full => "full",
+        MlEnergyDelta::Local => "local",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -223,7 +258,7 @@ mod tests {
 
     use crate::atoms::{Atom, Configuration};
     use crate::cells::CellList;
-    use crate::config::{MlBackend, MlPotentialConfig};
+    use crate::config::{MlBackend, MlEnergyDelta, MlPotentialConfig};
     use crate::energy::EnergyModel;
 
     use super::MacePythonModel;
@@ -296,6 +331,10 @@ for line in sys.stdin:
     elif cmd == "move":
         positions[int(request["atom"])] = list(request["position"])
         response = {"ok": True}
+    elif cmd == "local_delta":
+        old = energy()
+        positions[int(request["atom"])] = list(request["new_position"])
+        response = {"ok": True, "delta": energy() - old}
     elif cmd == "shutdown":
         print(json.dumps({"ok": True}), flush=True)
         break
@@ -324,6 +363,7 @@ for line in sys.stdin:
             init_args: None,
             weight: Some(0.5),
             cutoff: Some(5.0),
+            delta: None,
             device: Some("cpu".to_string()),
             torch_threads: Some(1),
             python: Some("python3".to_string()),
@@ -346,5 +386,23 @@ for line in sys.stdin:
 
         model.reject_move(0, &[1.0, 0.0, 0.0]);
         assert_eq!(model.total_energy(&config, &cell_list), 5.0);
+        drop(model);
+
+        let mut local_cfg = cfg.clone();
+        local_cfg.delta = Some(MlEnergyDelta::Local);
+        let mut local_model = MacePythonModel::from_config(&local_cfg, &config, &temp_dir).unwrap();
+        let local_delta = local_model.energy_delta_atom(
+            &config,
+            0,
+            &[1.0, 0.0, 0.0],
+            &[2.0, 0.0, 0.0],
+            &cell_list,
+            0,
+            0,
+        );
+        assert_eq!(local_delta, 3.0);
+        assert_eq!(local_model.total_energy(&config, &cell_list), 8.0);
+        local_model.reject_move(0, &[1.0, 0.0, 0.0]);
+        assert_eq!(local_model.total_energy(&config, &cell_list), 5.0);
     }
 }

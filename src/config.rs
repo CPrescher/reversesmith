@@ -228,10 +228,18 @@ pub struct MlPotentialConfig {
     pub init_args: Option<String>,
     pub weight: Option<f64>,
     pub cutoff: Option<f64>,
+    pub delta: Option<MlEnergyDelta>,
     pub device: Option<String>,
     pub torch_threads: Option<usize>,
     pub python: Option<String>,
     pub worker: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MlEnergyDelta {
+    Full,
+    Local,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -272,6 +280,9 @@ impl Config {
                 .is_some_and(|cutoff| cutoff <= 0.0 || !cutoff.is_finite())
             {
                 return Err("[ml_potential] cutoff must be finite and greater than 0".into());
+            }
+            if ml.delta.is_some() && !matches!(ml.backend, MlBackend::MacePython) {
+                return Err("[ml_potential] delta is only supported for mace_python".into());
             }
             match ml.backend {
                 MlBackend::GapQuip | MlBackend::MacePython => {
