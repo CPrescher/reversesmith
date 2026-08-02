@@ -2,6 +2,49 @@
 
 All notable changes to rsmith will be documented in this file.
 
+## [1.4.0] - 2026-08-02
+
+### Added
+- **Native SNAP backend**: evaluate LAMMPS/FitSNAP `.snapcoeff` and `.snapparam`
+  models directly in Rust without a LAMMPS runtime dependency.
+- Support for linear, explicit multi-element (`chemflag`), and quadratic SNAP
+  energy models, including the standard switching, normalization, self-weight,
+  and isolated-atom conventions.
+- **MACE/Python backend**: persistent Python worker integration for using MACE
+  checkpoints as RMC energy regularizers, with CPU/GPU device selection,
+  PyTorch thread control, and optional float32 conversion.
+- Three MACE energy-delta strategies: broadly compatible full-system evaluation,
+  exact dense-local evaluation, and exact incremental message-passing inference
+  for supported short-range `MACE` and `ScaleShiftMACE` checkpoints.
+- Release-mode MACE and native-SNAP scaling examples that emit CSV timing data
+  for atom-count, thread-count, precision, and delta-mode comparisons.
+
+### Performance
+- Native SNAP caches accepted per-atom energies and recomputes only local
+  environments affected by a proposed single-atom move.
+- Dense-local MACE clusters are built with a dedicated Rust cell list and sent
+  to the Python worker as compact atom-index and periodic-image arrays.
+- Dense-local MACE caches accepted per-atom energies, requiring only one
+  energy-only forward pass over the proposed cluster per trial.
+- Incremental MACE caches accepted hidden features and recomputes only the
+  causal subgraph changed at each message-passing layer. Its measured cost is
+  effectively independent of total atom count once the local environment has
+  stabilized.
+
+### Validation
+- Added frozen LAMMPS reference fixtures for standard, chemical, and quadratic
+  SNAP models, plus rotation-invariance and transactional-cache tests.
+- Added real-checkpoint MACE integration coverage comparing full, local, and
+  incremental deltas across rejected and accepted moves.
+- Hardened SNAP parsing and radial-parameter validation to reject inconsistent
+  or non-finite model data instead of silently evaluating it.
+
+### Documentation
+- Documented native SNAP setup, supported model conventions, and numerical
+  reference testing.
+- Added a MACE mode-selection guide covering compatibility, exactness,
+  atom-count scaling, precision, compilation, and measured CPU performance.
+
 ## [1.3.0] - 2026-07-08
 
 ### Added
