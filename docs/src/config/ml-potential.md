@@ -145,8 +145,15 @@ cluster with explicit periodic image atoms as context. It sums MACE per-atom
 energies only for atoms within `num_interactions * cutoff` of the moved atom
 before or after the trial move. Context atoms are included out to the same
 message-passing radius around those central atoms. At fixed density this makes
-the cost effectively independent of total atom count, but the constant can be
-large.
+the cost effectively independent of total atom count once the simulation cell
+is larger than the cluster. A dedicated Rust cell list generates compact
+`(atom index, periodic image shift)` arrays and places the affected central
+atoms in one coherent image around the moved atom; the Python worker only
+assembles and evaluates the resulting cluster. The worker caches accepted
+full-system per-atom energies, so a trial evaluates only the proposed cluster
+once, without force/stress autograd. Accepting the trial commits its affected
+per-atom energies to the cache; rejecting it restores the position and drops
+the pending update.
 
 Use `delta = "local"` only for ordinary short-range MACE models. Do not use it
 for models with explicit long-range electrostatics, global charge/spin coupling,

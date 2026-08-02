@@ -1,7 +1,7 @@
 //! Manual CPU thread-scaling benchmark for the MACE/Python RMC backend.
 //!
-//! This measures the complete rejected-trial path used by RMC: two MACE
-//! full-system energy evaluations followed by restoration of the worker state.
+//! This measures the complete rejected-trial path used by RMC for either the
+//! full-system or local-cluster MACE energy-delta strategy.
 
 use std::collections::HashMap;
 use std::env;
@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use rsmith::atoms::{Atom, Configuration};
 use rsmith::cells::CellList;
-use rsmith::config::{MlBackend, MlPotentialConfig};
+use rsmith::config::{MlBackend, MlEnergyDelta, MlPotentialConfig};
 use rsmith::energy::EnergyModel;
 use rsmith::ml_potential::MacePythonModel;
 
@@ -22,6 +22,7 @@ struct Arguments {
     model: PathBuf,
     python: String,
     device: String,
+    delta: MlEnergyDelta,
     cells: Vec<usize>,
     threads: Vec<usize>,
     warmup: usize,
@@ -31,7 +32,7 @@ struct Arguments {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let arguments = parse_arguments()?;
     println!(
-        "cells,atoms,threads,init_ms,trials,mean_ms,median_ms,min_ms,max_ms,stddev_ms,speedup_vs_1t,efficiency"
+        "delta,cells,atoms,threads,baseline_threads,init_ms,trials,central_atoms,cluster_atoms,mean_ms,median_ms,min_ms,max_ms,stddev_ms,speedup_vs_baseline,efficiency"
     );
 
     for &cells in &arguments.cells {
@@ -43,7 +44,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map(|atom| atom.position)
             .collect::<Vec<_>>();
         let cell_list = CellList::new(&positions, &template.box_lengths, 5.0);
-        let mut one_thread_median = None;
+        let mut baseline_median = None;
+        let baseline_threads = arguments.threads[0];
 
         for &threads in &arguments.threads {
             let config = MlPotentialConfig {
@@ -54,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 init_args: None,
                 weight: Some(1.0),
                 cutoff: Some(5.0),
-                delta: None,
+                delta: Some(arguments.delta),
                 device: Some(arguments.device.clone()),
                 torch_threads: Some(threads),
                 python: Some(arguments.python.clone()),
@@ -80,6 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 arguments.trials,
                 true,
             )?;
+            let (central_atoms, cluster_atoms) = model.last_local_cluster_sizes().unwrap_or((0, 0));
             samples.sort_by(f64::total_cmp);
 
             let mean = samples.iter().sum::<f64>() / samples.len() as f64;
@@ -95,17 +98,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .sum::<f64>()
                 / samples.len() as f64;
             let standard_deviation = variance.sqrt();
-            if threads == 1 {
-                one_thread_median = Some(median);
+            if threads == baseline_threads {
+                baseline_median = Some(median);
             }
-            let baseline = one_thread_median.ok_or(
-                "thread list must start with 1 so speedup and efficiency can be calculated",
-            )?;
+            let baseline = baseline_median.ok_or("failed to record the baseline thread count")?;
             let speedup = baseline / median;
-            let efficiency = speedup / threads as f64;
+            let efficiency = speedup / (threads as f64 / baseline_threads as f64);
 
             println!(
-                "{cells},{atom_count},{threads},{initialization_ms:.3},{},{mean:.3},{median:.3},{:.3},{:.3},{standard_deviation:.3},{speedup:.3},{efficiency:.3}",
+                "{},{cells},{atom_count},{threads},{baseline_threads},{initialization_ms:.3},{},{central_atoms},{cluster_atoms},{mean:.3},{median:.3},{:.3},{:.3},{standard_deviation:.3},{speedup:.3},{efficiency:.3}",
+                delta_label(arguments.delta),
                 arguments.trials,
                 samples[0],
                 samples[samples.len() - 1],
@@ -209,6 +211,7 @@ fn parse_arguments() -> Result<Arguments, Box<dyn std::error::Error>> {
         }
     });
     let mut device = "cpu".to_string();
+    let mut delta = MlEnergyDelta::Full;
     let mut cells = DEFAULT_CELLS.to_vec();
     let mut threads = DEFAULT_THREADS.to_vec();
     let mut warmup = 2;
@@ -220,6 +223,7 @@ fn parse_arguments() -> Result<Arguments, Box<dyn std::error::Error>> {
             "--model" => model = Some(PathBuf::from(next_value(&mut arguments, "--model")?)),
             "--python" => python = next_value(&mut arguments, "--python")?,
             "--device" => device = next_value(&mut arguments, "--device")?,
+            "--delta" => delta = parse_delta(&next_value(&mut arguments, "--delta")?)?,
             "--cells" => cells = parse_list(&next_value(&mut arguments, "--cells")?)?,
             "--threads" => threads = parse_list(&next_value(&mut arguments, "--threads")?)?,
             "--warmup" => warmup = next_value(&mut arguments, "--warmup")?.parse()?,
@@ -240,8 +244,8 @@ fn parse_arguments() -> Result<Arguments, Box<dyn std::error::Error>> {
     if cells.is_empty() || cells.contains(&0) {
         return Err("--cells must contain positive integers".into());
     }
-    if threads.first() != Some(&1) || threads.contains(&0) {
-        return Err("--threads must contain positive integers and start with 1".into());
+    if threads.is_empty() || threads.contains(&0) {
+        return Err("--threads must contain positive integers".into());
     }
     if trials == 0 {
         return Err("--trials must be greater than zero".into());
@@ -251,6 +255,7 @@ fn parse_arguments() -> Result<Arguments, Box<dyn std::error::Error>> {
         model,
         python,
         device,
+        delta,
         cells,
         threads,
         warmup,
@@ -274,6 +279,21 @@ fn parse_list(value: &str) -> Result<Vec<usize>, Box<dyn std::error::Error>> {
         .collect()
 }
 
+fn parse_delta(value: &str) -> Result<MlEnergyDelta, Box<dyn std::error::Error>> {
+    match value {
+        "full" => Ok(MlEnergyDelta::Full),
+        "local" => Ok(MlEnergyDelta::Local),
+        _ => Err(format!("unknown delta mode {value:?}; expected full or local").into()),
+    }
+}
+
+fn delta_label(delta: MlEnergyDelta) -> &'static str {
+    match delta {
+        MlEnergyDelta::Full => "full",
+        MlEnergyDelta::Local => "local",
+    }
+}
+
 fn print_help() {
     println!(
         "MACE/Python CPU thread-scaling benchmark\n\n\
@@ -282,9 +302,10 @@ Options:\n\
   --model PATH       MACE checkpoint (or RSMITH_MACE_TEST_MODEL)\n\
   --python PATH      Python with MACE installed [default: .venv/bin/python]\n\
   --device DEVICE    MACE device [default: cpu]\n\
+  --delta MODE       Energy delta: full or local [default: full]\n\
   --cells LIST       Diamond-Si supercell edges [default: 3,5,6]\n\
                      Atom count is 8*cells^3: 216,1000,1728\n\
-  --threads LIST     PyTorch thread counts, starting with 1 [default: 1,2,4,8,10,14]\n\
+  --threads LIST     PyTorch thread counts [default: 1,2,4,8,10,14]\n\
   --warmup N         Unmeasured trial moves per case [default: 2]\n\
   --trials N         Measured trial moves per case [default: 5]\n"
     );

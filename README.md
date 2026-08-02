@@ -378,9 +378,15 @@ delta_E = E_full(after move) - E_full(before move)
 
 For ordinary short-range MACE models, `delta = "local"` evaluates a bounded
 local cluster with explicit periodic image atoms as context and sums only the
-affected per-atom energies. The affected radius is `num_interactions * cutoff`,
-so at fixed density the trial cost is effectively independent of total atom
-count, though the constant can still be large.
+affected per-atom energies. rsmith builds the cluster with a dedicated Rust
+cell list, places affected atoms in one coherent periodic image around the
+moved atom, and sends compact atom-index/image-shift arrays to the Python
+worker. The worker caches the accepted full-system per-atom energies, so each
+trial needs only one energy-only MACE forward pass for the proposed local
+cluster; accepting a move updates the affected cache entries and rejecting it
+discards them. The affected radius is `num_interactions * cutoff`, so at fixed
+density the trial cost becomes effectively independent of total atom count once
+the simulation cell is larger than the local cluster.
 
 Use local MACE deltas only for short-range models. Keep `delta = "full"` for
 models with explicit long-range electrostatics, global charge/spin coupling, or
@@ -406,12 +412,14 @@ used by RMC, run the release-mode benchmark example:
 MODEL=$(.venv/bin/python scripts/download_mace_test_model.py)
 cargo run --release --example mace_scaling -- \
   --model "$MODEL" \
-  --python .venv/bin/python
+  --python .venv/bin/python \
+  --delta local
 ```
 
 By default this benchmarks 216-, 1,000-, and 1,728-atom diamond-Si cells with
 1, 2, 4, 8, 10, and 14 PyTorch threads. It prints CSV containing per-trial
 statistics, speedup relative to one thread, and parallel efficiency. Use
+`--delta full` or `--delta local` to select the energy-delta strategy, and use
 `--help` to change the system sizes, thread counts, warm-up, or sample count.
 
 ### 5. Smoke-test the binding
