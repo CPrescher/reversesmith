@@ -329,6 +329,10 @@ energies live in `tests/data/snap`. Run their native checks with:
 cargo test --test snap_model_files --test snap_reference_fixture
 ```
 
+The book contains a complete [native SNAP user
+guide](docs/src/snap.md) and an [implementation
+description](docs/src/algorithms/snap-native.md).
+
 For GAP/QUIP, use:
 
 ```toml

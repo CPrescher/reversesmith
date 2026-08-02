@@ -16,6 +16,7 @@
     - [EPSR](./config/epsr.md)
     - [Analysis](./config/analysis.md)
 - [Pair Potentials](./potentials.md)
+- [Native SNAP](./snap.md)
 - [Structural Analysis](./analysis.md)
 
 # Theory & Algorithms
@@ -23,6 +24,7 @@
 - [RMC Algorithm](./algorithms/rmc.md)
 - [Scattering Functions](./algorithms/scattering.md)
 - [Pair Potentials Theory](./algorithms/potentials-theory.md)
+- [Native SNAP Implementation](./algorithms/snap-native.md)
 
 # Reference
 
