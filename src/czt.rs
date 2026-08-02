@@ -3,11 +3,11 @@ use rustfft::{Fft, FftPlanner};
 use std::sync::Arc;
 
 /// Chirp-Z Transform for computing the discrete sine transform:
-///   Y[k] = Σ_{i=0}^{N-1} f[i] * sin(Q_k * r_i)
+///   `Y[k] = Σ_{i=0}^{N-1} f[i] * sin(Q_k * r_i)`
 /// where Q_k = qmin + k * dQ and r_i are uniformly spaced,
 /// using Bluestein's algorithm (O(L log L) instead of O(N * M)).
 ///
-/// The key idea: the sum is Im(Σ f[i] * exp(j * Q_k * r_i)), which is
+/// The key idea: the sum is `Im(Σ f[i] * exp(j * Q_k * r_i))`, which is
 /// a non-uniform DFT that can be expressed as a convolution via
 /// Bluestein's identity: k*i = (k² + i² - (k-i)²)/2.
 pub struct CztSineTransform {
@@ -105,7 +105,7 @@ impl CztSineTransform {
         }
     }
 
-    /// Compute Y[k] = Σ_{i=0}^{N-1} input[i] * sin(Q_k * r_i) for k = 0..nq-1.
+    /// Compute `Y[k] = Σ_{i=0}^{N-1} input[i] * sin(Q_k * r_i)` for `k = 0..nq-1`.
     pub fn transform(&mut self, input: &[f64], output: &mut [f64]) {
         debug_assert_eq!(input.len(), self.nbins);
         debug_assert_eq!(output.len(), self.nq);

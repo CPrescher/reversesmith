@@ -50,9 +50,10 @@ rdf_cutoff = 11.0
 ## Modes
 
 ```bash
-rsmith config.toml                      # RMC refinement
-rsmith config.toml --compute-sq-only    # Compute S(Q) only
-rsmith config.toml --analyze            # Structural analysis
+rsmith config.toml                    # RMC refinement
+rsmith config.toml --analyze          # Analyze starting and refined structures
+rsmith config.toml --resume           # Resume from checkpoint.dat
+rsmith config.toml --output-dir run01 # Keep one run's outputs separate
 ```
 
 ## Documentation

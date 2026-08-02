@@ -1,3 +1,4 @@
+#![doc = include_str!("../docs/src/crate-guide.md")]
 #![allow(clippy::needless_range_loop)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]

@@ -1,6 +1,7 @@
 # Summary
 
 [Introduction](./introduction.md)
+- [RMC and regularization in practice](./crate-guide.md)
 
 # User Guide
 

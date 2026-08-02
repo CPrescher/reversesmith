@@ -25,3 +25,7 @@ Reversesmith is designed for refining atomic models of disordered materials (gla
 4. Analyze the refined structure for local order (coordination, bond angles)
 
 The pair potential feature (hybrid RMC) is particularly useful when pure RMC produces physically unreasonable structures -- it keeps the refinement close to the potential energy surface of the force field used to generate the initial structure.
+
+For a fuller explanation of the inverse problem, the role of physical and
+machine-learning potentials as regularizers, workflow selection, and four worked
+tutorials, continue with [RMC and regularization in practice](./crate-guide.md).

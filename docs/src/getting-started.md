@@ -117,4 +117,9 @@ This refines `glass.data` against `experimental.sq` and writes:
 
 **XYZ file** (`format = "xyz"`): Standard XYZ with box dimensions in the comment line, either as `Lattice="Lx 0 0 0 Ly 0 0 0 Lz"` (extended XYZ) or `Lx Ly Lz`.
 
+**VASP POSCAR/CONTCAR** (`format = "poscar"`): VASP 5+ format with species names,
+using Direct or Cartesian coordinates. An optional Selective Dynamics line is
+accepted. Only orthorhombic cells are currently supported for every structure
+format.
+
 **Experimental data**: Two-column whitespace-separated files. Lines starting with `#` are skipped. First column is Q (1/A) or r (A), second column is S(Q) or g(r).

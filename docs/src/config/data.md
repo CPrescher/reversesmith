@@ -12,6 +12,7 @@ sigma = 0.02                # Uncertainty in S(Q) units (omit to auto-estimate f
 sigma_alpha = 0.05          # Linear Q-scaling: sigma *= 1 + alpha*Q (default: 0)
 fit_min = 0.5               # Only fit Q > fit_min (default: 0, fit all)
 fit_max = 18.0              # Only fit Q < fit_max (default: inf, fit all)
+convention = "sq"           # "sq", "iq", or "fq" (default: "sq")
 ```
 
 ## `[data.neutron_sq]` -- Neutron Structure Factor
@@ -76,6 +77,12 @@ lorch = true                # Apply Lorch window in Q-space (default: true)
 | `fit_max` | Float | inf | Upper bound of fitting range |
 | `qmax` | Float | auto | Q_max for g(r) inverse FT (g(r) only) |
 | `lorch` | Bool | true | Lorch window in Q-space (g(r) only) |
+| `convention` | String | `"sq"` | Reciprocal-space input convention: `"sq"` for S(Q), `"iq"` for S(Q)-1, or `"fq"` for Q[S(Q)-1] |
+
+`convention` applies to X-ray and neutron reciprocal-space datasets. It lets
+`rsmith` transform its calculated Faber-Ziman S(Q) before evaluating the residual,
+so the experimental file does not need to be pre-converted. It is ignored for
+real-space datasets.
 
 ## Sigma estimation
 

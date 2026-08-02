@@ -5,6 +5,7 @@
 structure = "structure.data"   # Path to atomic structure file
 format = "lammps"              # "lammps" or "xyz"
 density = 3.27                 # Optional: target mass density in g/cm^3
+output_poscar = true           # Also write refined_POSCAR (default: false)
 
 [system.types]                 # Required for LAMMPS format: type ID -> element
 1 = "Ca"
@@ -17,9 +18,12 @@ density = 3.27                 # Optional: target mass density in g/cm^3
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `structure` | String | Yes | Path to the input structure file |
-| `format` | String | Yes | File format: `"lammps"` or `"xyz"` |
+| `format` | String | Yes | File format: `"lammps"`, `"xyz"`, or `"poscar"` |
 | `types` | Map | LAMMPS only | Maps LAMMPS type integers to element names |
 | `density` | Float | No | Target mass density (g/cm^3). When set, the box and atom positions are rescaled isotropically before any computation begins. |
+| `output_poscar` | Boolean | No | Write `refined_POSCAR` alongside `refined.xyz` (default: `false`) |
+
+All input formats currently require an orthorhombic periodic cell.
 
 ## Density rescaling
 
@@ -41,3 +45,10 @@ Standard XYZ with box dimensions in the comment line (line 2):
 - Simple: `Lx Ly Lz`
 
 Species are determined automatically from the element names in the coordinate lines. The `[system.types]` section is not needed.
+
+## VASP POSCAR/CONTCAR format
+
+Use `format = "poscar"` for a VASP 5+ POSCAR or CONTCAR containing element names.
+Both Direct and Cartesian coordinates are supported, as is an optional Selective
+Dynamics line (the flags are ignored). VASP 4 files without species names and
+non-orthorhombic lattice vectors are not supported.

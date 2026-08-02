@@ -14,7 +14,7 @@ use crate::xray::form_factor;
 
 /// Cumulative empirical potential state for all pairs.
 pub struct EpsrState {
-    /// EP tables per pair, flat [n_pairs][n_bins].
+    /// EP tables per pair, stored as a flat `n_pairs * n_bins` array.
     pub ep_tables: Vec<Vec<f64>>,
     /// Grid spacing in Å.
     pub dr: f64,
@@ -110,7 +110,7 @@ impl EpsrState {
 
     /// Compute X-ray weights w_ab(Q) for given species/concentrations/form factors.
     ///
-    /// Returns flat array [n_pairs * nq] with w_ab(Q_k) = δ_ab c_a c_b f_a f_b / <f>².
+    /// Returns a flat `n_pairs * nq` array with `w_ab(Q_k) = δ_ab c_a c_b f_a f_b / ⟨f⟩²`.
     pub fn compute_xray_weights(config: &Configuration, q_grid: &[f64]) -> Vec<f64> {
         let n_types = config.species.len();
         let nq = q_grid.len();
@@ -143,7 +143,7 @@ impl EpsrState {
 
     /// Compute Faber-Ziman neutron weights w_ab(Q) (Q-independent).
     ///
-    /// w_ab = (2-δ_ab) * c_a * c_b * b_a * b_b / <b>²
+    /// `w_ab = (2-δ_ab) * c_a * c_b * b_a * b_b / ⟨b⟩²`
     pub fn compute_neutron_weights(config: &Configuration, nq: usize) -> Vec<f64> {
         let n_types = config.species.len();
         let n_pairs = n_types * (n_types + 1) / 2;

@@ -78,7 +78,7 @@ pub struct RmcState {
     pub seed: u64,
     /// Flat partial S_ab(Q) array: [n_pairs * nq]. Populated after run_rmc().
     pub partial_sq: Option<Vec<f64>>,
-    /// Total (X-ray weighted) S(Q): [nq]. Populated after run_rmc().
+    /// Total (X-ray weighted) S(Q), with `nq` entries. Populated after `run_rmc()`.
     pub total_sq: Option<Vec<f64>>,
 }
 
