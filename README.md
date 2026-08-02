@@ -84,8 +84,10 @@ The shim must export these symbols:
 rsmith_gap_quip_create
 rsmith_gap_quip_destroy
 rsmith_gap_quip_set_structure
+rsmith_gap_quip_set_local_cluster
 rsmith_gap_quip_move_atom
 rsmith_gap_quip_per_atom_energy
+rsmith_gap_quip_per_atom_energies
 ```
 
 `rsmith_gap_quip_per_atom_energy()` is required. A total-energy-only wrapper is
@@ -178,15 +180,14 @@ $RSMITH_QUIP_PREFIX/env.sh
 $RSMITH_QUIP_PREFIX/lib/pkgconfig/rsmith-gap-quip.pc
 ```
 
-The shim includes `include/rsmith_gap_quip_shim.h` and calls QUIP's
-`quip_lammps_wrapper`, because that wrapper already returns per-atom
-`local_energy`. Its implementation:
+The shim includes `include/rsmith_gap_quip_shim.h` and uses an energy-only
+Fortran adapter around QUIP's `calc()` API. Its implementation:
 
 1. Load the GAP XML model and optional QUIP initialization string in `rsmith_gap_quip_create()`.
-2. Build/update the QUIP atoms object in `rsmith_gap_quip_set_structure()`.
-3. Update one atom position in `rsmith_gap_quip_move_atom()`.
-4. Recompute per-atom energies for the current structure.
-5. Sum only the requested atom indices in `rsmith_gap_quip_per_atom_energy()`.
+2. Build/update the periodic structure in `rsmith_gap_quip_set_structure()`.
+3. Accept bounded explicit-image clusters through `rsmith_gap_quip_set_local_cluster()`.
+4. Request selected per-atom energies without unused forces or virials.
+5. Return either individual values or their sum.
 
 Return `0` on success from mutating/evaluation functions and nonzero on error.
 Return a null handle from `rsmith_gap_quip_create()` if initialization fails.
@@ -338,6 +339,7 @@ model = "gap.xml"
 init_args = "Potential xml_label=GAP_2026"
 weight = 0.001
 cutoff = 5.0
+delta = "local"       # full=reference; local=bounded cached delta
 ```
 
 `cutoff` must be at least the maximum descriptor cutoff used by the GAP model.
@@ -347,6 +349,13 @@ energy delta will be wrong.
 `init_args` is optional. Use it when your GAP XML requires a specific QUIP
 initialization string, such as an `xml_label`. If omitted, the shim receives a
 null pointer and must choose an appropriate default for the model.
+
+`delta = "full"` evaluates the complete periodic system twice per trial.
+`delta = "local"` performs one full evaluation at startup, caches accepted
+per-atom energies, and then evaluates only a bounded explicit-image cluster for
+each move. Accept and reject operations update that cache transactionally.
+Local mode is intended for finite-range GAP models; validate it against full
+deltas when adopting a new potential.
 
 For MACE, use the Python worker backend:
 
@@ -483,15 +492,17 @@ cargo run --release --features gap-quip --example gap_scaling -- \
   --model /path/to/gap.xml \
   --init-args "Potential xml_label=GAP_LABEL" \
   --cutoff 5.0 \
-  --cells 3,5,6,8,10
+  --cells 3,5,6,8,10 \
+  --delta local
 ```
 
-The current GAP shim selects the correct affected per-atom energies for the
-delta, but QUIP's LAMMPS wrapper still builds a whole-system neighbor list and
-evaluates the full system twice per trial. GAP timing therefore grows with atom
-count. It also depends strongly on descriptor complexity and the number of
-sparse points, so comparisons between different GAP, SNAP, and MACE models are
-implementation benchmarks rather than accuracy rankings.
+Local GAP builds the periodic-image cluster in Rust, evaluates only affected
+central atoms, and calls an energy-only QUIP adapter. Its trial time should be
+approximately independent of total atom count, while its one-time cache
+initialization still scales with system size. Timing depends strongly on local
+coordination, descriptor complexity, and sparse-point count, so comparisons
+between GAP, SNAP, and MACE models are implementation benchmarks rather than
+accuracy rankings.
 
 ### 5. Smoke-test the binding
 
@@ -500,15 +511,13 @@ check that the backend initializes:
 
 ```bash
 . $HOME/Software/rsmith-gap-quip/env.sh
-RUST_MIN_STACK=134217728 \
 RSMITH_GAP_TEST_MODEL=/path/to/gap.xml \
 RSMITH_GAP_TEST_INIT_ARGS="Potential xml_label=GAP_LABEL" \
-cargo test --features gap-quip gap_quip_backend_initializes_when_test_model_is_available
+cargo test --release --features gap-quip --test gap_quip_integration
 ```
 
-If the test cannot find `RSMITH_GAP_TEST_MODEL`, it skips itself. `RUST_MIN_STACK`
-is recommended because QUIP/GAP initialization can use more stack than Rust's
-default test-thread stack.
+If the test cannot find `RSMITH_GAP_TEST_MODEL`, it skips itself. The test checks
+full/local equivalence across a periodic boundary and local reject semantics.
 
 ## References
 

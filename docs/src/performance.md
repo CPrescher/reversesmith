@@ -57,26 +57,32 @@ than proportional to core count.
 
 ## GAP/QUIP performance
 
-The GAP backend currently calculates the correct affected-atom energy sum but
-does not restrict QUIP's computational work to those atoms. Each trial invokes
-the LAMMPS-style QUIP wrapper for the complete old and new systems. The shim
-also constructs the full neighbor list with a direct atom-pair loop for each
-evaluation. Consequently, current GAP cost grows with total atom count rather
-than flattening like native SNAP or incremental MACE.
+GAP supports `delta = "full"` and `delta = "local"`. Full mode evaluates both
+complete periodic systems. Local mode caches accepted per-atom energies,
+constructs a bounded explicit-image cluster, and evaluates only affected
+central atoms once per trial. The adapter requests local energies without
+calculating forces or virials.
 
 The following Apple M4 Pro measurements use the published general-purpose Si
 PRX GAP (`GAP_2017_6_17_60_4_3_56_165`): a 5 A SOAP descriptor with 9,000
-sparse points plus its repulsive core potential. Times are medians of three
-rejected single-atom trials after one warm-up. The structures and displacement
-sequence match the SNAP and MACE benchmarks.
+sparse points plus its repulsive core potential. Full times are medians of
+three rejected trials after one warm-up; local times are medians of seven after
+two warm-ups. Both use eight OpenMP and OpenBLAS threads. The structures and
+displacement sequence match the SNAP and MACE benchmarks.
 
-| Atoms | GAP/QUIP | SNAP native | MACE incremental float32 |
-|------:|---------:|------------:|--------------------------:|
-| 216 | 1.090 s | 2.415 ms | 36.0 ms |
-| 1,000 | 5.295 s | 2.377 ms | 52.8 ms |
-| 1,728 | 9.309 s | 2.387 ms | 52.3 ms |
-| 4,096 | 22.583 s | 2.399 ms | 52.5 ms |
-| 8,000 | 44.456 s | 2.407 ms | 53.8 ms |
+| Atoms | GAP full | GAP local | Local speedup | SNAP native | MACE incremental float32 |
+|------:|---------:|----------:|--------------:|------------:|--------------------------:|
+| 216 | 252.6 ms | 21.17 ms | 11.9x | 2.415 ms | 36.0 ms |
+| 1,000 | 1.143 s | 21.07 ms | 54.3x | 2.377 ms | 52.8 ms |
+| 1,728 | 1.980 s | 21.15 ms | 93.6x | 2.387 ms | 52.3 ms |
+| 4,096 | 4.730 s | 21.32 ms | 221.8x | 2.399 ms | 52.5 ms |
+| 8,000 | 9.527 s | 21.81 ms | 436.9x | 2.407 ms | 53.8 ms |
+
+Every local case evaluated 29 central atoms in a 413-atom/image cluster. The
+small 3% change from 216 to 8,000 atoms shows that steady-state trial cost is
+effectively independent of total atom count. Local mode pays a one-time full
+evaluation to initialize its accepted-energy cache; this took about 4.7 s for
+8,000 atoms in the same process, in addition to model loading.
 
 These potentials are not equivalent in complexity or accuracy. In particular,
 the benchmark GAP has 9,000 SOAP sparse points, while the MACE result uses the
@@ -84,13 +90,11 @@ small MACE-MP test checkpoint and the SNAP result uses the linear
 `Si_Zuo_JPCA2020` model. The table measures current rsmith backend cost on a
 common structure, not scientific model quality.
 
-The installed QUIP build showed little CPU scaling at 1,000 atoms. A longer
-repeat measured 5.456 s with one thread and 4.949 s with fourteen OpenMP
-threads: only 1.10x speedup and about 8% parallel efficiency. OpenBLAS-only
-thread changes did not help; the small gain followed `OMP_NUM_THREADS` and is
-likely in the OpenBLAS fraction because this QUIP architecture was not compiled
-with OpenMP flags. Independent RMC replicas are therefore a better way to use
-additional cores with this build.
+Local CPU scaling at 1,000 atoms was useful but sublinear: 39.38, 27.52, 25.15,
+21.25, and 21.00 ms at 1, 2, 4, 8, and 14 threads respectively. Fourteen
+threads were 1.88x faster than one, with nearly all practical gain reached by
+eight threads. Independent RMC replicas remain the more efficient way to use
+additional cores after that point.
 
 ## Scaling
 

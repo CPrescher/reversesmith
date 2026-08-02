@@ -221,6 +221,7 @@ charges = { Ca = 1.2, Si = 2.4, O = -1.2 }   # Per-species charges (e)
 # init_args = "Potential xml_label=GAP_2026"  # Optional QUIP init string.
 # weight = 0.001
 # cutoff = 5.0  # Must be >= the maximum GAP descriptor cutoff.
+# delta = "local" # full=reference; local=bounded cached delta for finite-range GAP.
 
 # MACE/Python example (requires `uv sync --group mace`, no Rust feature flag):
 # [ml_potential]

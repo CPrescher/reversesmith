@@ -7,6 +7,10 @@ fn main() {
         return;
     }
 
+    println!("cargo:rerun-if-changed=c_src/rsmith_gap_quip_lammps_shim.cpp");
+    println!("cargo:rerun-if-changed=c_src/rsmith_gap_quip_local_energy_wrapper.F90");
+    println!("cargo:rerun-if-changed=include/rsmith_gap_quip_shim.h");
+
     println!("cargo:rerun-if-env-changed=QUIP_INCLUDE_DIR");
     println!("cargo:rerun-if-env-changed=QUIP_LIB_DIR");
     println!("cargo:rerun-if-env-changed=QUIP_LIBS");

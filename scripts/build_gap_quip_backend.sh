@@ -81,13 +81,44 @@ else
   cxx="${CXX:-c++}"
 fi
 
+if [ -z "${FC:-}" ] && [ -f "$quip_config" ]; then
+  fc="$(awk -F= '/^F95[[:space:]]*=/ { print $2; exit }' "$quip_config" | xargs)"
+  if [ -z "$fc" ]; then
+    fc="gfortran"
+  fi
+else
+  fc="${FC:-gfortran}"
+fi
+
+if ! command -v "$cxx" >/dev/null 2>&1; then
+  fc_major="$("$fc" -dumpversion 2>/dev/null | awk -F. '{ print $1 }')"
+  matching_cxx="$(dirname "$fc")/g++-$fc_major"
+  if [ -n "$fc_major" ] && [ -x "$matching_cxx" ]; then
+    cxx="$matching_cxx"
+  else
+    cat >&2 <<EOF
+The C++ compiler recorded by QUIP is unavailable:
+  $cxx
+
+Set CXX to the GNU C++ compiler matching your QUIP/GFortran installation.
+EOF
+    exit 1
+  fi
+fi
+
 "$cxx" -std=c++17 -O2 -fPIC \
   -I"$repo_dir/include" \
   -c "$repo_dir/c_src/rsmith_gap_quip_lammps_shim.cpp" \
   -o "$prefix/obj/rsmith_gap_quip_lammps_shim.o"
 
+"$fc" -O2 -fPIC -cpp -ffree-line-length-none \
+  -I"$quip_build_dir" \
+  -c "$repo_dir/c_src/rsmith_gap_quip_local_energy_wrapper.F90" \
+  -o "$prefix/obj/rsmith_gap_quip_local_energy_wrapper.o"
+
 "$ar" rcs "$prefix/lib/librsmith_quip_gap_shim.a" \
-  "$prefix/obj/rsmith_gap_quip_lammps_shim.o"
+  "$prefix/obj/rsmith_gap_quip_lammps_shim.o" \
+  "$prefix/obj/rsmith_gap_quip_local_energy_wrapper.o"
 
 fox_dirs="$(find "$quip_root/src/fox" -path '*/lib' -type d 2>/dev/null | paste -sd: - || true)"
 lib_dirs="$prefix/lib:$quip_build_dir"

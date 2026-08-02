@@ -11,6 +11,45 @@ This is RMC regularized by an ML potential, not EPSR refinement of the ML model.
 In v1, `[ml_potential]` is only supported for normal RMC runs and cannot be
 combined with `[epsr]` or `[potential]`.
 
+## Native SNAP
+
+Linear and quadratic SNAP models produced by FitSNAP or LAMMPS can be evaluated
+natively, without installing or launching LAMMPS:
+
+```toml
+[ml_potential]
+backend = "snap_native"
+coefficient_file = "potential.snapcoeff"
+parameter_file = "potential.snapparam"
+weight = 0.001
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `backend` | String | required | `snap_native` |
+| `coefficient_file` | String | required | FitSNAP/LAMMPS `.snapcoeff` file, relative to the config file |
+| `parameter_file` | String | required | Matching `.snapparam` file, relative to the config file |
+| `weight` | Float | 0.001 | Scales the SNAP energy contribution in the RMC cost |
+
+Do not set `cutoff` or `delta` for this backend. `rsmith` derives the species-pair
+cutoffs from `rcutfac` and the element radii, maintains a dedicated cell list, and
+caches accepted per-atom energies. A trial move recomputes only local environments
+within the old or proposed cutoff shells. Every cell dimension must be larger than
+twice the largest model cutoff so the minimum-image environment is unambiguous.
+
+Native evaluation supports linear standard and explicit multi-element (`chemflag`)
+SNAP models, including `switchflag`, `rmin0`, per-element `wj` and `radelem`,
+`bzeroflag`, `bnormflag`, both `wselfallflag` conventions, and quadratic
+(`quadraticflag`) energy models. FitSNAP remains responsible for fitting the model;
+`rsmith` only loads and evaluates it.
+
+The repository contains small reference models and frozen LAMMPS energies. Run the
+native compatibility checks with:
+
+```bash
+cargo test --test snap_model_files --test snap_reference_fixture
+```
+
 ## GAP/QUIP
 
 ```toml
@@ -20,6 +59,7 @@ model = "gap.xml"
 init_args = "Potential xml_label=GAP_2026"
 weight = 0.001
 cutoff = 5.0
+delta = "local"
 ```
 
 | Field | Type | Default | Description |
@@ -29,18 +69,23 @@ cutoff = 5.0
 | `init_args` | String | none | Optional QUIP initialization string, e.g. an `xml_label` |
 | `weight` | Float | 0.001 | Scales the ML energy contribution in the RMC cost |
 | `cutoff` | Float | required | Local environment cutoff in A |
+| `delta` | String | `full` | `full` or bounded, cached `local` energy deltas |
 
 `cutoff` must be at least the maximum descriptor cutoff used by the GAP model.
 If it is too small, local energy deltas will be wrong because some changed
 atomic environments will be missed.
 
-rsmith sums only the per-atom GAP energies whose finite-range environments can
-change. However, the current C shim uses QUIP's LAMMPS wrapper, which constructs
-a whole-system neighbor list and evaluates all atoms on both sides of every
-trial move before rsmith selects those affected energies. This preserves the
-correct local energy delta but does **not** currently give local computational
-scaling. Expect the runtime to grow with total atom count; see
-[Performance Notes](../performance.md#gapquip-performance).
+`delta = "full"` evaluates the complete periodic system before and after each
+trial and is the conservative reference mode. `delta = "local"` evaluates the
+full system once at startup to cache accepted per-atom energies. Each trial then
+builds an explicit periodic-image cluster, evaluates only the atoms whose GAP
+environments can change, and updates the cache transactionally on acceptance.
+The bundled Fortran adapter requests local energies only; it does not calculate
+unused forces or virials. For finite-range GAP models, per-trial cost therefore
+depends on local coordination and model complexity rather than total atom count.
+
+Validate local against full deltas when introducing a new model, especially a
+model with nonlocal terms. `incremental` is not supported for GAP/QUIP.
 
 ## Building With QUIP
 
@@ -86,8 +131,10 @@ and exposes per-atom GAP energies. The Rust side calls the following symbols:
 rsmith_gap_quip_create
 rsmith_gap_quip_destroy
 rsmith_gap_quip_set_structure
+rsmith_gap_quip_set_local_cluster
 rsmith_gap_quip_move_atom
 rsmith_gap_quip_per_atom_energy
+rsmith_gap_quip_per_atom_energies
 ```
 
 `rsmith_gap_quip_create()` receives both the model path and the optional
@@ -104,12 +151,13 @@ To benchmark the exact GAP path used by RMC, run:
 cargo run --release --features gap-quip --example gap_scaling -- \
   --model /path/to/gap.xml \
   --init-args "Potential xml_label=GAP_LABEL" \
-  --cutoff 5.0
+  --cutoff 5.0 \
+  --delta local
 ```
 
 The example prints CSV timing statistics for identical rejected single-atom
 moves across configurable diamond-Si supercells. The model must support Si;
-use `--help` to change sizes, warm-up count, and sample count.
+use `--help` to change sizes, delta mode, warm-up count, and sample count.
 
 ## MACE/Python
 

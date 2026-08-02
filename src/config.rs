@@ -136,7 +136,7 @@ pub struct EpsrConfig {
     pub feedback: Option<f64>,
     /// Gaussian smoothing width in Å for EP (default: 0.02).
     pub smooth_sigma: Option<f64>,
-    /// MC moves per EPSR epoch. Overrides [rmc] max_moves during EPSR (default: from [rmc]).
+    /// MC moves per EPSR epoch. Overrides `[rmc]` max_moves during EPSR (default: from `[rmc]`).
     pub moves_per_iteration: Option<u64>,
     /// kT in eV for the EP update (default: 0.025, ~300K).
     pub temperature: Option<f64>,
@@ -299,8 +299,15 @@ impl Config {
             {
                 return Err("[ml_potential] cutoff must be finite and greater than 0".into());
             }
-            if ml.delta.is_some() && !matches!(ml.backend, MlBackend::MacePython) {
-                return Err("[ml_potential] delta is only supported for mace_python".into());
+            if ml.delta.is_some() && matches!(ml.backend, MlBackend::SnapNative) {
+                return Err(
+                    "[ml_potential] delta is only supported for gap_quip and mace_python".into(),
+                );
+            }
+            if matches!(ml.backend, MlBackend::GapQuip)
+                && matches!(ml.delta, Some(MlEnergyDelta::Incremental))
+            {
+                return Err("[ml_potential] gap_quip supports delta = full or local".into());
             }
             if (ml.dtype.is_some() || ml.compile_mode.is_some())
                 && !matches!(ml.backend, MlBackend::MacePython)

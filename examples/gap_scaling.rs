@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use rsmith::atoms::{Atom, Configuration};
 use rsmith::cells::CellList;
-use rsmith::config::{MlBackend, MlPotentialConfig};
+use rsmith::config::{MlBackend, MlEnergyDelta, MlPotentialConfig};
 use rsmith::energy::EnergyModel;
 use rsmith::ml_potential::GapQuipModel;
 
@@ -19,6 +19,7 @@ struct Arguments {
     cells: Vec<usize>,
     warmup: usize,
     trials: usize,
+    delta: MlEnergyDelta,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let openblas_threads =
         env::var("OPENBLAS_NUM_THREADS").unwrap_or_else(|_| "default".to_string());
     println!(
-        "backend,omp_threads,openblas_threads,cells,atoms,init_ms,trials,mean_ms,median_ms,min_ms,max_ms,stddev_ms"
+        "backend,omp_threads,openblas_threads,cells,atoms,init_ms,trials,mean_ms,median_ms,min_ms,max_ms,stddev_ms,delta_checksum,central_atoms,cluster_atoms"
     );
 
     for cells in arguments.cells {
@@ -41,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             init_args: arguments.init_args.clone(),
             weight: Some(1.0),
             cutoff: Some(arguments.cutoff),
-            delta: None,
+            delta: Some(arguments.delta),
             device: None,
             torch_threads: None,
             dtype: None,
@@ -60,14 +61,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect::<Vec<_>>();
         let cell_list = CellList::new(&positions, &structure.box_lengths, model.cutoff());
 
-        run_trials(
+        let _ = run_trials(
             &mut model,
             &mut structure,
             &cell_list,
             arguments.warmup,
             false,
         );
-        let mut samples = run_trials(
+        let (mut samples, checksum) = run_trials(
             &mut model,
             &mut structure,
             &cell_list,
@@ -88,8 +89,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .sum::<f64>()
             / samples.len() as f64;
 
+        let (central_atoms, cluster_atoms) = model.last_local_cluster_sizes().unwrap_or((0, 0));
         println!(
-            "gap_quip,{omp_threads},{openblas_threads},{cells},{atom_count},{initialization_ms:.3},{},{mean:.6},{median:.6},{:.6},{:.6},{:.6}",
+            "gap_quip_{},{omp_threads},{openblas_threads},{cells},{atom_count},{initialization_ms:.3},{},{mean:.6},{median:.6},{:.6},{:.6},{:.6},{checksum:.12e},{central_atoms},{cluster_atoms}",
+            delta_label(arguments.delta),
             arguments.trials,
             samples[0],
             samples[samples.len() - 1],
@@ -105,7 +108,7 @@ fn run_trials(
     cell_list: &CellList,
     count: usize,
     measure: bool,
-) -> Vec<f64> {
+) -> (Vec<f64>, f64) {
     let atom_index = 0;
     let old_position = structure.atoms[atom_index].position;
     let mut samples = Vec::with_capacity(count);
@@ -141,7 +144,7 @@ fn run_trials(
         }
     }
     black_box(checksum);
-    samples
+    (samples, checksum)
 }
 
 fn diamond_silicon(cells: usize) -> Configuration {
@@ -189,6 +192,7 @@ fn parse_arguments() -> Result<Arguments, Box<dyn std::error::Error>> {
     let mut cells = vec![3, 5, 6, 8, 10];
     let mut warmup = 3;
     let mut trials = 7;
+    let mut delta = MlEnergyDelta::Full;
     let mut arguments = env::args().skip(1);
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
@@ -198,6 +202,13 @@ fn parse_arguments() -> Result<Arguments, Box<dyn std::error::Error>> {
             "--cells" => cells = parse_list(&next_value(&mut arguments, "--cells")?)?,
             "--warmup" => warmup = next_value(&mut arguments, "--warmup")?.parse()?,
             "--trials" => trials = next_value(&mut arguments, "--trials")?.parse()?,
+            "--delta" => {
+                delta = match next_value(&mut arguments, "--delta")?.as_str() {
+                    "full" => MlEnergyDelta::Full,
+                    "local" => MlEnergyDelta::Local,
+                    value => return Err(format!("unsupported GAP delta mode: {value}").into()),
+                }
+            }
             "-h" | "--help" => {
                 print_help();
                 std::process::exit(0);
@@ -219,6 +230,7 @@ fn parse_arguments() -> Result<Arguments, Box<dyn std::error::Error>> {
         cells,
         warmup,
         trials,
+        delta,
     })
 }
 
@@ -248,6 +260,15 @@ Options:\n\
   --cutoff FLOAT     Maximum GAP descriptor cutoff in A [default: 5.0]\n\
   --cells LIST       Diamond-Si supercell edges [default: 3,5,6,8,10]\n\
   --warmup N         Unmeasured rejected trial moves [default: 3]\n\
-  --trials N         Measured rejected trial moves [default: 7]\n"
+  --trials N         Measured rejected trial moves [default: 7]\n\
+  --delta MODE       Energy-delta mode: full or local [default: full]"
     );
+}
+
+fn delta_label(delta: MlEnergyDelta) -> &'static str {
+    match delta {
+        MlEnergyDelta::Full => "full",
+        MlEnergyDelta::Local => "local",
+        MlEnergyDelta::Incremental => unreachable!(),
+    }
 }

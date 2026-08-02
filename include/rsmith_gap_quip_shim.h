@@ -22,6 +22,15 @@ int rsmith_gap_quip_set_structure(
     const double *positions,
     const double *box_lengths);
 
+int rsmith_gap_quip_set_local_cluster(
+    RsmithGapQuipHandle *handle,
+    size_t n_atoms,
+    size_t n_central,
+    const size_t *atom_ids,
+    const char *const *species,
+    const double *positions,
+    const double *box_lengths);
+
 int rsmith_gap_quip_move_atom(
     RsmithGapQuipHandle *handle,
     size_t atom_idx,
@@ -32,6 +41,12 @@ int rsmith_gap_quip_per_atom_energy(
     size_t n_indices,
     const size_t *indices,
     double *out_energy);
+
+int rsmith_gap_quip_per_atom_energies(
+    RsmithGapQuipHandle *handle,
+    size_t n_indices,
+    const size_t *indices,
+    double *out_energies);
 
 #ifdef __cplusplus
 }

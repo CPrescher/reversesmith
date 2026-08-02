@@ -352,7 +352,7 @@ worker = "custom_worker.py"
 }
 
 #[test]
-fn ml_delta_is_only_supported_for_mace_python() {
+fn gap_quip_accepts_local_but_rejects_incremental_delta() {
     let toml = r#"
 [system]
 structure = "test.xyz"
@@ -368,10 +368,13 @@ model = "gap.xml"
 cutoff = 5.0
 delta = "local"
 "#;
-    let err = load_toml(toml).unwrap_err();
+    load_toml(toml).expect("local GAP delta should be valid");
+
+    let incremental = toml.replace("delta = \"local\"", "delta = \"incremental\"");
+    let err = load_toml(&incremental).unwrap_err();
     assert!(
-        err.contains("delta is only supported for mace_python"),
-        "expected MACE-only delta validation error, got: {err}"
+        err.contains("gap_quip supports delta = full or local"),
+        "expected GAP delta validation error, got: {err}"
     );
 }
 
