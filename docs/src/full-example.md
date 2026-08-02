@@ -61,6 +61,11 @@ anneal_start = 2.0
 anneal_end = 0.01
 anneal_steps = 200_000
 
+# Optional for expensive GAP/MACE (and supported by every energy backend):
+# reject against the experimental term before calculating the energy delta.
+delayed_acceptance = true
+energy_calibration_moves = 1000
+
 # Early stopping
 convergence_threshold = 1e-4
 convergence_window = 50_000

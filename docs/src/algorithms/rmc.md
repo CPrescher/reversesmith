@@ -4,10 +4,17 @@ The core algorithm follows McGreevy & Pusztai (1988). Each iteration:
 
 1. **Select** a random atom and propose a displacement drawn uniformly from [-max_step, +max_step] in each dimension.
 2. **Check constraints**: reject immediately if minimum distance or coordination constraints are violated.
-3. **Compute cost**: incrementally update the structure factor and evaluate chi2. If potentials are active, compute the energy change.
+3. **Compute cost**: incrementally update the structure factor and evaluate chi2. If potentials are active, normally compute the energy change as well.
 4. **Accept/reject** via the Metropolis criterion:
    - If cost decreases: always accept
    - If cost increases by delta: accept with probability exp(-delta / 2T)
+
+When `[rmc] delayed_acceptance = true`, step 4 is split into a data-only
+Metropolis test followed by the energy test. A data-stage rejection avoids the
+potential call. This preserves the target distribution but can lower the
+acceptance rate when the two cost terms oppose one another. See
+[Delayed Acceptance](./delayed-acceptance.md) for the derivation, backend
+guidance, logging, and calibration behavior.
 
 ## Cost function
 
@@ -69,6 +76,9 @@ The factor of 2 in the denominator follows the RMC convention (McGreevy & Puszta
 The default temperature is **T = 0.1**, which provides a good balance between optimization and exploration. At T = 0.1, the effective acceptance threshold is `exp(-delta / 0.2)`, so a cost increase of +0.2 has about a 37% chance of being accepted, while an increase of +1.0 drops to 0.7%.
 
 Higher temperatures (T ~ 1) are very permissive and will typically cause chi2 to rise rather than improve — they are only useful during the initial phase of simulated annealing to escape local minima. See [RMC Parameters](../config/rmc.md) for details on temperature and annealing configuration.
+
+For expensive potentials, see [Delayed Acceptance](./delayed-acceptance.md) for
+an exact two-stage alternative that can avoid unnecessary energy evaluations.
 
 ## EPSR: Empirical Potential Structure Refinement
 

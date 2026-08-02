@@ -147,6 +147,8 @@ their species names directly. Optional isotropic density rescaling is available.
 ### Refinement and analysis
 
 - adaptive single-atom moves and exponential simulated annealing;
+- optional delayed acceptance that screens proposals against experimental data
+  before invoking an expensive potential;
 - checkpoint/resume and reproducible random seeds;
 - minimum-distance and coordination-number constraints;
 - pair-potential, SNAP, GAP/QUIP, or MACE energy regularization;

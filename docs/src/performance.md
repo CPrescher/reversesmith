@@ -23,6 +23,23 @@ The Delta-S(Q) computation dominates because nearly all histogram bins change pe
 
 When potentials are active, the energy computation adds O(N_neighbors) distance calculations and table lookups per move. For a 15 A cutoff, this is ~8000 neighbours, adding roughly 20-30 us per move (~5-8% overhead). The potential evaluation itself is a single linear interpolation per neighbour.
 
+## Delayed acceptance
+
+Hybrid RMC can optionally apply the cheap experimental-data Metropolis test
+before evaluating the configured energy model. Set
+`[rmc] delayed_acceptance = true`; after the initial weight-calibration window,
+data-stage rejections skip the potential call entirely. This applies uniformly
+to pair potentials, SNAP, GAP, and MACE, although the largest wall-time savings
+are expected for GAP and MACE.
+
+If the fraction of proposals passing the data stage is `p`, the approximate
+per-attempt cost is `data_cost + p * potential_cost`. For example, a 30% pass
+rate would reduce a 21 ms GAP-dominated attempt to roughly 7 ms, or a 56 ms
+MACE-dominated attempt to roughly 17 ms, before accounting for changes in the
+overall acceptance rate. Delayed acceptance preserves the target distribution
+but can mix more slowly when the experimental and energy changes oppose each
+other, so benchmark accepted or effectively independent structures per second.
+
 ## MACE energy-delta modes
 
 The MACE/Python backend offers three strategies for calculating the energy

@@ -11,6 +11,32 @@ This is RMC regularized by an ML potential, not EPSR refinement of the ML model.
 In v1, `[ml_potential]` is only supported for normal RMC runs and cannot be
 combined with `[epsr]` or `[potential]`.
 
+## Combining ML deltas with delayed acceptance
+
+The ML backend's `delta` mode controls the cost of an individual energy
+evaluation. The independent `[rmc] delayed_acceptance` option controls whether
+an energy evaluation is needed for a proposal at all:
+
+```toml
+[rmc]
+delayed_acceptance = true
+energy_calibration_moves = 1000
+
+[ml_potential]
+# ... backend-specific settings ...
+```
+
+This option works with SNAP and every GAP/MACE delta mode. It is especially
+useful with GAP `local` and MACE `incremental`: the accelerated delta mode makes
+each call cheaper, while delayed acceptance skips calls whose data-only stage
+already rejected the proposal. Native SNAP is fast enough that the benefit is
+more workload-dependent.
+
+Delayed acceptance retains the exact configured ML energy in the target but
+can reduce the overall acceptance rate. Benchmark accepted moves or independent
+structures per second. See [Delayed Acceptance](../algorithms/delayed-acceptance.md)
+for the algorithm, equations, calibration window, and log interpretation.
+
 ## Native SNAP
 
 Linear and quadratic SNAP models produced by FitSNAP or LAMMPS can be evaluated

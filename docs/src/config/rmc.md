@@ -9,6 +9,8 @@ seed = 42                   # RNG seed (optional; random if omitted)
 print_every = 1000          # Print status every N moves
 target_acceptance = 0.3     # Target acceptance rate for step adaptation
 adjust_step_every = 5000    # Adjust step size every N moves
+delayed_acceptance = false  # Screen with the data term before evaluating a potential
+energy_calibration_moves = 1000 # Full energy deltas before screening starts
 
 # Simulated annealing (omit for constant T = 0.1)
 anneal_start = 2.0          # Starting temperature
@@ -31,6 +33,8 @@ convergence_window = 50_000   # ...over this many moves (0 = disabled)
 | `print_every` | Integer | 1,000 | Status output interval (moves) |
 | `target_acceptance` | Float | 0.3 | Target acceptance ratio for step adaptation |
 | `adjust_step_every` | Integer | 5,000 | Step size adjustment interval (moves) |
+| `delayed_acceptance` | Boolean | false | Apply a cheap data-only acceptance stage before evaluating an active energy model |
+| `energy_calibration_moves` | Integer | 1,000 | Complete energy-delta evaluations used for weight calibration before delayed screening starts |
 | `anneal_start` | Float | 0.1 | Starting temperature |
 | `anneal_end` | Float | 0.1 | Final temperature (constant T when annealing is omitted) |
 | `anneal_steps` | Integer | max_moves | Moves over which to anneal |
@@ -48,6 +52,51 @@ When annealing is **not** configured (i.e., `anneal_start` and `anneal_end` are 
 | T > 1 | Very permissive — accepts most moves, chi2 will typically increase |
 | T ~ 0.1--1 | Moderate exploration with steady optimization |
 | T < 0.1 | Greedy — mostly downhill, risk of trapping in local minima |
+
+## Delayed acceptance for expensive potentials
+
+For the complete algorithm, detailed-balance derivation, backend-specific
+recommendations, and log interpretation, see
+[Delayed Acceptance](../algorithms/delayed-acceptance.md).
+
+With a pair or ML potential, standard hybrid RMC evaluates the complete trial
+cost before applying one Metropolis test:
+
+```text
+delta_cost = delta_chi2 + weight * delta_energy
+```
+
+Set `delayed_acceptance = true` to split this into two stages. The first stage
+uses only the already-computed experimental change:
+
+```text
+P_data = min(1, exp(-delta_chi2 / (2T)))
+```
+
+If that test rejects the proposal, rsmith skips the potential evaluation. If it
+passes, rsmith evaluates the energy change and applies:
+
+```text
+P_energy = min(1, exp(-weight * delta_energy / (2T)))
+```
+
+The product of the forward/reverse probability ratios is identical to that of
+the combined target, so delayed acceptance does not approximate or replace the
+configured potential. It does change the transition kernel: when the data and
+energy terms oppose one another, it is more conservative than the combined
+test and may lower the acceptance rate. Compare accepted moves and independent
+structures per unit time, not only attempted moves per second.
+
+The implementation is backend-independent and works with analytical pair
+potentials, SNAP, GAP, and MACE. It is normally most valuable for GAP and MACE.
+SNAP can benefit when the data stage rejects frequently; analytical pair
+potentials are usually too inexpensive for the saved evaluation to compensate
+for reduced mixing.
+
+By default, rsmith first performs `energy_calibration_moves = 1000` complete
+energy evaluations so the printed weight-calibration estimate remains
+unbiased. Delayed screening begins afterward. Set this to `0` to start screening
+immediately when the energy weight has already been calibrated.
 
 ## Simulated annealing
 

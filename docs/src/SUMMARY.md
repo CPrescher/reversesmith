@@ -22,6 +22,7 @@
 # Theory & Algorithms
 
 - [RMC Algorithm](./algorithms/rmc.md)
+- [Delayed Acceptance](./algorithms/delayed-acceptance.md)
 - [Scattering Functions](./algorithms/scattering.md)
 - [Pair Potentials Theory](./algorithms/potentials-theory.md)
 
