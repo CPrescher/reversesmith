@@ -90,6 +90,24 @@ checked against the preceding release binary: the refined coordinates,
 empirical potential, and calculated neutron S(Q) are byte-identical. These are
 implementation gates; they do not replace the native EPSR silica comparison.
 
+### EPSR26 DTBsilicaNX forward calculation
+
+The exact 6,000-atom worked-example configuration has now passed a deterministic
+neutron-plus-X-ray forward gate. Relative to a fresh one-configuration EPSR26
+calculation, the Si-Si, Si-O, and O-O partial i(Q) curves differ by 0.0397--
+0.0558% RMS of their respective dynamic ranges. After applying EPSR's documented
+worked-file normalizations (`nrtype=5` for neutron and single-atom scattering
+for X-ray), the neutron and X-ray total differences are 0.0639% and 0.0661%.
+The 0.12 A-rebinned partial RDF differences are 0.626--0.934% RMS/range, while
+an independent minimum-image histogram agrees with rsmith at better than
+`6e-8` RMS/range.
+
+The raw rsmith total files use Faber-Ziman normalization. Comparing those
+directly with EPSR's differently normalized totals would create an artificial
+31% neutron discrepancy; the benchmark therefore reconstructs the EPSR
+normalizations from its weight files before scoring. Licensed upstream files
+remain local and ignored, with committed hashes providing provenance.
+
 ## Remaining publication gates
 
 1. Validate liquid-Ga structures against held-out data or an independent

@@ -40,3 +40,16 @@ EPSR_DISTRIBUTION_URL="<official URL>" \
 ```
 
 The fetcher will write SHA-256 hashes for both received archives.
+
+## 2026-08-03
+
+The complete `DTBsilicaNX` worked example was located inside the user's
+existing local EPSR26 installation under
+`workshop2022/EPSR_WorkedExamples_2022/DTBsilicaNX`. This is an authorized
+local-testing source, not a redistributable replacement archive.
+
+`import_local_reference.sh` now copies that directory into the ignored
+`reference/local/upstream` sandbox and records a complete SHA-256 manifest.
+Key hashes are committed in `expected/native-forward.toml`, while all tutorial
+inputs and native outputs remain ignored. The exact `.ato` hash is
+`f6a5528c0f8adea3502a718e470b3b3e44b589d76556e95618686da9925882f0`.

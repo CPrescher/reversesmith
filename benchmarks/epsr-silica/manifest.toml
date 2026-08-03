@@ -1,8 +1,8 @@
 id = "epsr-silica"
-status = "protocol_frozen_official_download_unavailable"
+status = "local_reference_imported_forward_baseline_measured"
 reference_program = "EPSR26"
 reference_download = "https://www.isis.stfc.ac.uk/Pages/Empirical-Potential-Structure-Refinement.aspx"
-reference_package = "EPSR26-Workshop-2024.zip"
+reference_package = "EPSR_WorkedExamples_2022/DTBsilicaNX"
 manual = "EPSR26 Manual 2019-11-27, section 8.3"
 observable = [
   "neutron_total_scattering",
@@ -21,3 +21,6 @@ download_terms_accepted = true
 download_terms_accepted_date = "2026-08-02"
 official_download_attempted_date = "2026-08-02"
 official_download_http_status = 404
+local_reference_imported_date = "2026-08-03"
+local_reference_ato_sha256 = "f6a5528c0f8adea3502a718e470b3b3e44b589d76556e95618686da9925882f0"
+forward_baseline_status = "passed_regression_guards"

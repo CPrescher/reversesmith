@@ -21,6 +21,8 @@ All notable changes to rsmith will be documented in this file.
 - Joint EPSR empirical-potential updates from simultaneous X-ray and neutron
   S(Q) datasets, with per-contrast scattering weights, uncertainties, dataset
   weights, fit ranges, conventions, and neutron-isotope overrides.
+- Starting and refined partial S_ab(Q) output files for reference-code
+  validation and downstream analysis.
 
 ### Fixed
 - Convert experimental `S(Q)`, `i(Q) = S(Q)-1`, and
@@ -43,6 +45,8 @@ All notable changes to rsmith will be documented in this file.
 - Added the EPSR benchmark ladder, local-only workshop-data import workflow,
   frozen LiquidGa fixed-budget and independent-start results, and the silica
   acquisition/publication-permission protocol.
+- Added the local-only EPSR26 DTBsilicaNX importer, zero-move native runner,
+  deterministic neutron/X-ray/partial/RDF comparison, and regression verifier.
 - Documented current GAP/QUIP whole-system evaluation scaling and published Si
   GAP benchmark results alongside native SNAP and incremental MACE.
 

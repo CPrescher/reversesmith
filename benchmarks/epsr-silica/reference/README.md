@@ -19,5 +19,8 @@ express permission. Do not copy them into the repository, a paper supplement,
 or a public data archive until that permission explicitly permits it.
 
 After an authorized local download, `reference/downloads/SHA256SUMS` records
-the exact archives used. If redistribution remains prohibited, those checksums,
-the official link, and the conversion scripts form the public provenance trail.
+the exact archives used. An existing authorized EPSR26 installation can instead
+be imported with `../import_local_reference.sh --accept-local-testing-terms`;
+its files and complete hash manifest remain below ignored `reference/local/`.
+If redistribution remains prohibited, the committed key checksums, official
+link, and conversion scripts form the public provenance trail.

@@ -1,0 +1,40 @@
+# Deterministic EPSR26 DTBsilicaNX forward baseline recorded 2026-08-03.
+#
+# These limits were selected after the first diagnostic forward run and are
+# software-regression guards, not preregistered scientific equivalence margins.
+
+[provenance]
+case = "DTBsilicaNX"
+ato_sha256 = "f6a5528c0f8adea3502a718e470b3b3e44b589d76556e95618686da9925882f0"
+input_sha256 = "3163c4a92b50cf2254702a26c837b507ffeb8484ded7c380eb929fb29fc468c6"
+pcof_sha256 = "9a7e915cd2d09f04e5cdfcb2120cf25254dbbb113d86e47c1907398c95a55848"
+neutron_weights_sha256 = "b7d4c95628a28399dfce3d9522f5749edd3b99e24f79af7455dffb0091a2109c"
+xray_weights_sha256 = "7e04c4be6e8729a18954373925f744aececd9104bec9b2eb3a535c64ac1a97d5"
+neutron_data_sha256 = "aba7ac46556724431153af49b81505bfe15a762dc23513bbe840fc02f965caab"
+xray_data_sha256 = "6091b26f08a8114b8b5dbc6d2cf946e212ecf3b61696e96676efd6e884e39aef"
+
+[system]
+atom_count = 6000
+silicon_atoms = 2000
+oxygen_atoms = 4000
+box_angstrom = 44.873966
+number_density_atoms_per_a3 = 0.06639997054690536
+
+[observed.rms_over_dynamic_range]
+partial_iq_SiSi = 0.000557898866814149
+partial_iq_SiO = 0.0003974738360957579
+partial_iq_OO = 0.0004411855280420082
+epsr_normalized_neutron_iq = 0.0006385052041228686
+epsr_normalized_xray_iq = 0.0006612179756661851
+partial_gr_SiSi_rebinned_0_12A = 0.008583615321838916
+partial_gr_SiO_rebinned_0_12A = 0.006260526666923204
+partial_gr_OO_rebinned_0_12A = 0.009343979350751085
+oracle_gr_SiSi = 5.506069357389573e-8
+oracle_gr_SiO = 8.510251429806446e-9
+oracle_gr_OO = 3.8230585931704025e-8
+
+[regression_limits]
+partial_iq_rms_over_dynamic_range_max = 0.001
+epsr_normalized_total_iq_rms_over_dynamic_range_max = 0.0015
+partial_gr_rebinned_rms_over_dynamic_range_max = 0.015
+oracle_gr_rms_over_dynamic_range_max = 2.0e-6

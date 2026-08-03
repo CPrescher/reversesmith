@@ -3,13 +3,21 @@
 
 [provenance]
 reference_program = "EPSR26"
-reference_package = "EPSR26-Workshop-2024.zip"
+reference_package = "EPSR_WorkedExamples_2022/DTBsilicaNX from the local EPSR26 installation"
 manual = "EPSR26 Manual 2019-11-27, section 8.3"
 official_page = "https://www.isis.stfc.ac.uk/Pages/Empirical-Potential-Structure-Refinement.aspx"
 
+[provenance.amendment_2026_08_03]
+reason = "The local DTBsilicaNX worked input supersedes assumptions transcribed from the manual. This amendment was made before stochastic rsmith refinement results were generated."
+changes = [
+  "number density 0.06834 -> file-derived 0.0663999705 atoms/A^3",
+  "neutron nrtype 3 -> worked-input nrtype 5",
+  "reference package identified by file hashes rather than unavailable ZIP",
+]
+
 [system]
 formula = "SiO2"
-number_density_atoms_per_a3 = 0.06834
+number_density_atoms_per_a3 = 0.06639997054690536
 initial_temperature_k = 10000.0
 production_temperature_k = 300.0
 replicas = 10
@@ -17,8 +25,8 @@ seeds = [20260802, 20260803, 20260804, 20260805, 20260806, 20260807, 20260808, 2
 
 [data.neutron]
 enabled = true
-normalization = "sum_of_neutron_weights"
-epsr_nrtype = 3
+normalization = "worked_example_nrtype_5"
+epsr_nrtype = 5
 
 [data.xray]
 enabled = true

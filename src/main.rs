@@ -1,10 +1,13 @@
 #![allow(clippy::needless_range_loop)]
 #![allow(clippy::type_complexity)]
 
+use std::collections::HashMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
 
 use rsmith::analyze;
+use rsmith::atoms::Configuration;
 use rsmith::config::{Config, MlBackend, MlEnergyDelta};
 use rsmith::energy::EnergyModel;
 use rsmith::epsr::{self, EpsrResidualDataset, EpsrState};
@@ -33,6 +36,33 @@ fn parse_convention(s: Option<&str>) -> SqConvention {
             SqConvention::Sq
         }
     }
+}
+
+fn write_partial_sq(
+    path: &Path,
+    config: &Configuration,
+    q_grid: &[f64],
+    partial_sq: &HashMap<usize, Vec<f64>>,
+) -> std::io::Result<()> {
+    let mut file = std::fs::File::create(path)?;
+    write!(file, "# Q(1/A)")?;
+    for a in 0..config.species.len() {
+        for b in a..config.species.len() {
+            write!(file, " S_{}{}", config.species[a], config.species[b])?;
+        }
+    }
+    writeln!(file)?;
+    for (q_index, q) in q_grid.iter().enumerate() {
+        write!(file, "{q:.6}")?;
+        for a in 0..config.species.len() {
+            for b in a..config.species.len() {
+                let pair_index = config.pair_index(a, b);
+                write!(file, " {:.6}", partial_sq[&pair_index][q_index])?;
+            }
+        }
+        writeln!(file)?;
+    }
+    Ok(())
 }
 
 fn main() {
@@ -841,6 +871,9 @@ fn main() {
             .collect();
         let partial_sq =
             sq::compute_all_partial_sq(&r_grid, &partials_gr, rho0, &params.q_grid, params.lorch);
+        let partial_sq_path = output_dir.join("start_partial_sq.dat");
+        write_partial_sq(&partial_sq_path, &config, &params.q_grid, &partial_sq).unwrap();
+        log_println!("  Saved starting partial S(Q) to {:?}", partial_sq_path);
         // Write starting S(Q) for each data type, applying convention offset
         for exp in experiments.iter() {
             let (raw_sq, label) = match exp.kind {
@@ -872,7 +905,6 @@ fn main() {
         {
             let n_types = config.species.len();
             let mut file = std::fs::File::create(&gr_path).unwrap();
-            use std::io::Write;
             write!(file, "# r").unwrap();
             for a in 0..n_types {
                 for b in a..n_types {
@@ -1475,6 +1507,18 @@ fn main() {
         .collect();
     let partial_sq =
         sq::compute_all_partial_sq(&r_grid, &partials_gr, rho0, &params.q_grid, params.lorch);
+    let refined_partial_sq_path = output_dir.join("refined_partial_sq.dat");
+    write_partial_sq(
+        &refined_partial_sq_path,
+        &config,
+        &params.q_grid,
+        &partial_sq,
+    )
+    .unwrap();
+    log_println!(
+        "Saving refined partial S(Q) to {:?}",
+        refined_partial_sq_path
+    );
 
     // Write refined S(Q) for each data type, applying convention offset
     for exp in experiments.iter() {
@@ -1507,7 +1551,6 @@ fn main() {
     {
         let n_types = config.species.len();
         let mut file = std::fs::File::create(&refined_gr_path).unwrap();
-        use std::io::Write;
         write!(file, "# r").unwrap();
         for a in 0..n_types {
             for b in a..n_types {

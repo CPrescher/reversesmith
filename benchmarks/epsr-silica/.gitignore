@@ -1,4 +1,6 @@
 reference/downloads/
 reference/unpacked/
+reference/local/
 results/
+scripts/__pycache__/
 *.log
