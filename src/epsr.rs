@@ -10,7 +10,19 @@ use std::path::Path;
 use crate::atoms::Configuration;
 use crate::neutron::scattering_length as neutron_scattering_length;
 use crate::potential::{PairPotential, PotentialSet};
+use crate::rmc::SqConvention;
 use crate::xray::form_factor;
+
+/// One experimental contrast contributing to a joint EPSR residual update.
+///
+/// `precision[k]` is the relative inverse variance at Q point `k`. A value of
+/// zero excludes that point from this dataset's contribution.
+pub struct EpsrResidualDataset<'a> {
+    pub total_sq_sim: &'a [f64],
+    pub total_sq_exp: &'a [f64],
+    pub partial_weights: &'a [f64],
+    pub precision: &'a [f64],
+}
 
 /// Cumulative empirical potential state for all pairs.
 pub struct EpsrState {
@@ -145,14 +157,30 @@ impl EpsrState {
     ///
     /// `w_ab = (2-δ_ab) * c_a * c_b * b_a * b_b / ⟨b⟩²`
     pub fn compute_neutron_weights(config: &Configuration, nq: usize) -> Vec<f64> {
-        let n_types = config.species.len();
-        let n_pairs = n_types * (n_types + 1) / 2;
-        let conc: Vec<f64> = (0..n_types).map(|t| config.concentration(t)).collect();
-        let b: Vec<f64> = config
+        let scattering_lengths: Vec<f64> = config
             .species
             .iter()
             .map(|s| neutron_scattering_length(s))
             .collect();
+        Self::compute_neutron_weights_with_lengths(config, nq, &scattering_lengths)
+    }
+
+    /// Compute Faber-Ziman neutron weights using caller-supplied coherent
+    /// scattering lengths, for isotope-enriched and null-scattering contrasts.
+    pub fn compute_neutron_weights_with_lengths(
+        config: &Configuration,
+        nq: usize,
+        scattering_lengths: &[f64],
+    ) -> Vec<f64> {
+        let n_types = config.species.len();
+        let n_pairs = n_types * (n_types + 1) / 2;
+        let conc: Vec<f64> = (0..n_types).map(|t| config.concentration(t)).collect();
+        assert_eq!(
+            scattering_lengths.len(),
+            n_types,
+            "one neutron scattering length is required per species"
+        );
+        let b = scattering_lengths;
         let b_avg: f64 = (0..n_types).map(|a| conc[a] * b[a]).sum();
         let b_avg_sq = b_avg * b_avg;
 
@@ -171,6 +199,26 @@ impl EpsrState {
             }
         }
         weights
+    }
+
+    /// Combine partial S_ab(Q) curves with one dataset's scattering weights.
+    pub fn compute_weighted_total_sq(
+        partial_sq: &[f64],
+        partial_weights: &[f64],
+        n_pairs: usize,
+        nq: usize,
+    ) -> Vec<f64> {
+        assert_eq!(partial_sq.len(), n_pairs * nq);
+        assert_eq!(partial_weights.len(), n_pairs * nq);
+
+        let mut total_sq = vec![0.0; nq];
+        for k in 0..nq {
+            for p in 0..n_pairs {
+                let index = p * nq + k;
+                total_sq[k] += partial_weights[index] * partial_sq[index];
+            }
+        }
+        total_sq
     }
 
     /// Decompose total residual ΔS(Q) into partial residuals ΔS_ab(Q).
@@ -218,6 +266,81 @@ impl EpsrState {
         // We use: ΔS_ab(Q) ≈ w_ab(Q) * [S_exp(Q) - S_sim(Q)] / Σ w_cd²
         // This is the standard Soper approach.
 
+        delta_partials
+    }
+
+    /// Combine residual decompositions from all active experimental contrasts.
+    ///
+    /// Each total residual is first projected onto the partials using that
+    /// dataset's own X-ray or neutron Faber-Ziman weights. Those projected
+    /// corrections are then averaged with the dataset/Q-point inverse
+    /// variances. This lets independent contrasts influence the empirical
+    /// potential without making the result depend on their input ordering.
+    pub fn compute_joint_residual_partials(
+        datasets: &[EpsrResidualDataset<'_>],
+        n_pairs: usize,
+        nq: usize,
+    ) -> Vec<f64> {
+        if datasets.is_empty() {
+            return vec![0.0; n_pairs * nq];
+        }
+
+        // Preserve the established one-dataset numerical path exactly. Its
+        // absolute precision is immaterial because there is no second contrast
+        // against which it must be weighted.
+        if datasets.len() == 1 {
+            let dataset = &datasets[0];
+            return Self::compute_residual_partials(
+                &[],
+                dataset.total_sq_sim,
+                dataset.total_sq_exp,
+                dataset.partial_weights,
+                n_pairs,
+                nq,
+            );
+        }
+
+        let mut delta_partials = vec![0.0; n_pairs * nq];
+        let mut precision_sum = vec![0.0; nq];
+
+        for dataset in datasets {
+            assert_eq!(dataset.total_sq_sim.len(), nq);
+            assert_eq!(dataset.total_sq_exp.len(), nq);
+            assert_eq!(dataset.partial_weights.len(), n_pairs * nq);
+            assert_eq!(dataset.precision.len(), nq);
+
+            for k in 0..nq {
+                let precision = dataset.precision[k];
+                if !precision.is_finite() || precision <= 0.0 {
+                    continue;
+                }
+
+                let mut w2_sum = 0.0;
+                for p in 0..n_pairs {
+                    let weight = dataset.partial_weights[p * nq + k];
+                    w2_sum += weight * weight;
+                }
+                if w2_sum < 1.0e-30 {
+                    continue;
+                }
+
+                let delta_s = dataset.total_sq_sim[k] - dataset.total_sq_exp[k];
+                for p in 0..n_pairs {
+                    let index = p * nq + k;
+                    delta_partials[index] +=
+                        precision * dataset.partial_weights[index] * delta_s / w2_sum;
+                }
+                precision_sum[k] += precision;
+            }
+        }
+
+        for k in 0..nq {
+            if precision_sum[k] > 0.0 {
+                for p in 0..n_pairs {
+                    delta_partials[p * nq + k] /= precision_sum[k];
+                }
+            }
+        }
         delta_partials
     }
 
@@ -466,7 +589,9 @@ pub fn gaussian_smooth(data: &[f64], sigma: f64, dr: f64) -> Vec<f64> {
 
 /// Interpolate experimental S(Q) onto the simulation Q grid.
 ///
-/// Uses linear interpolation. Points outside the experimental range are set to 1.0.
+/// Uses linear interpolation and clamps points outside the experimental range
+/// to the nearest endpoint. Joint updates exclude those extrapolated points
+/// through [`precision_on_grid`].
 pub fn interpolate_exp_to_grid(q_exp: &[f64], sq_exp: &[f64], q_grid: &[f64]) -> Vec<f64> {
     q_grid
         .iter()
@@ -490,6 +615,44 @@ pub fn interpolate_exp_to_grid(q_exp: &[f64], sq_exp: &[f64], q_grid: &[f64]) ->
             }
             let t = (q - q_exp[lo]) / (q_exp[hi] - q_exp[lo]);
             sq_exp[lo] + t * (sq_exp[hi] - sq_exp[lo])
+        })
+        .collect()
+}
+
+/// Build the relative inverse-variance grid for one dataset in internal S(Q)
+/// units, respecting both the measured and configured fit ranges.
+pub fn precision_on_grid(
+    q_exp: &[f64],
+    sigma_exp: &[f64],
+    q_grid: &[f64],
+    fit_min: f64,
+    fit_max: f64,
+    dataset_weight: f64,
+    convention: SqConvention,
+) -> Vec<f64> {
+    assert!(!q_exp.is_empty());
+    assert_eq!(q_exp.len(), sigma_exp.len());
+    let sigma_on_grid = interpolate_exp_to_grid(q_exp, sigma_exp, q_grid);
+    let measured_min = q_exp[0];
+    let measured_max = q_exp[q_exp.len() - 1];
+
+    q_grid
+        .iter()
+        .zip(sigma_on_grid)
+        .map(|(&q, sigma)| {
+            if q < measured_min || q > measured_max || q < fit_min || q > fit_max {
+                return 0.0;
+            }
+            let sigma_sq = match convention {
+                SqConvention::Sq | SqConvention::Iq => sigma,
+                SqConvention::Fq if q.abs() > 1.0e-12 => sigma / q.abs(),
+                SqConvention::Fq => return 0.0,
+            };
+            if dataset_weight > 0.0 && sigma_sq.is_finite() && sigma_sq > 0.0 {
+                dataset_weight / (sigma_sq * sigma_sq)
+            } else {
+                0.0
+            }
         })
         .collect()
 }
@@ -524,4 +687,139 @@ fn interp_linear(x: &[f64], y: &[f64], xi: f64) -> f64 {
     }
     let t = (xi - x[lo]) / (x[hi] - x[lo]);
     y[lo] + t * (y[hi] - y[lo])
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+    use crate::atoms::{Atom, Configuration};
+
+    fn binary_configuration() -> Configuration {
+        Configuration {
+            atoms: vec![
+                Atom {
+                    position: [0.0, 0.0, 0.0],
+                    species: "Si".to_string(),
+                    type_id: 0,
+                },
+                Atom {
+                    position: [1.0, 1.0, 1.0],
+                    species: "O".to_string(),
+                    type_id: 1,
+                },
+            ],
+            species: vec!["Si".to_string(), "O".to_string()],
+            box_lengths: [10.0, 10.0, 10.0],
+            composition: HashMap::from([("Si".to_string(), 1), ("O".to_string(), 1)]),
+        }
+    }
+
+    #[test]
+    fn single_dataset_joint_path_is_identical_to_legacy() {
+        let simulated = [1.2, 0.8];
+        let experimental = [1.0, 1.1];
+        let weights = [0.5, 0.6, 0.3, 0.2, 0.2, 0.2];
+        let precision = [25.0, 0.0];
+        let legacy =
+            EpsrState::compute_residual_partials(&[], &simulated, &experimental, &weights, 3, 2);
+        let joint = EpsrState::compute_joint_residual_partials(
+            &[EpsrResidualDataset {
+                total_sq_sim: &simulated,
+                total_sq_exp: &experimental,
+                partial_weights: &weights,
+                precision: &precision,
+            }],
+            3,
+            2,
+        );
+        assert_eq!(joint, legacy);
+    }
+
+    #[test]
+    fn joint_neutron_xray_contrasts_both_change_the_update() {
+        let xray_sim = [1.2];
+        let xray_exp = [1.0];
+        let neutron_sim = [0.7];
+        let neutron_exp = [1.0];
+        let xray_weights = [0.8, 0.15, 0.05];
+        let neutron_weights = [0.1, 0.2, 0.7];
+        let equal_precision = [1.0];
+        let neutron_high_precision = [9.0];
+
+        let equal = EpsrState::compute_joint_residual_partials(
+            &[
+                EpsrResidualDataset {
+                    total_sq_sim: &xray_sim,
+                    total_sq_exp: &xray_exp,
+                    partial_weights: &xray_weights,
+                    precision: &equal_precision,
+                },
+                EpsrResidualDataset {
+                    total_sq_sim: &neutron_sim,
+                    total_sq_exp: &neutron_exp,
+                    partial_weights: &neutron_weights,
+                    precision: &equal_precision,
+                },
+            ],
+            3,
+            1,
+        );
+        let neutron_dominant = EpsrState::compute_joint_residual_partials(
+            &[
+                EpsrResidualDataset {
+                    total_sq_sim: &xray_sim,
+                    total_sq_exp: &xray_exp,
+                    partial_weights: &xray_weights,
+                    precision: &equal_precision,
+                },
+                EpsrResidualDataset {
+                    total_sq_sim: &neutron_sim,
+                    total_sq_exp: &neutron_exp,
+                    partial_weights: &neutron_weights,
+                    precision: &neutron_high_precision,
+                },
+            ],
+            3,
+            1,
+        );
+
+        assert!(
+            equal[0] > 0.0,
+            "X-ray-sensitive partial should move positive"
+        );
+        assert!(
+            equal[2] < 0.0,
+            "neutron-sensitive partial should move negative"
+        );
+        assert!(neutron_dominant[2] < equal[2]);
+        assert!(neutron_dominant[0] < equal[0]);
+    }
+
+    #[test]
+    fn neutron_weight_overrides_change_the_contrast() {
+        let config = binary_configuration();
+        let natural = EpsrState::compute_neutron_weights(&config, 2);
+        let isotope = EpsrState::compute_neutron_weights_with_lengths(&config, 2, &[4.0, -2.0]);
+        assert_ne!(natural, isotope);
+        assert_eq!(isotope[0], isotope[1]);
+        assert!(
+            isotope[2] < 0.0,
+            "unlike-pair weight should retain its sign"
+        );
+    }
+
+    #[test]
+    fn precision_grid_honours_range_weight_and_fq_units() {
+        let q_exp = [1.0, 2.0, 3.0];
+        let sigma = [0.2, 0.2, 0.2];
+        let q_grid = [0.0, 1.0, 2.0, 3.0, 4.0];
+        let precision = precision_on_grid(&q_exp, &sigma, &q_grid, 1.5, 3.0, 2.0, SqConvention::Fq);
+        assert_eq!(precision[0], 0.0);
+        assert_eq!(precision[1], 0.0);
+        assert!((precision[2] - 200.0).abs() < 1.0e-12);
+        assert!((precision[3] - 450.0).abs() < 1.0e-12);
+        assert_eq!(precision[4], 0.0);
+    }
 }

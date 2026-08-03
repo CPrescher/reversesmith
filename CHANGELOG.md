@@ -18,11 +18,16 @@ All notable changes to rsmith will be documented in this file.
   Carlo, with conservative rebuild tracking and brute-force periodic tests.
 - Release-mode GAP/QUIP atom-count benchmark using the same diamond-Si
   structures and rejected single-atom trial path as the SNAP and MACE examples.
+- Joint EPSR empirical-potential updates from simultaneous X-ray and neutron
+  S(Q) datasets, with per-contrast scattering weights, uncertainties, dataset
+  weights, fit ranges, conventions, and neutron-isotope overrides.
 
 ### Fixed
 - Convert experimental `S(Q)`, `i(Q) = S(Q)-1`, and
   `F(Q) = Q[S(Q)-1]` conventions back to internal `S(Q)` before empirical-
   potential updates.
+- Use configured isotope-specific neutron scattering lengths in EPSR residual
+  decomposition instead of always falling back to natural-element values.
 
 ### Performance
 - Reduced the ten-seed LiquidGa50C single-thread median from 44.64 s to

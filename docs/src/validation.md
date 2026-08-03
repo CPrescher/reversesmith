@@ -73,14 +73,32 @@ python3 scripts/verify_independent_starts.py
 The frozen result, per-seed convergence histories, provenance hashes, and
 plot-ready median curve are committed under `benchmarks/epsr-ga/expected/`.
 
+## Multi-contrast EPSR readiness
+
+The empirical-potential update now consumes every configured X-ray and neutron
+S(Q) dataset rather than selecting one preferred dataset. Each contrast uses
+its own Q-dependent or neutron scattering weights, including isotope-specific
+overrides, and the projected updates are combined using the dataset weight and
+pointwise uncertainty over the active fit range.
+
+This infrastructure is covered by a synthetic conflicting-contrast regression
+test: both an X-ray-sensitive and a neutron-sensitive partial change sign as
+required, and increasing the neutron precision shifts the combined update
+toward the neutron solution. An executable smoke test also exercises a joint
+X-ray/neutron pure-EPSR epoch. The historical single-neutron LiquidGa path was
+checked against the preceding release binary: the refined coordinates,
+empirical potential, and calculated neutron S(Q) are byte-identical. These are
+implementation gates; they do not replace the native EPSR silica comparison.
+
 ## Remaining publication gates
 
 1. Validate liquid-Ga structures against held-out data or an independent
    atomistic/physical oracle.
 2. Test independent equilibrium starts to separate basin sensitivity from
    convergence out of unstructured liquids.
-3. Reproduce the EPSR silica neutron-plus-X-ray example before comparing
-   pair-potential and MLIP-regularized rsmith refinements.
+3. Reproduce the EPSR silica neutron-plus-X-ray example with the now-validated
+   joint-update path before comparing pair-potential and MLIP-regularized
+   rsmith refinements.
 4. Apply the preregistered comparison to a complex high-pressure glass, where
    chemically diagnostic coordination, angle, and topology observables can
    establish or reject a physical-superiority claim.

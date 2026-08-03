@@ -49,12 +49,16 @@ Each EPSR outer iteration:
 
 1. Build combined potential: `V_ref(r) + EP(r)`
 2. Run the configured hybrid or pure MC epoch for `moves_per_iteration` moves
-3. Compute residual: `ΔS(Q) = S_exp(Q) - S_sim(Q)`
-4. Decompose to partials via proportional weighting: `ΔS_ab(Q) = w_ab(Q) * ΔS(Q) / Σ w_cd(Q)²`
-5. Sine transform each `ΔS_ab(Q)` to `Δg_ab(r)`
-6. Update: `EP_ab(r) += feedback * kT * Δg_ab(r)`
-7. Gaussian-smooth EP, zero below `min_r`
-8. Check convergence and repeat
+3. Compute one total residual for every configured X-ray and neutron S(Q)
+   dataset, after converting `sq`, `iq`, or `fq` to internal S(Q)
+4. Decompose each residual to partials with that dataset's own scattering
+   weights, including configured neutron isotope contrasts
+5. Combine the partial corrections point by point using
+   `weight / sigma_S(Q)^2`, within both the measured and configured fit ranges
+6. Sine transform each combined `ΔS_ab(Q)` to `Δg_ab(r)`
+7. Update: `EP_ab(r) += feedback * kT * Δg_ab(r)`
+8. Gaussian-smooth EP, zero below `min_r`
+9. Check convergence and repeat
 
 ## Output files
 
@@ -92,8 +96,12 @@ participate directly in accepting the moves within that epoch.
 
 ## Notes
 
-- EPSR uses the first X-ray S(Q) dataset when available and otherwise falls
-  back to the first neutron S(Q) dataset
+- EPSR uses every configured reciprocal-space dataset. X-ray and neutron
+  contrasts contribute with their own Faber-Ziman weights, uncertainties,
+  dataset weights, and fit ranges.
+- A one-dataset calculation uses the legacy-compatible update path so existing
+  EPSR trajectories remain reproducible. Absolute `sigma` and dataset `weight`
+  only set relative influence when multiple contrasts are combined.
 - The reference potential from `[potential]` is preserved; EP is added on top
 - If no `[potential]` section exists, EP alone drives the simulation
 - The `feedback` parameter controls how aggressively the EP adapts; values of 0.1–0.3 are typical

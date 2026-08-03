@@ -89,12 +89,26 @@ When `[epsr]` is configured, an outer loop wraps the RMC refinement following So
 Each outer iteration:
 
 1. **Equilibrate**: Run MC with `V_ref(r) + EP(r)` for N moves
-2. **Compute residual**: `ΔS(Q) = S_exp(Q) - S_sim(Q)` interpolated onto the model Q grid
-3. **Decompose**: Distribute the total residual to partial structure factors via X-ray weights:
-   `ΔS_ab(Q) = w_ab(Q) · ΔS(Q) / Σ_cd w_cd(Q)²`
-4. **Sine transform**: Convert each `ΔS_ab(Q)` to real-space `Δg_ab(r)`
-5. **Update EP**: `EP_ab(r) += feedback · kT · Δg_ab(r)` (HNC approximation)
-6. **Smooth**: Apply Gaussian convolution and zero below `min_r`
+2. **Compute residuals**: Convert every reciprocal-space dataset to internal
+   Faber-Ziman S(Q), interpolate it onto the model Q grid, and calculate
+   `ΔS_d(Q) = S_sim,d(Q) - S_exp,d(Q)`.
+3. **Decompose each contrast**: Project each total residual onto the partial
+   structure factors with that dataset's own X-ray form-factor or neutron
+   scattering-length weights:
+   `ΔS_ab,d(Q) = w_ab,d(Q) · ΔS_d(Q) / Σ_cd w_cd,d(Q)²`.
+4. **Combine contrasts**: Average the projected corrections point by point
+   with relative precision `λ_d(Q) = dataset_weight_d / σ_S,d(Q)²`. Only the
+   measured data and configured fit range contribute. This allows neutron and
+   X-ray contrasts, including isotope-specific neutron scattering lengths, to
+   drive the same empirical potentials.
+5. **Sine transform**: Convert each combined `ΔS_ab(Q)` to real-space `Δg_ab(r)`
+6. **Update EP**: `EP_ab(r) += feedback · kT · Δg_ab(r)` (HNC approximation)
+7. **Smooth**: Apply Gaussian convolution and zero below `min_r`
+
+For one reciprocal-space dataset, rsmith deliberately retains the established
+single-dataset EPSR update path. This keeps existing trajectories reproducible;
+relative uncertainty and dataset weighting affect the empirical-potential
+combination when multiple contrasts are supplied.
 
 ### Advantages over pure RMC
 

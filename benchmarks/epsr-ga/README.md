@@ -227,4 +227,7 @@ and executable outputs remain local and ignored.
 
 The next stages are (1) validate the Ga structures against an independent
 physical oracle or held-out data, then (2) repeat the protocol for the
-6,000-atom `DTBsilicaNX` neutron-plus-X-ray example.
+6,000-atom `DTBsilicaNX` neutron-plus-X-ray example. The rsmith EPSR update now
+uses both contrasts with their own scattering weights, uncertainties, dataset
+weights, fit ranges, and optional neutron-isotope overrides; the remaining
+task is the native/rsmith scientific comparison, not single-dataset plumbing.

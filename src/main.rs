@@ -7,7 +7,7 @@ use std::process;
 use rsmith::analyze;
 use rsmith::config::{Config, MlBackend, MlEnergyDelta};
 use rsmith::energy::EnergyModel;
-use rsmith::epsr::{self, EpsrState};
+use rsmith::epsr::{self, EpsrResidualDataset, EpsrState};
 use rsmith::io;
 use rsmith::ml_potential;
 use rsmith::neutron;
@@ -1070,40 +1070,74 @@ fn main() {
             }
         }
 
-        // Find first S(Q) experiment for EPSR EP update (prefer X-ray, fall back to neutron)
-        let epsr_exp = experiments
-            .iter()
-            .find(|e| matches!(e.kind, DataKind::Xray))
-            .or_else(|| {
-                experiments
-                    .iter()
-                    .find(|e| matches!(e.kind, DataKind::Neutron))
+        // Prepare every supplied reciprocal-space contrast for the EP update.
+        // The one-dataset path remains numerically identical to the historical
+        // implementation; inverse-variance weighting matters only when two or
+        // more contrasts must be combined.
+        let legacy_single_dataset = experiments.len() == 1;
+        let mut epsr_weights: Vec<Vec<f64>> = Vec::with_capacity(experiments.len());
+        let mut epsr_exp_on_grid: Vec<Vec<f64>> = Vec::with_capacity(experiments.len());
+        let mut epsr_precision: Vec<Vec<f64>> = Vec::with_capacity(experiments.len());
+
+        for (dataset_index, exp) in experiments.iter().enumerate() {
+            let (label, weights) = match exp.kind {
+                DataKind::Xray => (
+                    "X-ray",
+                    EpsrState::compute_xray_weights(&config, &params.q_grid),
+                ),
+                DataKind::Neutron => (
+                    "neutron",
+                    match exp.neutron_scattering_lengths.as_deref() {
+                        Some(lengths) => EpsrState::compute_neutron_weights_with_lengths(
+                            &config,
+                            params.q_grid.len(),
+                            lengths,
+                        ),
+                        None => EpsrState::compute_neutron_weights(&config, params.q_grid.len()),
+                    },
+                ),
+            };
+            log_println!(
+                "  EPSR EP dataset {}: {} (weight = {:.4}, fit = {:.3}..{:.3} A^-1)",
+                dataset_index + 1,
+                label,
+                exp.weight,
+                exp.fit_min,
+                exp.fit_max
+            );
+
+            epsr_weights.push(weights);
+            epsr_exp_on_grid.push(
+                epsr::interpolate_exp_to_grid(&exp.q, &exp.sq, &params.q_grid)
+                    .into_iter()
+                    .zip(params.q_grid.iter())
+                    .map(|(value, &q)| exp.convention.to_sq(value, q))
+                    .collect(),
+            );
+            epsr_precision.push(if legacy_single_dataset {
+                vec![1.0; params.q_grid.len()]
+            } else {
+                epsr::precision_on_grid(
+                    &exp.q,
+                    &exp.sigma,
+                    &params.q_grid,
+                    exp.fit_min,
+                    exp.fit_max,
+                    exp.weight,
+                    exp.convention,
+                )
             });
-
-        // Compute weights matching the experiment type
-        let epsr_weights = match epsr_exp {
-            Some(e) if matches!(e.kind, DataKind::Xray) => {
-                log_println!("  EPSR EP update using X-ray data");
-                EpsrState::compute_xray_weights(&config, &params.q_grid)
-            }
-            Some(e) if matches!(e.kind, DataKind::Neutron) => {
-                log_println!("  EPSR EP update using neutron data");
-                EpsrState::compute_neutron_weights(&config, params.q_grid.len())
-            }
-            _ => {
-                log_println!("  Warning: no S(Q) data for EPSR EP update");
-                vec![]
-            }
-        };
-
-        // Interpolate experimental S(Q) onto simulation Q grid
-        let exp_on_grid: Option<Vec<f64>> = epsr_exp.map(|exp| {
-            epsr::interpolate_exp_to_grid(&exp.q, &exp.sq, &params.q_grid)
-                .into_iter()
-                .zip(params.q_grid.iter())
-                .map(|(value, &q)| exp.convention.to_sq(value, q))
-                .collect()
-        });
+        }
+        if experiments.is_empty() {
+            log_println!("  Warning: no S(Q) data for EPSR EP update");
+        } else if legacy_single_dataset {
+            log_println!("  EPSR EP update: legacy-compatible single-dataset path");
+        } else {
+            log_println!(
+                "  EPSR EP update: joint inverse-variance combination of {} datasets",
+                experiments.len()
+            );
+        }
 
         let mut last_state: Option<rmc::RmcState> = resume_state;
         let mut conv_streak: usize = 0;
@@ -1177,7 +1211,7 @@ fn main() {
             }
 
             // Branch: pure EPSR uses energy-only MC, hybrid uses chi2+energy RMC
-            let (state, partial_sq_flat, total_sq_vec) = if epsr_mode == EpsrMode::Pure {
+            let (state, partial_sq_flat) = if epsr_mode == EpsrMode::Pure {
                 let state = rmc::run_energy_mc(
                     &mut config,
                     &constraints,
@@ -1218,45 +1252,7 @@ fn main() {
                     }
                 }
 
-                // Compute total weighted S(Q) for the primary experiment
-                let total_sq: Option<Vec<f64>> = epsr_exp.map(|exp| {
-                    let (raw_sq, _label) = match exp.kind {
-                        DataKind::Xray => (
-                            xray::compute_xray_sq(&config, &partial_sq_map, &params.q_grid),
-                            "xray",
-                        ),
-                        DataKind::Neutron => (
-                            match exp.neutron_scattering_lengths.as_deref() {
-                                Some(lengths) => neutron::compute_sq_with_lengths(
-                                    &config,
-                                    &partial_sq_map,
-                                    &params.q_grid,
-                                    lengths,
-                                ),
-                                None => {
-                                    neutron::compute_sq(&config, &partial_sq_map, &params.q_grid)
-                                }
-                            },
-                            "neutron",
-                        ),
-                    };
-                    raw_sq
-                });
-
-                // Compute chi2 for logging
-                let chi2 = if let (Some(ref tsq), Some(ref egrid)) = (&total_sq, &exp_on_grid) {
-                    let mut c = 0.0f64;
-                    for k in 0..nq {
-                        let diff = tsq[k] - egrid[k];
-                        c += diff * diff;
-                    }
-                    c
-                } else {
-                    0.0
-                };
-                log_println!("  Post-MC S(Q) chi2 = {:.6}", chi2);
-
-                (state, Some(flat_partial), total_sq)
+                (state, Some(flat_partial))
             } else {
                 // Hybrid mode: standard run_rmc with chi2+energy
                 let state = rmc::run_rmc(
@@ -1270,23 +1266,72 @@ fn main() {
                     None,
                 );
                 let psq = state.partial_sq.clone();
-                let tsq = state.total_sq.clone();
-                (state, psq, tsq)
+                (state, psq)
             };
 
             let mc_elapsed = iter_start.elapsed();
             let acceptance = 100.0 * state.accepted as f64 / state.move_count.max(1) as f64;
 
             // Extract partials and compute EP update
-            if let (Some(ref partial_sq), Some(ref total_sq), Some(ref exp_grid)) =
-                (&partial_sq_flat, &total_sq_vec, &exp_on_grid)
-            {
+            if let Some(ref partial_sq) = partial_sq_flat.filter(|_| !experiments.is_empty()) {
                 let nq = params.q_grid.len();
-                let delta_partials = EpsrState::compute_residual_partials(
-                    partial_sq,
-                    total_sq,
-                    exp_grid,
-                    &epsr_weights,
+                let total_sq_curves: Vec<Vec<f64>> = epsr_weights
+                    .iter()
+                    .map(|weights| {
+                        EpsrState::compute_weighted_total_sq(
+                            partial_sq,
+                            weights,
+                            epsr_state.n_pairs,
+                            nq,
+                        )
+                    })
+                    .collect();
+
+                for (dataset_index, ((total_sq, exp_grid), precision)) in total_sq_curves
+                    .iter()
+                    .zip(epsr_exp_on_grid.iter())
+                    .zip(epsr_precision.iter())
+                    .enumerate()
+                {
+                    let mut squared_residual = 0.0;
+                    let mut active_points = 0usize;
+                    for k in 0..nq {
+                        if legacy_single_dataset || precision[k] > 0.0 {
+                            let diff = total_sq[k] - exp_grid[k];
+                            squared_residual += diff * diff;
+                            active_points += 1;
+                        }
+                    }
+                    let rms = if active_points > 0 {
+                        (squared_residual / active_points as f64).sqrt()
+                    } else {
+                        0.0
+                    };
+                    if legacy_single_dataset {
+                        // Retain the established log field for benchmark and
+                        // downstream parser compatibility.
+                        log_println!("  Post-MC S(Q) chi2 = {:.6}", squared_residual);
+                    } else {
+                        log_println!(
+                            "  Post-MC dataset {}: squared residual = {:.6}, RMS = {:.6} ({} Q points)",
+                            dataset_index + 1,
+                            squared_residual,
+                            rms,
+                            active_points
+                        );
+                    }
+                }
+
+                let residual_datasets: Vec<EpsrResidualDataset<'_>> = (0..experiments.len())
+                    .map(|dataset_index| EpsrResidualDataset {
+                        total_sq_sim: &total_sq_curves[dataset_index],
+                        total_sq_exp: &epsr_exp_on_grid[dataset_index],
+                        partial_weights: &epsr_weights[dataset_index],
+                        precision: &epsr_precision[dataset_index],
+                    })
+                    .collect();
+                let delta_partials = EpsrState::compute_joint_residual_partials(
+                    &residual_datasets,
                     epsr_state.n_pairs,
                     nq,
                 );
