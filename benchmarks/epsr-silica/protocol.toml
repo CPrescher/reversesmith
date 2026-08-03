@@ -25,6 +25,29 @@ changes = [
   "prohibit treating closeness to either model as the primary physical-superiority criterion",
 ]
 
+[provenance.amendment_2026_08_03_cross_recovery]
+reason = "The symmetric GAP/Pedone cross-start recovery design was frozen before inspecting any cross-refinement outcome."
+protocol = "expected/cross-recovery.toml"
+changes = [
+  "replace pathological random starts with the opposite plausible model endpoint",
+  "isotropically rescale the cross-start to the hidden target density without relaxation",
+  "require zero-move forward controls and common independent coordinate scoring for every program",
+  "classify PDFgui as a forward-only control because it is not an atomistic RMC engine",
+]
+
+[provenance.amendment_2026_08_03_observable_audit]
+reason = "EPSR source and output inspection established that .u01 is the calculated total while .v01 is data-minus-model. The older reference-potential smoke target was corrected and rerun before publication use."
+changes = [
+  "read calculated tutorial totals from DTBsilica.EPSR.u01 rather than residuals from .v01",
+  "retain .v01 only for residual scoring or reconstructing a native forward curve as input minus residual",
+]
+
+[provenance.amendment_2026_08_03_public_gap]
+reason = "The private structure repository did not contain the potential; the published Erhard silica GAP was imported from its primary Zenodo record under an archive checksum gate."
+doi = "10.5281/zenodo.6353684"
+archive_md5 = "6a16de69b5e17fd18160d9b55972a3e1"
+xml_label = "GAP_2021_4_19_120_7_32_55_336"
+
 [system]
 formula = "SiO2"
 number_density_atoms_per_a3 = 0.06639997054690536

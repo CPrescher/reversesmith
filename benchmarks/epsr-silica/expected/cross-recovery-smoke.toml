@@ -1,0 +1,74 @@
+status = "passed_cross_program_adapter_smoke_not_publication_comparison"
+date = "2026-08-03"
+protocol = "cross-recovery.toml"
+seed = 20260802
+moves = 6000
+threads = 1
+hardware = "Apple M4 Pro, 48 GB, macOS arm64"
+
+[programs]
+rsmith = "1.4.0"
+epsr = "EPSR26, 2017-03-10 build"
+rmcprofile = "6.7.9.5, serial fallback from official macOS wrapper"
+pdfgui = "3.1.0 with diffpy.pdffit2 1.5.2; forward-only"
+
+[provenance]
+gap_archive_doi = "10.5281/zenodo.6353684"
+gap_archive_md5 = "6a16de69b5e17fd18160d9b55972a3e1"
+gap_archive_sha256 = "98ea6e58f6d98485ec06013c8de8e011b69e8867f6ad9cf580e43199eb6abb53"
+gap_xml_sha256 = "5d470c3cde09a26c7919caa556c84902a04a35e54fd87f27bd4abb2921150799"
+
+[guards]
+required_joint_coordinate_methods = [
+  "rsmith_joint",
+  "rsmith_pedone_joint",
+  "rsmith_gap_joint",
+  "rsmith_epsr_joint",
+  "native_epsr_joint",
+  "rmcprofile_joint",
+]
+hidden_self_common_rms_max = 1.0e-9
+native_epsr_hidden_replay_rms_max = 1.0e-6
+rmcprofile_hidden_replay_rms_max = 1.0e-12
+pdfgui_cross_start_rms_over_target_range_min = 0.04
+require_each_joint_method_to_improve_mean_common_total_rms = true
+
+[observed.target_gap_from_pedone]
+cross_neutron_rms = 0.108800245
+cross_xray_rms = 0.123322907
+rsmith_joint_neutron_rms = 0.091219855
+rsmith_joint_xray_rms = 0.103389339
+rsmith_gap_joint_neutron_rms = 0.091223420
+rsmith_gap_joint_xray_rms = 0.103478357
+native_epsr_joint_neutron_rms = 0.106886967
+native_epsr_joint_xray_rms = 0.122456270
+rmcprofile_joint_neutron_rms = 0.108373861
+rmcprofile_joint_xray_rms = 0.122562682
+rsmith_joint_wall_seconds = 0.529350042
+rsmith_epsr_joint_wall_seconds = 0.384769917
+rsmith_gap_joint_wall_seconds = 321.901201125
+native_epsr_joint_wall_seconds = 1.085439083
+rmcprofile_joint_wall_seconds = 6.919630583
+
+[observed.target_pedone_from_gap]
+cross_neutron_rms = 0.111703383
+cross_xray_rms = 0.125959699
+rsmith_joint_neutron_rms = 0.085411427
+rsmith_joint_xray_rms = 0.101740190
+rsmith_gap_joint_neutron_rms = 0.085348790
+rsmith_gap_joint_xray_rms = 0.101688385
+native_epsr_joint_neutron_rms = 0.110516320
+native_epsr_joint_xray_rms = 0.124824530
+rmcprofile_joint_neutron_rms = 0.109388563
+rmcprofile_joint_xray_rms = 0.123385696
+rsmith_joint_wall_seconds = 0.521959333
+rsmith_epsr_joint_wall_seconds = 0.417160833
+rsmith_gap_joint_wall_seconds = 343.349776042
+native_epsr_joint_wall_seconds = 1.116216666
+rmcprofile_joint_wall_seconds = 6.708854291
+
+[interpretation]
+boundary = "Post-diagnostic smoke observations and software regression guards, not preregistered stochastic equivalence limits."
+energy_weight = "The frozen 0.001 Pedone/GAP weights were 3-4 orders below rsmith's calibration suggestions, so these arms track pure RMC and do not test HRMC superiority."
+rmcprofile = "The official wrapper fell back to the serial executable; its timed checkpoint stores 5315/6000 and 5490/6000 generated-move coordinate snapshots, while the logs confirm both jobs completed 6000 moves."
+speed = "End-to-end local smoke timings include initialization. They are diagnostic only; production speed claims require repeated warm/cold timings and a functioning RMCProfile parallel build."

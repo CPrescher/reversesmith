@@ -99,9 +99,12 @@ potential-table grids.
 The same script converts the measured neutron `nrtype=5` and X-ray `<f^2>`
 totals to rsmith's Faber-Ziman normalization and runs one energy-only EPSR
 epoch using both contrasts. The 6,000-move, one-thread smoke run completed with
-7.0% acceptance; all three empirical pair potentials changed (maximum changes
-0.0671, 0.2012, and 0.2025 eV for Si-Si, Si-O, and O-O). The post-MC X-ray and
-neutron RMS residuals were 0.2391 and 0.2083. These values prove that the full
+7.0% acceptance; all three empirical pair potentials changed, with a maximum
+absolute update of 0.001846 eV. The post-MC X-ray and neutron RMS residuals
+were 0.001386 and 0.002137. An output audit corrected an earlier smoke result
+that had mistakenly treated EPSR's `.v01` data-minus-model residual as its
+calculated total; the calculated total is stored in `.u01`. These values prove
+that the full
 two-contrast reference-plus-empirical path executes; a single epoch is not a
 converged EPSR reproduction or a speed comparison.
 
@@ -151,6 +154,71 @@ The scientific claim is not "smaller chi-squared than EPSR". The meaningful
 test is whether MLIP-HRMC gives better held-out or chemically diagnostic
 structure at the same data agreement.
 
+## Symmetric GAP/Pedone cross-recovery smoke
+
+The first correctness comparison uses plausible cross-starts rather than a
+random 3,000-atom network. For the hidden GAP target, the Pedone endpoint is
+isotropically expanded by `1.03914913527` into the GAP box. For the hidden
+Pedone target, the GAP endpoint is compressed by `0.962325777945`. No random
+displacement, relaxation, or target-potential preprocessing is applied. Exact
+noise-free neutron and X-ray targets are generated from the hidden coordinates
+on the frozen common grid.
+
+All atom-moving programs start from those same density-rescaled coordinates.
+Because EPSR26 and RMCProfile use program-specific reciprocal conventions,
+each also generates a hidden-coordinate native target and must reproduce it in
+an exact zero-move replay. EPSR passes that replay at `2.7e-8` RMS or better and
+RMCProfile at exactly zero. Every recovered coordinate set is subsequently
+rescored by the same independent minimum-image analyzer. PDFgui/PDFfit2 is
+included as a forward-only PDF control: its target/cross-start differences are
+5.26--6.74% RMS of the target PDF range, but PDFgui does not perform atom-wise
+RMC recovery.
+
+At 6,000 attempted moves (two moves per atom), the common total-scattering RMS
+values are:
+
+| Hidden target / method | Neutron start -> smoke | X-ray start -> smoke |
+|---|---:|---:|
+| GAP / rsmith RMC | 0.10880 -> 0.09122 | 0.12332 -> 0.10339 |
+| GAP / rsmith EPSR | 0.10880 -> 0.10286 | 0.12332 -> 0.12060 |
+| GAP / native EPSR26 | 0.10880 -> 0.10689 | 0.12332 -> 0.12246 |
+| GAP / RMCProfile | 0.10880 -> 0.10837 | 0.12332 -> 0.12256 |
+| Pedone / rsmith RMC | 0.11170 -> 0.08541 | 0.12596 -> 0.10174 |
+| Pedone / rsmith EPSR | 0.11170 -> 0.10785 | 0.12596 -> 0.12271 |
+| Pedone / native EPSR26 | 0.11170 -> 0.11052 | 0.12596 -> 0.12482 |
+| Pedone / RMCProfile | 0.11170 -> 0.10939 | 0.12596 -> 0.12339 |
+
+The Pedone- and GAP-regularized rsmith trajectories are nearly identical to
+pure RMC in this smoke. The diagnostic calibration explains why: the frozen
+energy weight of `0.001` is roughly three to four orders of magnitude below
+the suggested per-move balance (`~27--30` for Pedone and `~0.67` for GAP).
+These results validate that the adapters and energy paths execute; they do not
+show an MLIP benefit. Production must measure a data-fit/energy-weight Pareto
+curve and compare methods at matched data fit.
+
+### Local timing diagnostic
+
+End-to-end one-thread wall times on an Apple M4 Pro were:
+
+| Method, joint fit | GAP target | Pedone target |
+|---|---:|---:|
+| rsmith RMC | 0.529 s | 0.522 s |
+| rsmith EPSR mode | 0.385 s | 0.417 s |
+| native EPSR26 | 1.085 s | 1.116 s |
+| RMCProfile | 6.920 s | 6.709 s |
+| rsmith GAP/QUIP | 321.9 s | 343.3 s |
+
+rsmith pure RMC is about 13 times faster than this installed RMCProfile path
+and about twice as fast as native EPSR in the smoke. Those are not yet paper
+speed claims. The official RMCProfile macOS wrapper fell back to its serial
+binary because its parallel executable references an unavailable x86-64
+`libgomp`; it also checkpoints coordinates by wall-clock time, so the
+independently scored snapshots represent 5,315 and 5,490 of the 6,000 completed
+moves. Conversely, GAP/QUIP model loading and local SOAP evaluation dominate
+and make the present GAP-HRMC path roughly 600 times slower than pure RMC.
+Production timing needs repeated cold/warm runs, a working parallel
+RMCProfile build, exact saved move counts, and calibrated energy weights.
+
 ## Files
 
 - `protocol.toml`: frozen methods, stages, contrasts, seeds, and observables;
@@ -166,6 +234,15 @@ structure at the same data agreement.
 - `scripts/run_reference_potential_smoke.py`: independent EPSR reference-
   potential reconstruction, native curve/energy gate, normalization
   conversion, and one-epoch joint neutron/X-ray rsmith smoke run;
+- `scripts/fetch_public_gap.py`: checksum-gated importer for the public Erhard
+  silica GAP and its sparse companions;
+- `scripts/prepare_cross_recovery.py`: symmetric hidden-target and cross-start
+  fixture generator for the common neutron/X-ray protocol;
+- `scripts/run_rsmith_cross.py`, `run_native_epsr_cross.py`, and
+  `run_rmcprofile_cross.py`: matched adapter smoke runners;
+- `scripts/run_pdfgui_cross_forward.py`: PDFgui/PDFfit2 forward-only control;
+- `scripts/score_cross_recovery.py` and `verify_cross_recovery.py`: common
+  coordinate scoring and committed smoke guards;
 - `scripts/analyze_ambient_models.py`: independent RDF, coordination, angle,
   minimum-distance, and shortest-ring analysis of both model endpoints;
 - `scripts/verify_ambient_models.py`: deterministic verifier for the pinned
@@ -176,6 +253,10 @@ structure at the same data agreement.
   observations plus regression guards;
 - `expected/ambient-model-endpoints.toml`: pinned source hashes, model
   provenance, structural observations, and claim boundary;
+- `expected/cross-recovery.toml`: protocol frozen before cross-refinement
+  outcomes were inspected;
+- `expected/cross-recovery-smoke.toml`: post-diagnostic observations and
+  adapter regression guards, explicitly not publication equivalence limits;
 - `reference/README.md`: provenance and redistribution rules for upstream data.
 
 ## Local reproduction
@@ -192,4 +273,16 @@ python3 scripts/run_reference_potential_smoke.py
 SIO2_GLASS_ROOT=/path/to/SiO2_glass ./import_ambient_models.sh
 python3 scripts/analyze_ambient_models.py
 python3 scripts/verify_ambient_models.py
+
+python3 scripts/fetch_public_gap.py
+python3 scripts/prepare_cross_recovery.py --force \
+  --gap-model reference/local/public-gap/silica_gap.xml
+python3 scripts/run_rsmith_cross.py --no-gap
+# Build rsmith with --features gap-quip, then pass that binary:
+python3 scripts/run_rsmith_cross.py --gap-only --binary /path/to/gap-enabled/rsmith
+python3 scripts/run_native_epsr_cross.py --force
+python3 scripts/run_rmcprofile_cross.py --force
+/path/to/pdfgui/python scripts/run_pdfgui_cross_forward.py
+python3 scripts/score_cross_recovery.py
+python3 scripts/verify_cross_recovery.py
 ```

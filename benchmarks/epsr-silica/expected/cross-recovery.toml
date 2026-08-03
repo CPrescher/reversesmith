@@ -1,0 +1,67 @@
+status = "protocol_frozen_before_cross_recovery_results"
+date = "2026-08-03"
+scope = "symmetric synthetic recovery between the pinned 300 K GAP and Pedone SiO2 endpoints"
+
+[grid]
+q_min_a_inverse = 0.5
+q_max_a_inverse = 25.0
+q_step_a_inverse = 0.05
+q_interval = "half-open [q_min, q_max), matching the rsmith reciprocal grid"
+r_max_a = 16.0
+r_step_a = 0.02
+lorch = false
+
+[starts]
+gap_target = "Pedone endpoint isotropically expanded to the native GAP target box"
+pedone_target = "GAP endpoint isotropically compressed to the native Pedone target box"
+random_displacement_a = 0.0
+relax_before_refinement = false
+rationale = "preserve a plausible but model-biased silica network without leaking the target potential into the start"
+
+[data]
+noise_model = "exact_noiseless_first-stage correctness target"
+contrasts = ["natural-isotope neutron Faber-Ziman S(Q)", "X-ray Faber-Ziman S(Q)"]
+fit_modes = ["neutron_only", "xray_only", "joint"]
+neutron_scattering_length_si_fm = 4.1491
+neutron_scattering_length_o_fm = 5.803
+constant_sigma = 0.02
+
+[methods]
+recovery = ["rsmith_rmc", "rsmith_pedone_hrmc", "rsmith_gap_hrmc", "rsmith_epsr", "native_epsr26", "native_rmcprofile"]
+forward_only = ["pdfgui"]
+pdfgui_exclusion_reason = "PDFgui refines a parameterized structural model and does not perform atom-by-atom reverse Monte Carlo recovery"
+rsmith_gap_local_requirement = "Erhard silica GAP XML plus sparse companions and a working QUIP shim; unavailable in the current local private-repository checkout"
+
+[controls]
+required = [
+  "hidden_target_zero_move_forward",
+  "density_rescaled_cross_start_zero_move",
+  "same_model_start_to_target",
+]
+native_forward_policy = "Each comparison program may synthesize its program-native observable from the same hidden coordinates only after its zero-move forward calculation is recorded."
+common_scoring_policy = "All recovered coordinates are evaluated by the independent rsmith benchmark analyzer, not by the program that produced them."
+
+[budgets]
+smoke_moves_per_atom = 2
+production_moves_per_atom = 1000
+production_seeds = [20260802, 20260803, 20260804, 20260805, 20260806, 20260807, 20260808, 20260809, 20260810, 20260811]
+threads = 1
+comparison_basis = "matched attempted atom moves; wall time, accepted moves, and residual trajectory all reported"
+
+[primary_outcomes]
+metrics = [
+  "held_out_total_scattering_rms",
+  "partial_Sij_rms",
+  "partial_gij_rms",
+  "Si_coordination_distribution_at_2.2A",
+  "O_coordination_distribution_at_2.2A",
+  "O_Si_O_angle_distribution",
+  "Si_O_Si_angle_distribution",
+  "edge_weighted_shortest_ring_distribution",
+  "minimum_pair_distances",
+]
+coordinate_rmsd_is_primary = false
+
+[claims]
+rule = "Recovery of withheld partial and network observables at matched fitted-data agreement is evidence of correctness; proximity to GAP alone is not evidence of physical superiority."
+publication_gate = "The smoke stage validates adapters only. Scientific comparisons require all production seeds and independently generated decorrelated target snapshots."

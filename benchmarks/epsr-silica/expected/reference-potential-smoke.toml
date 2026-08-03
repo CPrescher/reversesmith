@@ -47,13 +47,10 @@ threads = 1
 iterations = 1
 moves = 6000
 acceptance_percent = 7.0
-max_ep_update_ev = 0.202453
-si_si_max_ep_ev = 0.06707815
-si_o_max_ep_ev = 0.20117767
-o_o_max_ep_ev = 0.20245322
-xray_post_mc_rms = 0.239095
-neutron_post_mc_rms = 0.208286
-summed_squared_residual = 47.908949
+max_ep_update_ev = 0.001846
+xray_post_mc_rms = 0.001386
+neutron_post_mc_rms = 0.002137
+summed_squared_residual = 0.003467
 
 [guards]
 pair_curve_rms_over_dynamic_range_max = 2.0e-7

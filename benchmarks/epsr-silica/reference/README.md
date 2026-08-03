@@ -45,3 +45,18 @@ quench. Their equilibrium densities also differ: 2.282 g/cm3 for GAP and
 2.560 g/cm3 for Pedone, compared with 2.2 g/cm3 nominal experimental glass.
 Coordination, angle, and network-topology comparisons are useful; raw RDF
 distance must be interpreted with the density difference stated explicitly.
+
+## Public silica GAP parameterization
+
+The private structure repository contains a GAP-generated endpoint but not the
+potential files. The benchmark therefore obtains the Erhard et al. silica GAP
+from the primary Zenodo record, DOI `10.5281/zenodo.6353684`. The deposited
+archive `sio2_potential_data.zip` is 157,430,123 bytes with MD5
+`6a16de69b5e17fd18160d9b55972a3e1`; the extracted `silica_gap.xml` has SHA-256
+`5d470c3cde09a26c7919caa556c84902a04a35e54fd87f27bd4abb2921150799`.
+
+Run `../scripts/fetch_public_gap.py` to download, verify, and extract the XML
+and its five sparse companions below ignored `reference/local/public-gap/`.
+The files are not vendored because the two SOAP sparse tables alone occupy
+about 334 MB. The model label used by QUIP is
+`GAP_2021_4_19_120_7_32_55_336`.

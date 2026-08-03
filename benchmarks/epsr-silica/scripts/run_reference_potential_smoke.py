@@ -180,7 +180,10 @@ def xray_form_factor(values, q: float):
 
 
 def write_faber_ziman_targets(source: Path, native: Path, output: Path):
-    rows = numeric_rows(native / "DTBsilica.EPSR.v01", 5)
+    # EPSR .u01 stores the calculated total scattering.  The similarly shaped
+    # .v01 file stores data-minus-model residuals and must not be used as a
+    # refinement target.
+    rows = numeric_rows(native / "DTBsilica.EPSR.u01", 5)
     neutron_weights = [row[2] for row in numeric_rows(source / "DTBsilica.NWTStot.wts", 3) if len(row) == 3]
     if len(neutron_weights) != 3:
         raise ValueError("expected three neutron pair weights")
@@ -318,7 +321,7 @@ repo_root = case_root.parents[1]
 source = case_root / "reference/local/upstream"
 native = case_root / "results/native-zero-move"
 structure = case_root / "results/rsmith-zero-move/dtbsilica.data"
-for required in (source / "si.ato", source / "o.ato", source / "DTBsilica.pcof", native / "DTBsilica.EPSR.o01", native / "DTBsilica.EPSR.v01", structure):
+for required in (source / "si.ato", source / "o.ato", source / "DTBsilica.pcof", native / "DTBsilica.EPSR.o01", native / "DTBsilica.EPSR.u01", structure):
     if not required.is_file():
         raise SystemExit(f"missing prerequisite {required}; run the local import and zero-move gates first")
 

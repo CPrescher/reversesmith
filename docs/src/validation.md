@@ -120,7 +120,9 @@ short-range and Coulomb cutoff functions.
 
 A one-thread, 6,000-move smoke trajectory then exercised the verified
 reference potential together with both measured neutron and X-ray contrasts.
-All three empirical pair potentials received nonzero updates. This closes the
+All three empirical pair potentials received nonzero updates. An audit also
+fixed the target reader to use EPSR's `.u01` calculated total rather than its
+similarly shaped `.v01` data-minus-model residual. This closes the
 reference-potential plumbing gate, but the one-epoch wall time and residuals
 are deliberately not presented as performance or convergence results. The
 next scientific gate is the preregistered matched multi-seed, multi-epoch
@@ -142,15 +144,43 @@ endpoint from a `10^14 K/s` quench, and their densities differ substantially
 (2.282 versus 2.560 g/cm3). The preregistered claim rule therefore forbids
 using agreement with GAP alone as evidence of physical superiority.
 
+### Symmetric cross-program silica smoke
+
+The pinned GAP and Pedone endpoints now form two symmetric synthetic recovery
+cases. In each direction the opposite endpoint is isotropically rescaled to
+the hidden target box without relaxation or random displacement. rsmith RMC,
+Pedone-HRMC, GAP/QUIP-HRMC, rsmith EPSR mode, native EPSR26, and RMCProfile all
+execute from the same cross-start; PDFgui/PDFfit2 supplies a forward-only PDF
+control because it is not an atom-by-atom RMC engine.
+
+Program-native hidden-coordinate target/replay gates pass before refinement,
+and all recovered coordinates are rescored with one independent Faber-Ziman
+and minimum-image analyzer. In the 6,000-move adapter smoke every joint method
+improves the mean common neutron/X-ray RMS over its cross-start. rsmith pure
+RMC reduces the common totals from 0.10880/0.12332 to 0.09122/0.10339 for the
+GAP target and from 0.11170/0.12596 to 0.08541/0.10174 for the Pedone target.
+
+This is deliberately not evidence that GAP-HRMC is superior. The smoke's
+`0.001` Pedone/GAP energy weight is orders of magnitude below the calibration
+diagnostic, so both energy-regularized paths remain almost indistinguishable
+from pure RMC. End-to-end rsmith RMC is about 2x faster than native EPSR26 and
+13x faster than the installed serial-fallback RMCProfile path in this local
+smoke, whereas the current GAP/QUIP path takes 322--343 s and is roughly 600x
+slower than pure RMC. These timings expose the next optimization target; they
+are not publication speed ratios.
+
 ## Remaining publication gates
 
 1. Validate liquid-Ga structures against held-out data or an independent
    atomistic/physical oracle.
 2. Test independent equilibrium starts to separate basin sensitivity from
    convergence out of unstructured liquids.
-3. Run the matched multi-seed native/rsmith silica ensembles, estimate native
-   seed-to-seed spread, and freeze the stochastic equivalence margins before
+3. Calibrate Pedone and GAP energy weights as data-fit/energy Pareto curves,
+   repair the RMCProfile parallel runtime, and freeze exact coordinate-save and
+   timing rules.
+4. Run the matched multi-seed native/rsmith silica ensembles, estimate native
+   seed-to-seed spread, and freeze stochastic equivalence margins before
    comparing pair-potential and MLIP-regularized refinements.
-4. Apply the preregistered comparison to a complex high-pressure glass, where
+5. Apply the preregistered comparison to a complex high-pressure glass, where
    chemically diagnostic coordination, angle, and topology observables can
    establish or reject a physical-superiority claim.
