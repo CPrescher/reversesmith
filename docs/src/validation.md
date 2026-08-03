@@ -321,15 +321,38 @@ failure of this native setup, but it is a single-seed synthetic pilot. A paper
 claim requires seed replication, denser matched-fit checkpoints, sensitivity
 to EPSR controls and starting state, and held-out or experimental validation.
 
+### Dense matched-fit EPSR ensemble
+
+The preregistered follow-up completes ten seeds for both cross-recovery cases,
+with 260 native EPSR26 and 280 unconstrained-rsmith endpoints. A monotone
+one-to-one match gives 12 fit-matched pairs per GAP seed and 11 per Pedone seed;
+every primary pair is within the frozen `0.002` combined-fit tolerance.
+
+| Target | Rsmith lower hidden RDF | Mean native - rsmith RDF (95% CI) | Native Si-Si < 2.0 A at iteration 100 |
+|---|---:|---:|---:|
+| GAP from Pedone | 9/10 | 0.02954 (0.01905--0.03863) | 4/10 |
+| Pedone from GAP | 10/10 | 0.22145 (0.21572--0.22622) | 10/10 |
+
+At the best-fit and worst-fit ends of common support, rsmith has lower hidden-
+RDF error in all ten seeds for both cases, with all four paired-bootstrap
+intervals excluding zero. The hidden partial-S(Q) difference is unresolved for
+GAP but favors rsmith for Pedone. Independently resampling native and rsmith
+RDF values also leaves positive confidence intervals for GAP
+(`0.02093--0.03785`) and Pedone (`0.21664--0.22590`), so the result does not
+depend on pairing unlike RNG streams by seed label. Concurrent ensemble wall
+times are excluded from speed claims. This establishes a reproducible advantage over stock
+EPSR26 for hidden-structure recovery in these synthetic tests; experimental
+validation and control/start sensitivity remain necessary before generalizing.
+
 ## Remaining publication gates
 
 1. Validate liquid-Ga structures against held-out data or an independent
    atomistic/physical oracle.
 2. Test independent equilibrium starts to separate basin sensitivity from
    convergence out of unstructured liquids.
-3. Replicate the native/rsmith EPSR convergence result across seeds with dense
-   checkpoints around common achieved residuals, and test whether the native
-   close-contact failure survives reasonable control/start sensitivity.
+3. Test the replicated native/rsmith result against reasonable EPSR feedback,
+   reference-potential, and equilibrium-start sensitivity. The ten-seed dense
+   matched-fit replication is complete; start/control generality is not.
 4. Complete the separately preregistered cold/warm timing-only campaign. The
    ten fresh-process scientific timings are repeatable warm-cache diagnostics,
    not final publication speed ratios.

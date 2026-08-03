@@ -430,6 +430,31 @@ directory, so scientific runs may execute concurrently. Their wall times are
 explicitly excluded from speed claims; the cold/warm serial timing protocol
 remains separate.
 
+All 540 configurations completed: 260 native EPSR26 and 280 unconstrained-
+rsmith endpoints. Maximum-cardinality monotone matching gives 12 accepted
+pairs per GAP seed and 11 per Pedone seed, with every primary pair inside the
+frozen `0.002` fit tolerance.
+
+| Target | Rsmith lower hidden RDF | Mean native - rsmith RDF (95% paired-bootstrap CI) | Native iteration-100 Si-Si < 2.0 A |
+|---|---:|---:|---:|
+| GAP from Pedone | 9/10 seeds | 0.02954 (0.01905--0.03863) | 4/10 seeds |
+| Pedone from GAP | 10/10 seeds | 0.22145 (0.21572--0.22622) | 10/10 seeds |
+
+The result is not an artifact of selecting the middle of the overlap. At both
+the best-fit and worst-fit matched ends, rsmith has lower hidden-RDF error in
+all ten seeds for both cases, and all four sensitivity confidence intervals
+exclude zero. Hidden partial-S(Q) is unresolved for the GAP target (mean
+native-minus-rsmith `0.000053`, 95% CI `-0.000491--0.000630`) but favors
+rsmith for the Pedone target (`0.006739`, `0.006284--0.007191`). A conservative
+sensitivity that resamples native and rsmith RDF values independently also
+excludes zero for GAP (`0.02093--0.03785`) and Pedone
+(`0.21664--0.22590`), so the conclusion does not depend on pairing unlike RNG
+streams by seed label. This supports a bounded superiority statement: for
+these two preregistered synthetic silica cross-recovery cases, unconstrained
+rsmith recovers hidden real-space
+structure better than stock EPSR26 at matched scattering fit. It is not yet a
+claim about experimental validity, equilibrium sampling, or all EPSR uses.
+
 ### Repeated one-thread timing diagnostic
 
 The ten independent fresh-process timings per method and case are reported in
@@ -494,6 +519,10 @@ hardware/software metadata.
 - `scripts/run_rsmith_epsr_convergence.py` and
   `verify_epsr_convergence.py`: tutorial-scale EPSR prefix runs, constraint-
   parity control, matched-fit checks, and the iteration-100 stability stop;
+- `scripts/summarize_epsr_convergence_ensemble.py` and
+  `verify_epsr_convergence_ensemble.py`: ten-seed monotone fit matching,
+  paired-bootstrap analysis, close-contact counts, and strict provenance
+  verification;
 - `scripts/prepare_hrmc_weight_sweep.py`, `run_hrmc_weight_sweep.py`, and
   `verify_hrmc_weight_sweep.py`: frozen Pedone/GAP weight-pilot preparation,
   execution, scoring, and regression guards;
@@ -622,4 +651,7 @@ python3 scripts/run_native_epsr_cross.py --convergence-ensemble \
   --convergence-seed 20260803 --force
 python3 scripts/run_rsmith_epsr_convergence.py --convergence-ensemble \
   --convergence-seed 20260803 --force
+python3 scripts/score_cross_recovery.py --quiet
+python3 scripts/summarize_epsr_convergence_ensemble.py
+python3 scripts/verify_epsr_convergence_ensemble.py
 ```

@@ -1,0 +1,53 @@
+status = "epsr_dense_matched_fit_ensemble_completed"
+date = "2026-08-03"
+protocol = "epsr-convergence-ensemble.toml"
+protocol_commit = "94c11cf"
+raw_score_sha256 = "009beb9983e96e91998dc03a7e0384a9e04624170cb2808d68e8d83f353a86b2"
+matched_fit_summary_sha256 = "499e9a00bb380bc0fb8b9840e6bff3876f939cde7e4ebde5b17914c10efd7509"
+seeds = [20260802, 20260803, 20260804, 20260805, 20260806, 20260807, 20260808, 20260809, 20260810, 20260811]
+
+[interpretation]
+primary = "At the preregistered median-overlap fit match, unconstrained rsmith has lower hidden partial-RDF RMS in 9/10 GAP seeds and 10/10 Pedone seeds; both paired bootstrap mean-difference intervals exclude zero."
+fit_support = "Every seed has 12 monotone matched pairs for GAP and 11 for Pedone within the frozen 0.002 fit tolerance."
+partial_sq = "The hidden partial-S(Q) contrast is unresolved for GAP because its interval straddles zero, while rsmith is better for Pedone."
+stability = "At native iteration 100, the Si-Si minimum is below 2.0 A in 4/10 GAP seeds and 10/10 Pedone seeds."
+sensitivity = "At both the best-fit and worst-fit ends of common support, rsmith has lower hidden-RDF error in all ten seeds for both cases and every paired bootstrap interval excludes zero."
+unpaired_sensitivity = "Independently resampling the native and rsmith primary RDF values also gives positive mean-difference intervals for both cases, so the conclusion does not rely on covariance from pairing unlike RNG streams by seed label."
+timing = "These concurrently executed ensemble wall times are invalid for speed claims and are not interpreted."
+claim_boundary = "This supports rsmith superiority over stock EPSR26 for hidden-structure recovery in the two preregistered synthetic SiO2 cross-recovery cases. It does not establish universal EPSR superiority, equilibrium sampling, or experimental validity."
+
+[cases."target-gap_from-pedone"]
+matched_seed_count = 10
+accepted_pair_count = 12
+rsmith_lower_primary_rdf_count = 9
+native_iteration_100_close_contact_count = 4
+maximum_primary_absolute_fit_difference = 0.0015792262827799136
+primary_rdf_mean_native_minus_rsmith = 0.02953997900240825
+primary_rdf_median_native_minus_rsmith = 0.03596410416196924
+primary_rdf_bootstrap_mean_95_ci = [0.019048625903483923, 0.038631312861663374]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [0.02092694916081167, 0.03784721525374976]
+primary_partial_sq_mean_native_minus_rsmith = 0.00005273066501589874
+primary_partial_sq_bootstrap_mean_95_ci = [-0.0004905548644077967, 0.0006300643644572334]
+best_fit_end_rdf_mean_native_minus_rsmith = 0.03284854156593412
+best_fit_end_rdf_bootstrap_mean_95_ci = [0.027670846796681373, 0.03832833230447261]
+worst_fit_end_rdf_mean_native_minus_rsmith = 0.05801078800374415
+worst_fit_end_rdf_bootstrap_mean_95_ci = [0.0547243946507723, 0.06115320353645783]
+native_iteration_100_min_si_si_a = [1.9246663453729465, 2.4333818998855556, 1.9704330987107919, 2.348606655670288, 2.380226147077261, 2.406934339645276, 1.9281423763099952, 1.7538098339162351, 2.4384342128724037, 2.4009437826664057]
+
+[cases."target-pedone_from-gap"]
+matched_seed_count = 10
+accepted_pair_count = 11
+rsmith_lower_primary_rdf_count = 10
+native_iteration_100_close_contact_count = 10
+maximum_primary_absolute_fit_difference = 0.000841895543964119
+primary_rdf_mean_native_minus_rsmith = 0.2214477824510289
+primary_rdf_median_native_minus_rsmith = 0.22092052156344189
+primary_rdf_bootstrap_mean_95_ci = [0.21571926250394818, 0.22622330482169153]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [0.2166390335818713, 0.22589881840243506]
+primary_partial_sq_mean_native_minus_rsmith = 0.006739029514852349
+primary_partial_sq_bootstrap_mean_95_ci = [0.006283534329996985, 0.007191308143276353]
+best_fit_end_rdf_mean_native_minus_rsmith = 0.18251695724152206
+best_fit_end_rdf_bootstrap_mean_95_ci = [0.17539409611404372, 0.1901747046833446]
+worst_fit_end_rdf_mean_native_minus_rsmith = 0.06828149263093766
+worst_fit_end_rdf_bootstrap_mean_95_ci = [0.06448369743654876, 0.07187333045798579]
+native_iteration_100_min_si_si_a = [1.5793794154488314, 1.72922465207834, 1.8067900111411879, 1.7058486708206715, 1.9291997377486594, 1.7323340324984846, 1.779653781162627, 1.7894983801224393, 1.5873425369244678, 1.8416286011651462]

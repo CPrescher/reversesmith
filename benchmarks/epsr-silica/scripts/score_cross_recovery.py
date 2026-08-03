@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import math
@@ -12,6 +13,16 @@ from itertools import combinations
 from pathlib import Path
 
 import numpy as np
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--quiet", action="store_true")
+args = parser.parse_args()
+
+
+def emit(payload) -> None:
+    if not args.quiet:
+        print(json.dumps(payload, indent=2, sort_keys=True))
 
 
 PAIR_TYPES = ((1, 1), (1, 2), (2, 2))
@@ -562,7 +573,7 @@ for case in sorted(fixture_root.glob("target-*_*")):
 (fixture_root / "score-summary.json").write_text(
     json.dumps(summary, indent=2, sort_keys=True) + "\n"
 )
-print(json.dumps(summary, indent=2, sort_keys=True))
+emit(summary)
 
 
 def score_hrmc_root(root: Path, status: str, scope: str):
@@ -593,7 +604,7 @@ def score_hrmc_root(root: Path, status: str, scope: str):
     (root / "score-summary.json").write_text(
         json.dumps(hrmc_summary, indent=2, sort_keys=True) + "\n"
     )
-    print(json.dumps(hrmc_summary, indent=2, sort_keys=True))
+    emit(hrmc_summary)
 
 
 score_hrmc_root(
@@ -673,7 +684,7 @@ def score_multiseed_root(root: Path):
     (root / "raw-score-summary.json").write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n"
     )
-    print(json.dumps(result, indent=2, sort_keys=True))
+    emit(result)
 
 
 score_multiseed_root(case_root / "results/multiseed-comparison")
@@ -722,7 +733,7 @@ def score_epsr_convergence_root(root: Path):
     (root / "raw-score-summary.json").write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n"
     )
-    print(json.dumps(result, indent=2, sort_keys=True))
+    emit(result)
 
 
 score_epsr_convergence_root(case_root / "results/epsr-convergence-pilot")
@@ -773,7 +784,7 @@ def score_epsr_convergence_ensemble_root(root: Path):
     (root / "raw-score-summary.json").write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n"
     )
-    print(json.dumps(result, indent=2, sort_keys=True))
+    emit(result)
 
 
 score_epsr_convergence_ensemble_root(
