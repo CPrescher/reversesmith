@@ -558,7 +558,7 @@ fn sinc_derivative(value: f64) -> f64 {
 fn simplified_bessel_aux(distance: f64, cutoff: f64, order: usize) -> (f64, f64) {
     let first = (order + 1) as f64;
     let second = (order + 2) as f64;
-    let sign = if order % 2 == 0 { 1.0 } else { -1.0 };
+    let sign = if order.is_multiple_of(2) { 1.0 } else { -1.0 };
     let prefactor =
         sign * 2.0_f64.sqrt() * std::f64::consts::PI / cutoff.powf(1.5) * first * second
             / (first * first + second * second).sqrt();
