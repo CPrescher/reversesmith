@@ -486,6 +486,38 @@ excludes zero. The bounded claim is retained only if neither target is
 sensitive in any arm. Concurrent scientific jobs are allowed, but their wall
 times cannot support speed claims.
 
+All 1,260 endpoints completed: 600 native EPSR26 and 660 rsmith structures.
+Every primary comparison is inside the frozen `0.002` achieved-fit tolerance.
+The result is strong in eleven of twelve target-control combinations:
+
+| Target | Control | rsmith lower hidden RDF | Mean native - rsmith RDF (95% paired-bootstrap CI) | Decision |
+|---|---|---:|---:|---|
+| GAP | feedback 0.5 | 5/5 | 0.01971 (0.01275--0.02720) | strong |
+| GAP | feedback 0.8 | 4/5 | 0.00972 (0.00039--0.02105) | strong |
+| GAP | reference 0.5x | 5/5 | 0.01911 (0.00855--0.02966) | strong |
+| GAP | reference 1.5x | 2/5 | 0.00034 (-0.00999--0.01071) | sensitive/tied |
+| GAP | common start A | 5/5 | 0.02678 (0.01717--0.03639) | strong |
+| GAP | common start B | 5/5 | 0.04361 (0.03699--0.04970) | strong |
+| Pedone | feedback 0.5 | 5/5 | 0.20485 (0.19831--0.21157) | strong |
+| Pedone | feedback 0.8 | 5/5 | 0.21659 (0.21357--0.22005) | strong |
+| Pedone | reference 0.5x | 5/5 | 0.15821 (0.14795--0.16801) | strong |
+| Pedone | reference 1.5x | 5/5 | 0.23012 (0.22596--0.23462) | strong |
+| Pedone | common start A | 5/5 | 0.20878 (0.20570--0.21186) | strong |
+| Pedone | common start B | 5/5 | 0.21141 (0.20325--0.21789) | strong |
+
+The common-start test is especially clean: rsmith has lower hidden-RDF error
+in all twenty comparisons across two starts, two targets, and five seeds. The
+Pedone recovery advantage also survives every control. For GAP recovery,
+however, strengthening the reference interaction to 1.5 times baseline makes
+the preregistered primary median-support result an unresolved tie. The
+independent-resampling interval likewise crosses zero. Although the best- and
+worst-fit ends of that arm still favor rsmith, the frozen overall rule is not
+met. We therefore do **not** retain an all-controls superiority claim. The
+paper-facing statement is narrower: rsmith is superior over most tested
+ambient-silica controls and robust to common starting state, but the magnitude
+and significance depend on reference-potential strength. This closes the
+ambient-pressure sensitivity campaign; further broad grids are unnecessary.
+
 ### Repeated one-thread timing diagnostic
 
 The ten independent fresh-process timings per method and case are reported in
@@ -557,7 +589,8 @@ hardware/software metadata.
 - `scripts/prepare_epsr_control_start_sensitivity.py`, the two EPSR runners,
   `verify_epsr_control_start_inputs.py`, and
   `run_epsr_control_start_matrix.py`, and
-  `summarize_epsr_control_start_sensitivity.py`: scaled-reference and
+  `summarize_epsr_control_start_sensitivity.py` plus its verifier:
+  scaled-reference and
   target-blind common-start preparation and verification, bounded-concurrency
   dispatch of the frozen six-arm/five-seed matrix, and preregistered robustness
   decisions;
@@ -606,6 +639,9 @@ hardware/software metadata.
   reference-strength, and common-start sensitivity design and claim boundary;
 - `expected/epsr-control-start-sensitivity-inputs.toml`: hashes and geometric
   audit of the generated inputs, frozen before refinement outcomes;
+- `expected/epsr-control-start-sensitivity-observed.toml`: complete endpoint
+  counts, matched-fit observations, provenance hashes, and the retained
+  parameter-sensitivity conclusion;
 - `reference/README.md`: provenance and redistribution rules for upstream data.
 
 ## Local reproduction
@@ -710,4 +746,5 @@ python3 scripts/run_rsmith_epsr_convergence.py --control-start-sensitivity \
 python3 scripts/score_cross_recovery.py --quiet \
   --only-epsr-control-start-sensitivity
 python3 scripts/summarize_epsr_control_start_sensitivity.py
+python3 scripts/verify_epsr_control_start_sensitivity.py --strict-provenance
 ```

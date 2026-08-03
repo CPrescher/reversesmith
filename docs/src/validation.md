@@ -108,6 +108,31 @@ directly with EPSR's differently normalized totals would create an artificial
 normalizations from its weight files before scoring. Licensed upstream files
 remain local and ignored, with committed hashes providing provenance.
 
+### Matched-fit hidden-structure recovery
+
+Two 3,000-atom ambient-silica models provide symmetric synthetic recovery
+tests: the Pedone structure starts the GAP-target refinement, and the GAP
+structure starts the Pedone-target refinement. Native EPSR26 and rsmith are
+compared only at common externally measured neutron/X-ray fit quality; the
+hidden partial g(r) curves are never used for refinement.
+
+In a ten-seed dense-checkpoint ensemble, rsmith has lower hidden-RDF error in
+9/10 GAP-target seeds and 10/10 Pedone-target seeds. Mean native-minus-rsmith
+errors are 0.02954 (95% paired-bootstrap interval 0.01905--0.03863) and
+0.22145 (0.21572--0.22622), respectively.
+
+A separate five-seed control matrix varies feedback, reference-potential
+strength, and two independently reference-equilibrated common starts. Rsmith
+is strong under the preregistered rule in eleven of twelve target-control
+combinations. It wins all twenty common-start comparisons. The exception is
+GAP recovery at 1.5 times reference strength: rsmith wins 2/5 seeds and the
+mean difference is 0.00034 with interval -0.00999--0.01071. Consequently the
+all-controls superiority claim is not retained. The validated conclusion is
+that rsmith usually recovers these hidden ambient-silica structures better at
+matched scattering fit and is robust to starting state, but its advantage is
+sensitive to reference-potential strength. This result motivates a focused
+high-pressure discriminator rather than additional ambient sensitivity grids.
+
 ### EPSR26 DTBsilicaNX reference potential
 
 The second deterministic gate independently reconstructs the reference

@@ -1,0 +1,196 @@
+status = "epsr_control_start_sensitivity_observed"
+date = "2026-08-03"
+raw_score_sha256 = "ac30a8b4fcc4bee3f100806dcbc2e6c11fe1edc08171c9fe8ce81f1d48e21ff0"
+matched_fit_summary_sha256 = "8d180fadb6d92f5612d5c708db0a24ff76990816fbaf3b737a041413aa4a28a2"
+native_endpoint_count = 600
+rsmith_endpoint_count = 660
+evaluated_case_arms = 12
+strong_case_arms = 11
+sensitive_case_arms = 1
+retain_bounded_superiority_claim = false
+
+[[observations]]
+case = "target-gap_from-pedone"
+arm = "feedback-0p5"
+accepted_pair_count_range = [8, 9]
+rsmith_lower_primary_rdf_count = 5
+native_close_contact_count = 1
+maximum_primary_fit_difference = 0.001110114016050684
+primary_rdf_mean_native_minus_rsmith = 0.019707036083622988
+primary_rdf_median_native_minus_rsmith = 0.016855141934920992
+primary_rdf_bootstrap_mean_95_ci = [0.012746148707788252, 0.02720373289512005]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [0.012570698590480378, 0.025812922926390536]
+robust = true
+strong = true
+sensitive = false
+
+[[observations]]
+case = "target-gap_from-pedone"
+arm = "feedback-0p8"
+accepted_pair_count_range = [9, 9]
+rsmith_lower_primary_rdf_count = 4
+native_close_contact_count = 2
+maximum_primary_fit_difference = 0.0019166967155529319
+primary_rdf_mean_native_minus_rsmith = 0.009715038882654037
+primary_rdf_median_native_minus_rsmith = 0.008823440402433935
+primary_rdf_bootstrap_mean_95_ci = [0.0003868226804563335, 0.021051870388148063]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [0.0004145795852051881, 0.018482231918725032]
+robust = true
+strong = true
+sensitive = false
+
+[[observations]]
+case = "target-gap_from-pedone"
+arm = "reference-0p5"
+accepted_pair_count_range = [8, 9]
+rsmith_lower_primary_rdf_count = 5
+native_close_contact_count = 2
+maximum_primary_fit_difference = 0.0009019741447412466
+primary_rdf_mean_native_minus_rsmith = 0.019105090375794897
+primary_rdf_median_native_minus_rsmith = 0.018074089339109145
+primary_rdf_bootstrap_mean_95_ci = [0.00854652957714872, 0.029663651174441075]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [0.010950477566790863, 0.027598879501849593]
+robust = true
+strong = true
+sensitive = false
+
+[[observations]]
+case = "target-gap_from-pedone"
+arm = "reference-1p5"
+accepted_pair_count_range = [8, 9]
+rsmith_lower_primary_rdf_count = 2
+native_close_contact_count = 0
+maximum_primary_fit_difference = 0.001849020596732448
+primary_rdf_mean_native_minus_rsmith = 0.0003389609522882919
+primary_rdf_median_native_minus_rsmith = -0.007182967585070421
+primary_rdf_bootstrap_mean_95_ci = [-0.009992089708067909, 0.010711450306474524]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [-0.010727810923613346, 0.01199694911698935]
+robust = false
+strong = false
+sensitive = true
+
+[[observations]]
+case = "target-gap_from-pedone"
+arm = "start-equilibrated-a"
+accepted_pair_count_range = [9, 10]
+rsmith_lower_primary_rdf_count = 5
+native_close_contact_count = 5
+maximum_primary_fit_difference = 0.000582862082183333
+primary_rdf_mean_native_minus_rsmith = 0.026779978216626355
+primary_rdf_median_native_minus_rsmith = 0.023842417080629508
+primary_rdf_bootstrap_mean_95_ci = [0.01717104037077235, 0.03638891606248036]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [0.01942496142091293, 0.03407705843276232]
+robust = true
+strong = true
+sensitive = false
+
+[[observations]]
+case = "target-gap_from-pedone"
+arm = "start-equilibrated-b"
+accepted_pair_count_range = [9, 10]
+rsmith_lower_primary_rdf_count = 5
+native_close_contact_count = 5
+maximum_primary_fit_difference = 0.0007225292915912784
+primary_rdf_mean_native_minus_rsmith = 0.0436140773351351
+primary_rdf_median_native_minus_rsmith = 0.04267319287081023
+primary_rdf_bootstrap_mean_95_ci = [0.03699374512042409, 0.049697944345701316]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [0.038282115088865476, 0.04833971649053406]
+robust = true
+strong = true
+sensitive = false
+
+[[observations]]
+case = "target-pedone_from-gap"
+arm = "feedback-0p5"
+accepted_pair_count_range = [8, 8]
+rsmith_lower_primary_rdf_count = 5
+native_close_contact_count = 5
+maximum_primary_fit_difference = 0.00043364194918325827
+primary_rdf_mean_native_minus_rsmith = 0.2048545046529222
+primary_rdf_median_native_minus_rsmith = 0.20554424277505234
+primary_rdf_bootstrap_mean_95_ci = [0.19830863013396846, 0.21156727718697085]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [0.19292977257183108, 0.21706641909843735]
+robust = true
+strong = true
+sensitive = false
+
+[[observations]]
+case = "target-pedone_from-gap"
+arm = "feedback-0p8"
+accepted_pair_count_range = [8, 8]
+rsmith_lower_primary_rdf_count = 5
+native_close_contact_count = 5
+maximum_primary_fit_difference = 0.0007165979304359638
+primary_rdf_mean_native_minus_rsmith = 0.2165898835455759
+primary_rdf_median_native_minus_rsmith = 0.21603757323073225
+primary_rdf_bootstrap_mean_95_ci = [0.2135744445068375, 0.2200524240294513]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [0.2123713661091453, 0.22103751154258133]
+robust = true
+strong = true
+sensitive = false
+
+[[observations]]
+case = "target-pedone_from-gap"
+arm = "reference-0p5"
+accepted_pair_count_range = [6, 7]
+rsmith_lower_primary_rdf_count = 5
+native_close_contact_count = 5
+maximum_primary_fit_difference = 0.0013841401093718647
+primary_rdf_mean_native_minus_rsmith = 0.15820540249770426
+primary_rdf_median_native_minus_rsmith = 0.15908157399175027
+primary_rdf_bootstrap_mean_95_ci = [0.14794595454546955, 0.1680130743164324]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [0.14620317689063023, 0.1720585320613001]
+robust = true
+strong = true
+sensitive = false
+
+[[observations]]
+case = "target-pedone_from-gap"
+arm = "reference-1p5"
+accepted_pair_count_range = [8, 8]
+rsmith_lower_primary_rdf_count = 5
+native_close_contact_count = 5
+maximum_primary_fit_difference = 0.0004884717005659983
+primary_rdf_mean_native_minus_rsmith = 0.23011558970404894
+primary_rdf_median_native_minus_rsmith = 0.2294390775094376
+primary_rdf_bootstrap_mean_95_ci = [0.22595602295138476, 0.23462238058657542]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [0.22007113513761617, 0.23868346632343576]
+robust = true
+strong = true
+sensitive = false
+
+[[observations]]
+case = "target-pedone_from-gap"
+arm = "start-equilibrated-a"
+accepted_pair_count_range = [8, 9]
+rsmith_lower_primary_rdf_count = 5
+native_close_contact_count = 4
+maximum_primary_fit_difference = 0.0008593164501310008
+primary_rdf_mean_native_minus_rsmith = 0.20878047287347717
+primary_rdf_median_native_minus_rsmith = 0.20965624814898245
+primary_rdf_bootstrap_mean_95_ci = [0.20569840247360313, 0.21186254327335124]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [0.2012610982693216, 0.21564567788107103]
+robust = true
+strong = true
+sensitive = false
+
+[[observations]]
+case = "target-pedone_from-gap"
+arm = "start-equilibrated-b"
+accepted_pair_count_range = [8, 9]
+rsmith_lower_primary_rdf_count = 5
+native_close_contact_count = 5
+maximum_primary_fit_difference = 0.000715256197418565
+primary_rdf_mean_native_minus_rsmith = 0.21141208078663723
+primary_rdf_median_native_minus_rsmith = 0.212394564335277
+primary_rdf_bootstrap_mean_95_ci = [0.20324850435001932, 0.21789434248774167]
+primary_rdf_unpaired_bootstrap_mean_difference_95_ci = [0.1996249148393917, 0.22068215638801758]
+robust = true
+strong = true
+sensitive = false
+
+[interpretation]
+result = "rsmith is strong in eleven of twelve preregistered target-control combinations; the GAP target at 1.5-times reference strength is an unresolved tie at the primary median-support comparison"
+starting_state = "both common-start arms strongly favor rsmith for both targets, five of five seeds each"
+claim = "the all-arms bounded superiority claim is not retained under the frozen rule; report broad but parameter-sensitive superiority instead"
+next = "stop expanding the ambient-pressure matrix and move to the high-pressure differentiating case"
