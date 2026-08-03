@@ -49,7 +49,9 @@ def seed_epsr_ato(path: Path, seed: int) -> None:
             candidates.append(index)
     if len(candidates) != 1:
         raise ValueError(f"expected one EPSR RNG-state record, found {len(candidates)}")
-    lines[candidates[0]] = " " + " ".join(str(value) for value in [0, -seed, 0, *([0] * 32)])
+    lines[candidates[0]] = " " + " ".join(
+        str(value) for value in [0, -seed, 0, *([0] * 32)]
+    )
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -187,7 +189,9 @@ def rsmith_epoch_ensemble(run_dir: Path, box: float, iterations: int):
         "# Q mean_S(Q)-1\n"
         + "".join(f"{q_value:.12g} {value:.12g}\n" for q_value, value in zip(q, iq))
     )
-    return list(zip(radius.tolist(), mean_gr.tolist())), list(zip(q.tolist(), iq.tolist()))
+    return list(zip(radius.tolist(), mean_gr.tolist())), list(
+        zip(q.tolist(), iq.tolist())
+    )
 
 
 def native_acceptance(report: str) -> float:
@@ -198,20 +202,28 @@ def native_acceptance(report: str) -> float:
 
 
 def rsmith_acceptance(log: str, iterations: int) -> float:
-    match = re.findall(
-        rf"EPSR iter {iterations}:.*?acceptance = ([0-9.]+)%", log
-    )
+    match = re.findall(rf"EPSR iter {iterations}:.*?acceptance = ([0-9.]+)%", log)
     if len(match) != 1:
         raise ValueError("could not identify final rsmith acceptance")
     return float(match[0]) / 100.0
 
 
-def run_native(source: Path, binary: Path, output: Path, seed: int, iterations: int, force: bool):
+def run_native(
+    source: Path,
+    binary: Path,
+    output: Path,
+    seed: int,
+    iterations: int,
+    force: bool,
+    start_ato: Path | None = None,
+):
     if output.exists():
         if not force:
             return
         shutil.rmtree(output)
     shutil.copytree(source, output)
+    if start_ato is not None:
+        shutil.copy2(start_ato, output / "LiquidGa50C.ato")
     input_path = output / "LiquidGa50C.EPSR.inp"
     text = input_path.read_text()
     for name, value in (
@@ -244,11 +256,15 @@ def run_native(source: Path, binary: Path, output: Path, seed: int, iterations: 
     (output / "native.log").write_text(completed.stdout)
     (output / "wall_seconds.txt").write_text(f"{elapsed:.9f}\n")
     if completed.returncode != 0:
-        raise RuntimeError(f"native EPSR seed {seed} failed; see {output / 'native.log'}")
+        raise RuntimeError(
+            f"native EPSR seed {seed} failed; see {output / 'native.log'}"
+        )
     report = (output / "LiquidGa50C.EPSR.out").read_text()
     match = re.search(r"No\. of configurations in sum\s+(\d+)", report)
     if match is None or int(match.group(1)) != iterations:
-        raise RuntimeError(f"native EPSR seed {seed} accumulated the wrong number of configurations")
+        raise RuntimeError(
+            f"native EPSR seed {seed} accumulated the wrong number of configurations"
+        )
 
 
 def run_rsmith(
@@ -278,7 +294,7 @@ def run_rsmith(
     config = output / "run.toml"
     config.write_text(
         f'''[system]
-structure = "{output / 'liquid-ga.data'}"
+structure = "{output / "liquid-ga.data"}"
 format = "lammps"
 types = {{ "1" = "Ga" }}
 
@@ -380,7 +396,9 @@ def summarize(case_root: Path, seeds, iterations, moves_per_iteration):
                 "seed": seed,
                 "native": {
                     "total_fit": curve_metrics(target_total, native_iq, 1.3, 29.95),
-                    "gr_vs_worked_ensemble": curve_metrics(target_gr, native_gr, 1.5, 10.0),
+                    "gr_vs_worked_ensemble": curve_metrics(
+                        target_gr, native_gr, 1.5, 10.0
+                    ),
                     "final_cycle_acceptance": native_acceptance(native_report),
                     "wall_seconds": float((native / "wall_seconds.txt").read_text()),
                 },
@@ -388,13 +406,18 @@ def summarize(case_root: Path, seeds, iterations, moves_per_iteration):
                     "total_fit": curve_metrics(
                         target_total, rsmith_iq, 1.3, 29.95, scale=NEUTRON_TOTAL_WEIGHT
                     ),
-                    "gr_vs_worked_ensemble": curve_metrics(target_gr, rsmith_gr, 1.5, 10.0),
+                    "gr_vs_worked_ensemble": curve_metrics(
+                        target_gr, rsmith_gr, 1.5, 10.0
+                    ),
                     "final_epoch_acceptance": rsmith_acceptance(rsmith_log, iterations),
                     "wall_seconds": float((rsmith / "wall_seconds.txt").read_text()),
                 },
                 "matched": {
                     "iq": curve_metrics(
-                        read_curve(native / "LiquidGa50C.EPSR.f01"), rsmith_iq, 1.3, 29.95
+                        read_curve(native / "LiquidGa50C.EPSR.f01"),
+                        rsmith_iq,
+                        1.3,
+                        29.95,
                     ),
                     "gr": curve_metrics(native_gr, rsmith_gr, 1.5, 10.0),
                 },
@@ -418,13 +441,18 @@ def summarize(case_root: Path, seeds, iterations, moves_per_iteration):
                 [run[method]["total_fit"]["rms_over_dynamic_range"] for run in runs]
             ),
             "gr_vs_worked_rms_over_dynamic_range": distribution(
-                [run[method]["gr_vs_worked_ensemble"]["rms_over_dynamic_range"] for run in runs]
+                [
+                    run[method]["gr_vs_worked_ensemble"]["rms_over_dynamic_range"]
+                    for run in runs
+                ]
             ),
             "wall_seconds": distribution([run[method]["wall_seconds"] for run in runs]),
             "final_acceptance": distribution(
                 [
                     run[method][
-                        "final_cycle_acceptance" if method == "native" else "final_epoch_acceptance"
+                        "final_cycle_acceptance"
+                        if method == "native"
+                        else "final_epoch_acceptance"
                     ]
                     for run in runs
                 ]
@@ -445,70 +473,89 @@ def summarize(case_root: Path, seeds, iterations, moves_per_iteration):
     print(f"Full stochastic summary: {output}")
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--seeds", default=",".join(str(seed) for seed in DEFAULT_SEEDS))
-parser.add_argument("--iterations", type=int, default=40)
-parser.add_argument("--moves-per-iteration", type=int, default=25000)
-parser.add_argument("--force", action="store_true")
-parser.add_argument("--jobs", type=int, default=1)
-parser.add_argument("--native-only", action="store_true")
-parser.add_argument("--rsmith-only", action="store_true")
-parser.add_argument("--summarize-only", action="store_true")
-parser.add_argument("--binary", type=Path)
-args = parser.parse_args()
-if args.native_only and args.rsmith_only:
-    raise SystemExit("--native-only and --rsmith-only are mutually exclusive")
-seeds = tuple(int(value) for value in args.seeds.split(",") if value)
-if not seeds or args.iterations <= 0 or args.moves_per_iteration <= 0 or args.jobs <= 0:
-    raise SystemExit("seeds, iterations, and moves per iteration must be positive")
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--seeds", default=",".join(str(seed) for seed in DEFAULT_SEEDS)
+    )
+    parser.add_argument("--iterations", type=int, default=40)
+    parser.add_argument("--moves-per-iteration", type=int, default=25000)
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--jobs", type=int, default=1)
+    parser.add_argument("--native-only", action="store_true")
+    parser.add_argument("--rsmith-only", action="store_true")
+    parser.add_argument("--summarize-only", action="store_true")
+    parser.add_argument("--binary", type=Path)
+    args = parser.parse_args()
+    if args.native_only and args.rsmith_only:
+        raise SystemExit("--native-only and --rsmith-only are mutually exclusive")
+    seeds = tuple(int(value) for value in args.seeds.split(",") if value)
+    if (
+        not seeds
+        or args.iterations <= 0
+        or args.moves_per_iteration <= 0
+        or args.jobs <= 0
+    ):
+        raise SystemExit("seeds, iterations, and moves per iteration must be positive")
 
-case_root = Path(__file__).resolve().parents[1]
-repo_root = case_root.parents[1]
-local = case_root / "reference/local"
-source = local / "upstream"
-record_file = local / "IMPORT.txt"
-if not source.is_dir() or not record_file.is_file():
-    raise SystemExit("run import_local_reference.sh --accept-local-testing-terms first")
-record = dict(line.split("=", 1) for line in record_file.read_text().splitlines() if "=" in line)
-epsr_binary = Path(record["binary"])
-rsmith_binary = args.binary or repo_root / "target/release/rsmith"
-if not epsr_binary.is_file() or not rsmith_binary.is_file():
-    raise SystemExit("native EPSR or release rsmith executable is missing")
-
-def run_seed(seed):
-    print(f"seed {seed}: native EPSR", flush=True)
-    if not args.rsmith_only:
-        run_native(
-            source,
-            epsr_binary,
-            case_root / f"results/stochastic/native/seed-{seed}",
-            seed,
-            args.iterations,
-            args.force,
+    case_root = Path(__file__).resolve().parents[1]
+    repo_root = case_root.parents[1]
+    local = case_root / "reference/local"
+    source = local / "upstream"
+    record_file = local / "IMPORT.txt"
+    if not source.is_dir() or not record_file.is_file():
+        raise SystemExit(
+            "run import_local_reference.sh --accept-local-testing-terms first"
         )
-    print(f"seed {seed}: rsmith", flush=True)
-    if not args.native_only:
-        run_rsmith(
-            source / "LiquidGa50C.ato",
-            source / "LiquidGa50C.EPSR.q01",
-            rsmith_binary,
-            case_root / f"results/stochastic/rsmith/seed-{seed}",
-            seed,
-            args.iterations,
-            args.moves_per_iteration,
-            args.force,
-        )
+    record = dict(
+        line.split("=", 1)
+        for line in record_file.read_text().splitlines()
+        if "=" in line
+    )
+    epsr_binary = Path(record["binary"])
+    rsmith_binary = args.binary or repo_root / "target/release/rsmith"
+    if not epsr_binary.is_file() or not rsmith_binary.is_file():
+        raise SystemExit("native EPSR or release rsmith executable is missing")
+
+    def run_seed(seed):
+        print(f"seed {seed}: native EPSR", flush=True)
+        if not args.rsmith_only:
+            run_native(
+                source,
+                epsr_binary,
+                case_root / f"results/stochastic/native/seed-{seed}",
+                seed,
+                args.iterations,
+                args.force,
+            )
+        print(f"seed {seed}: rsmith", flush=True)
+        if not args.native_only:
+            run_rsmith(
+                source / "LiquidGa50C.ato",
+                source / "LiquidGa50C.EPSR.q01",
+                rsmith_binary,
+                case_root / f"results/stochastic/rsmith/seed-{seed}",
+                seed,
+                args.iterations,
+                args.moves_per_iteration,
+                args.force,
+            )
+
+    if not args.summarize_only:
+        if args.jobs == 1:
+            for seed in seeds:
+                run_seed(seed)
+        else:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=args.jobs
+            ) as executor:
+                futures = [executor.submit(run_seed, seed) for seed in seeds]
+                for future in concurrent.futures.as_completed(futures):
+                    future.result()
+
+    if not args.native_only and not args.rsmith_only:
+        summarize(case_root, seeds, args.iterations, args.moves_per_iteration)
 
 
-if not args.summarize_only:
-    if args.jobs == 1:
-        for seed in seeds:
-            run_seed(seed)
-    else:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
-            futures = [executor.submit(run_seed, seed) for seed in seeds]
-            for future in concurrent.futures.as_completed(futures):
-                future.result()
-
-if not args.native_only and not args.rsmith_only:
-    summarize(case_root, seeds, args.iterations, args.moves_per_iteration)
+if __name__ == "__main__":
+    main()

@@ -73,3 +73,39 @@ list_radius_angstrom = 15.0
 average_candidates_per_atom = 738.4
 intra_epoch_rebuilds_observed = 0
 correctness = "brute-force energy-delta equivalence across periodic moves and rebuilds"
+
+[independent_starts]
+status = "one-seed pilot informed, then frozen before the ten-seed results"
+purpose = "convergence, time-to-target, and basin-sensitivity test"
+seeds = [20260812, 20260813, 20260814, 20260815, 20260816, 20260817, 20260818, 20260819, 20260820, 20260821]
+replicates = 10
+checkpoints = [0, 1, 2, 4, 8, 16, 24, 32, 40]
+moves_per_epoch = 25000
+maximum_moves = 1000000
+threads_per_process = 1
+timing_processes_concurrent = 1
+paired_coordinates = true
+start_generator = "periodic random-sequential hard spheres"
+start_generator_uses_worked_coordinates = false
+hard_sphere_minimum_angstrom = 2.25
+
+[independent_starts.scoring]
+external_residual = "RMS error divided by measured-total dynamic range"
+q_fit_inverse_angstrom = [1.3, 29.95]
+time_to_target_residuals = [0.05, 0.04, 0.03, 0.025, 0.02, 0.015]
+time_to_target_rule = "first observed checkpoint at or below target with every later checkpoint also at or below target"
+censored_runs = "reported as failures; medians never impute maximum runtime"
+worked_gr_is_ground_truth = false
+first_shell_cutoff_angstrom = 3.93
+first_shell_cutoff_source = "first minimum after the supplied worked-ensemble g(r) peak, frozen before new results"
+
+[independent_starts.structural_observables]
+observables = [
+    "first RDF peak position and height",
+    "coordination integral through 3.93 A",
+    "direct per-atom coordination through 3.93 A",
+    "nearest-neighbor distribution",
+    "fraction of nearest neighbors below 2.3 A",
+    "combined-potential energy distribution within each program",
+]
+energy_comparison = "diagnostic within each program only; cross-program zeroes and empirical-potential conventions differ"
