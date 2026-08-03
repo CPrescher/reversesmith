@@ -1,0 +1,81 @@
+status = "passed_bounded_hrmc_weight_pilot_not_production_comparison"
+date = "2026-08-03"
+protocol = "hrmc-weight-sweep.toml"
+moves = 1000
+atoms = 3000
+seed = 20260802
+threads = 1
+hardware = "Apple M4 Pro, 48 GB, macOS arm64"
+
+[models]
+pedone = "rsmith native Pedone-style fixed pair potential"
+gap = "Erhard et al. silica GAP through local QUIP, xml label GAP_2021_4_19_120_7_32_55_336"
+
+[guards]
+required_pedone_weights = [0.001, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0]
+required_gap_weights = [0.001, 0.03, 0.1, 0.3, 1.0, 3.0]
+attempted_moves = 1000
+minimum_fit_progress_fraction = 0.5
+minimum_distance_a = { "Si-Si" = 2.0, "Si-O" = 1.35, "O-O" = 2.0 }
+pedone_highest_guard_passing_weight = 30.0
+pedone_first_guard_failing_weight = 100.0
+gap_highest_guard_passing_weight = 0.3
+gap_first_guard_failing_weight = 1.0
+gap_weight_0p3_minimum_fit_progress_fraction = 0.88
+gap_weight_1_maximum_accepted_moves = 10
+
+[selection]
+pedone_production_bracket = [3.0, 10.0, 30.0]
+gap_resolved_low_and_knee = [0.1, 0.3]
+gap_next_pilot_weights = [0.4, 0.5, 0.6, 0.8]
+gap_reason = "The coarse pilot locates an acceptance cliff between 0.3 and 1.0; refine that interval before selecting a high production weight."
+
+[observed.target_gap_from_pedone.pure_rmc]
+neutron_final_rms = 0.105299326
+xray_final_rms = 0.119601422
+wall_seconds = 0.271948333
+
+[observed.target_gap_from_pedone.pedone]
+weights = [0.001, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0]
+neutron_progress_fraction = [1.000000, 1.001047, 1.007660, 1.001932, 1.030493, 1.062553, 0.857790, 0.547106]
+xray_progress_fraction = [1.000000, 0.999971, 1.003552, 1.017711, 1.001141, 0.973931, 0.748126, 0.370472]
+energy_change_ev_per_atom = [0.017004688, 0.017064688, 0.016931355, 0.016348021, 0.014764688, 0.011248021, 0.004304688, -0.001005312]
+accepted_moves = [570, 568, 568, 566, 542, 488, 349, 242]
+
+[observed.target_gap_from_pedone.gap]
+weights = [0.001, 0.03, 0.1, 0.3, 1.0, 3.0]
+neutron_progress_fraction = [1.000410, 1.016099, 1.016678, 0.937369, 0.000000, 0.000000]
+xray_progress_fraction = [1.000235, 1.016932, 1.012031, 0.912597, 0.000000, 0.000000]
+energy_change_ev_per_atom = [0.586393487, 0.581676820, 0.578100153, 0.552270153, 0.000000153, 0.000000153]
+accepted_moves = [569, 566, 545, 405, 0, 0]
+wall_seconds = [57.767568500, 58.258627875, 58.240011084, 57.890542292, 56.916638084, 55.844327333]
+
+[observed.target_pedone_from_gap.pure_rmc]
+neutron_final_rms = 0.105978392
+xray_final_rms = 0.120215889
+wall_seconds = 0.282054917
+
+[observed.target_pedone_from_gap.pedone]
+weights = [0.001, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0]
+neutron_progress_fraction = [1.000000, 0.996759, 0.993481, 0.987275, 0.976727, 0.917442, 0.653199, 0.254328]
+xray_progress_fraction = [1.000000, 1.000484, 1.004658, 1.003389, 0.969372, 0.887768, 0.630395, 0.279769]
+energy_change_ev_per_atom = [0.034833026, 0.034859692, 0.034559692, 0.033086359, 0.030623026, 0.022809692, 0.007299692, -0.001360308]
+accepted_moves = [615, 615, 615, 608, 585, 509, 333, 186]
+
+[observed.target_pedone_from_gap.gap]
+weights = [0.001, 0.03, 0.1, 0.3, 1.0, 3.0]
+neutron_progress_fraction = [1.000000, 0.985011, 0.925701, 0.908312, 0.046529, 0.000000]
+xray_progress_fraction = [1.000000, 0.981812, 0.929413, 0.889079, 0.039845, 0.000000]
+energy_change_ev_per_atom = [0.496333373, 0.490113373, 0.484203373, 0.455850039, 0.041116706, 0.000000039]
+accepted_moves = [615, 606, 583, 521, 10, 0]
+wall_seconds = [65.880227708, 66.189364625, 66.619534250, 66.197799000, 66.852741917, 66.989596500]
+
+[timing]
+pedone_mean_overhead_vs_pure_rmc = [1.1837, 1.1701]
+gap_mean_slowdown_vs_pure_rmc = [211.4, 235.6]
+boundary = "Single invocations including initialization; useful for local cost planning, not publication speed ratios."
+
+[interpretation]
+pedone = "Weights 3, 10, and 30 form a usable low/knee/high production bracket. Weight 30 reduces positive energy drift by 75-79% relative to 0.001 while retaining at least 63% of pure-RMC progress; 100 fails the frozen progress guard."
+gap = "Weight 0.3 retains 89-94% of pure-RMC neutron/X-ray progress and reduces positive energy drift by 6-8%; weight 1.0 crosses an abrupt acceptance cliff and fails the progress guard."
+boundary = "The one-third-move-per-atom pilot calibrates influence and brackets follow-up weights. It does not demonstrate that GAP-HRMC is structurally superior, equilibrated, or converged."

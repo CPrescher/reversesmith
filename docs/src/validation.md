@@ -169,15 +169,31 @@ smoke, whereas the current GAP/QUIP path takes 322--343 s and is roughly 600x
 slower than pure RMC. These timings expose the next optimization target; they
 are not publication speed ratios.
 
+### HRMC energy-weight pilot
+
+The next frozen pilot used the same symmetric starts and targets for 1,000
+moves while sweeping Pedone weights from `0.001` to `100` and GAP weights from
+`0.001` to `3`. Pedone weights 3, 10, and 30 retain at least 63% of the
+same-budget pure-RMC progress in both neutron and X-ray fits. At weight 30 the
+positive energy drift is 75--79% smaller than at weight `0.001`; weight 100
+reduces the energy but fails the preregistered 50% fit-progress guard.
+
+For GAP, weight 0.3 retains 89--94% of pure-RMC progress and reduces positive
+energy drift by 6--8%. Weight 1.0 instead crosses an acceptance cliff: only 0
+and 10 of 1,000 moves are accepted in the two directions. A finer 0.3--1.0
+pilot is required before the matched 6,000-move comparison. These results
+calibrate regularizer influence; they do not establish convergence or a
+structural advantage over EPSR.
+
 ## Remaining publication gates
 
 1. Validate liquid-Ga structures against held-out data or an independent
    atomistic/physical oracle.
 2. Test independent equilibrium starts to separate basin sensitivity from
    convergence out of unstructured liquids.
-3. Calibrate Pedone and GAP energy weights as data-fit/energy Pareto curves,
-   repair the RMCProfile parallel runtime, and freeze exact coordinate-save and
-   timing rules.
+3. Refine the GAP acceptance cliff between weights 0.3 and 1.0, then run the
+   selected Pedone and GAP brackets for 6,000 moves; repair the RMCProfile
+   parallel runtime and freeze exact coordinate-save and timing rules.
 4. Run the matched multi-seed native/rsmith silica ensembles, estimate native
    seed-to-seed spread, and freeze stochastic equivalence margins before
    comparing pair-potential and MLIP-regularized refinements.

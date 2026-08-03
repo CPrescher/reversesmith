@@ -196,6 +196,37 @@ These results validate that the adapters and energy paths execute; they do not
 show an MLIP benefit. Production must measure a data-fit/energy-weight Pareto
 curve and compare methods at matched data fit.
 
+### Bounded HRMC energy-weight pilot
+
+A frozen one-thread pilot then varied only the regularizer weight for 1,000
+attempted moves (one third of a move per atom), retaining the same seed, starts,
+targets, fit ranges, uncertainties, and minimum-distance constraints. Progress
+below is the fraction of the same-budget pure-RMC reduction in RMS; `1.0` means
+the regularized run made the same fit progress as pure RMC.
+
+| Regularizer / weight | GAP-target N/X progress | GAP-target dE/atom | Pedone-target N/X progress | Pedone-target dE/atom |
+|---|---:|---:|---:|---:|
+| Pedone / 3 | 1.030 / 1.001 | +0.01476 eV | 0.977 / 0.969 | +0.03062 eV |
+| Pedone / 10 | 1.063 / 0.974 | +0.01125 eV | 0.917 / 0.888 | +0.02281 eV |
+| Pedone / 30 | 0.858 / 0.748 | +0.00430 eV | 0.653 / 0.630 | +0.00730 eV |
+| Pedone / 100 | 0.547 / 0.370 | -0.00101 eV | 0.254 / 0.280 | -0.00136 eV |
+| GAP / 0.1 | 1.017 / 1.012 | +0.57810 eV | 0.926 / 0.929 | +0.48420 eV |
+| GAP / 0.3 | 0.937 / 0.913 | +0.55227 eV | 0.908 / 0.889 | +0.45585 eV |
+| GAP / 1.0 | 0.000 / 0.000 | ~0 eV | 0.047 / 0.040 | +0.04112 eV |
+
+Pedone weights 3, 10, and 30 therefore form the low/knee/high bracket for a
+matched 6,000-move follow-up. Relative to weight `0.001`, weight 30 suppresses
+the positive energy drift by 75--79% while retaining at least 63% of pure-RMC
+progress; weight 100 fails the frozen 50% progress guard. GAP shows an abrupt
+acceptance cliff: weight 0.3 retains 89--94% of fit progress, whereas weight
+1.0 accepts only 0 and 10 of 1,000 moves. The interval 0.3--1.0 must therefore
+be refined before selecting a high GAP production weight.
+
+The pilot does not yet show better hidden-target structure from either energy
+model. At this short budget the independently scored RDF distance generally
+tracks the amount of scattering-fit progress. The defensible result is weight
+calibration and detection of the GAP acceptance cliff, not HRMC superiority.
+
 ### Local timing diagnostic
 
 End-to-end one-thread wall times on an Apple M4 Pro were:
@@ -243,6 +274,9 @@ RMCProfile build, exact saved move counts, and calibrated energy weights.
 - `scripts/run_pdfgui_cross_forward.py`: PDFgui/PDFfit2 forward-only control;
 - `scripts/score_cross_recovery.py` and `verify_cross_recovery.py`: common
   coordinate scoring and committed smoke guards;
+- `scripts/prepare_hrmc_weight_sweep.py`, `run_hrmc_weight_sweep.py`, and
+  `verify_hrmc_weight_sweep.py`: frozen Pedone/GAP weight-pilot preparation,
+  execution, scoring, and regression guards;
 - `scripts/analyze_ambient_models.py`: independent RDF, coordination, angle,
   minimum-distance, and shortest-ring analysis of both model endpoints;
 - `scripts/verify_ambient_models.py`: deterministic verifier for the pinned
@@ -257,6 +291,8 @@ RMCProfile build, exact saved move counts, and calibrated energy weights.
   outcomes were inspected;
 - `expected/cross-recovery-smoke.toml`: post-diagnostic observations and
   adapter regression guards, explicitly not publication equivalence limits;
+- `expected/hrmc-weight-sweep.toml` and `hrmc-weight-sweep-smoke.toml`: frozen
+  pilot design, observed Pareto brackets, timings, and claim boundary;
 - `reference/README.md`: provenance and redistribution rules for upstream data.
 
 ## Local reproduction
@@ -285,4 +321,12 @@ python3 scripts/run_rmcprofile_cross.py --force
 /path/to/pdfgui/python scripts/run_pdfgui_cross_forward.py
 python3 scripts/score_cross_recovery.py
 python3 scripts/verify_cross_recovery.py
+
+python3 scripts/prepare_hrmc_weight_sweep.py --force
+python3 scripts/run_hrmc_weight_sweep.py --model pure
+python3 scripts/run_hrmc_weight_sweep.py --model pedone
+python3 scripts/run_hrmc_weight_sweep.py --model gap \
+  --binary /path/to/gap-enabled/rsmith
+python3 scripts/score_cross_recovery.py
+python3 scripts/verify_hrmc_weight_sweep.py
 ```

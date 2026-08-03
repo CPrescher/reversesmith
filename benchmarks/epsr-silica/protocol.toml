@@ -48,6 +48,15 @@ doi = "10.5281/zenodo.6353684"
 archive_md5 = "6a16de69b5e17fd18160d9b55972a3e1"
 xml_label = "GAP_2021_4_19_120_7_32_55_336"
 
+[provenance.amendment_2026_08_03_hrmc_weight_pilot]
+reason = "A bounded Pedone/GAP weight grid and its selection rules were frozen before any sweep outcomes were scored."
+protocol = "expected/hrmc-weight-sweep.toml"
+changes = [
+  "add same-seed, same-start, 1000-move pure-RMC and energy-weight controls in both cross-recovery directions",
+  "require at least half of pure-RMC neutron and X-ray fit progress and enforce the existing minimum-distance constraints",
+  "use the pilot only to bracket matched 6000-move production weights, not to claim MLIP superiority",
+]
+
 [system]
 formula = "SiO2"
 number_density_atoms_per_a3 = 0.06639997054690536

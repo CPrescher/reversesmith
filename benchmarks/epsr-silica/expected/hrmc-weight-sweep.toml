@@ -1,0 +1,32 @@
+status = "pilot_protocol_frozen_before_weight_sweep_results"
+date = "2026-08-03"
+scope = "Pedone and Erhard-GAP energy-weight calibration on both symmetric SiO2 cross-recovery cases"
+
+[budget]
+moves = 1000
+moves_per_atom = 0.3333333333333333
+seed = 20260802
+threads = 1
+stage = "bounded pilot used to choose production brackets, not a scientific comparison"
+
+[weights]
+pedone = [0.001, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0]
+gap = [0.001, 0.03, 0.1, 0.3, 1.0, 3.0]
+controls = ["pure_rmc_at_the_same_1000_move_budget"]
+rationale = "log-spaced grid spanning the post-smoke per-move balance estimates of 26.6-29.6 for Pedone and 0.67-1.08 for GAP"
+
+[data]
+fit = ["natural-isotope neutron Faber-Ziman S(Q)", "X-ray Faber-Ziman S(Q)"]
+q_interval = "half-open [0.5, 25.0) A^-1"
+sigma = 0.02
+same_cross_starts = true
+
+[selection]
+primary = "Pareto nondominance in common neutron/X-ray RMS and regularizer energy change"
+minimum_fit_progress_fraction_of_pure_rmc = 0.5
+reject_if_new_minimum_distance_violation = true
+production_policy = "select a low, knee, and high physically safe weight for a matched 6000-move follow-up; do not select from target-model proximity alone"
+
+[claims]
+allowed = "identify weights that materially influence the HRMC trajectory and bracket a production Pareto front"
+forbidden = "claim MLIP superiority, equilibrium sampling, or final structural recovery from this one-third-move-per-atom pilot"

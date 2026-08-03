@@ -400,7 +400,7 @@ def csv_fit_rms(path: Path):
     return math.sqrt(sum(value * value for value in residual) / len(residual))
 
 
-def rsmith_fit(run_dir: Path):
+def rsmith_fit(run_dir: Path, target_root: Path | None = None):
     result = {
         "wall_seconds": float((run_dir / "wall-seconds.txt").read_text())
         if (run_dir / "wall-seconds.txt").is_file()
@@ -409,7 +409,7 @@ def rsmith_fit(run_dir: Path):
     for stage in ("start", "refined"):
         for kind in ("neutron", "xray"):
             path = run_dir / f"{stage}_{kind}_sq.dat"
-            target = run_dir.parent / f"target-{kind}-iq.dat"
+            target = (target_root or run_dir.parent) / f"target-{kind}-iq.dat"
             if path.is_file() and target.is_file():
                 actual = {round(row[0], 8): row[1] for row in read_space_curve(path)}
                 expected = read_space_curve(target)
@@ -426,6 +426,23 @@ def rsmith_fit(run_dir: Path):
     if accepted:
         result["accepted_moves"] = int(accepted.group(1))
         result["attempted_moves"] = int(accepted.group(2))
+    initial_energy = re.search(
+        r"Initial (?:pair potentials|GAP/QUIP) energy =\s*([+\-0-9.eE]+) eV", log
+    )
+    final_energies = re.findall(r"\[E:\s*([+\-0-9.eE]+)\]", log)
+    suggested = re.search(
+        r"Suggested weight \(chi2 ≈ energy influence\) =\s*([+\-0-9.eE]+)", log
+    )
+    if initial_energy:
+        result["initial_energy_ev"] = float(initial_energy.group(1))
+    if final_energies:
+        result["final_energy_ev"] = float(final_energies[-1])
+        if initial_energy:
+            result["energy_change_ev_per_atom"] = (
+                result["final_energy_ev"] - result["initial_energy_ev"]
+            ) / 3000.0
+    if suggested:
+        result["suggested_balance_weight"] = float(suggested.group(1))
     return result
 
 
@@ -545,3 +562,36 @@ for case in sorted(fixture_root.glob("target-*_*")):
     json.dumps(summary, indent=2, sort_keys=True) + "\n"
 )
 print(json.dumps(summary, indent=2, sort_keys=True))
+
+sweep_root = case_root / "results/hrmc-weight-sweep"
+if sweep_root.is_dir():
+    sweep_summary = {
+        "status": "available_hrmc_weight_pilot_outputs_scored",
+        "scope": "one-third move per atom pilot, not production comparison",
+        "cases": {},
+    }
+    for sweep_case in sorted(sweep_root.glob("target-*_*")):
+        cross_case = fixture_root / sweep_case.name
+        target = structure_metrics(cross_case / "hidden-target.data")
+        runs = {}
+        for run in sorted(sweep_case.iterdir()):
+            refined = run / "refined.xyz"
+            if run.is_dir() and refined.is_file():
+                model = structure_metrics(refined)
+                runs[run.name] = {
+                    "fit": rsmith_fit(run, cross_case),
+                    "common_reciprocal_distance_from_hidden_target": common_reciprocal_distance(
+                        cross_case, model
+                    ),
+                    "structural_distance_from_hidden_target": structural_distance(
+                        target, model
+                    ),
+                    "model_metrics": {
+                        key: value for key, value in model.items() if key != "rdf"
+                    },
+                }
+        sweep_summary["cases"][sweep_case.name] = runs
+    (sweep_root / "score-summary.json").write_text(
+        json.dumps(sweep_summary, indent=2, sort_keys=True) + "\n"
+    )
+    print(json.dumps(sweep_summary, indent=2, sort_keys=True))
