@@ -5,11 +5,13 @@ use crate::atoms::Configuration;
 #[cfg(feature = "gap-quip")]
 pub mod gap_quip;
 pub mod mace_python;
+pub mod pace_native;
 pub mod snap_native;
 
 #[cfg(feature = "gap-quip")]
 pub use gap_quip::GapQuipModel;
 pub use mace_python::MacePythonModel;
+pub use pace_native::PaceNativeModel;
 pub use snap_native::SnapNativeModel;
 
 #[cfg(not(feature = "gap-quip"))]

@@ -1,0 +1,14 @@
+# Repository-authored rank-4 angular oracle model. The contraction is the
+# scalar l=1 four-factor Clebsch-Gordan coupling.
+elements: [Ta]
+E0: [-0.1]
+deltaSplineBins: 0.001
+embeddings:
+  0: {ndensity: 1, FS_parameters: [1.0, 1.0], npoti: FinnisSinclair, rho_core_cutoff: 100000.0, drho_core_cutoff: 250.0}
+bonds:
+  [0, 0]: {nradmax: 1, lmax: 2, nradbasemax: 2, radbasename: ChebExpCos, radparameters: [0.5723], radcoefficients: [[[1.0, 0.2], [0.8, -0.1], [0.5, 0.3]]], prehc: 0.0, lambdahc: 0.5723, rcut: 4.842, dcut: 0.01, rcut_in: 0.595, dcut_in: 0.01, inner_cutoff_type: distance}
+functions:
+  0:
+    - {mu0: 0, rank: 1, ndensity: 1, num_ms_combs: 1, mus: [0], ns: [1], ls: [0], ms_combs: [0], ctildes: [0.4]}
+    - {mu0: 0, rank: 1, ndensity: 1, num_ms_combs: 1, mus: [0], ns: [2], ls: [0], ms_combs: [0], ctildes: [-0.15]}
+    - {mu0: 0, rank: 4, ndensity: 1, num_ms_combs: 19, mus: [0, 0, 0, 0], ns: [1, 1, 1, 1], ls: [1, 1, 1, 1], ms_combs: [-1, -1, 1, 1, -1, 0, 0, 1, -1, 0, 1, 0, -1, 1, -1, 1, -1, 1, 0, 0, -1, 1, 1, -1, 0, -1, 0, 1, 0, -1, 1, 0, 0, 0, -1, 1, 0, 0, 0, 0, 0, 0, 1, -1, 0, 1, -1, 0, 0, 1, 0, -1, 1, -1, -1, 1, 1, -1, 0, 0, 1, -1, 1, -1, 1, 0, -1, 0, 1, 0, 0, -1, 1, 1, -1, -1], ctildes: [0.0, 0.0, 0.0, 0.3333333333333333, -0.3333333333333333, 0.3333333333333333, 0.0, 0.0, -0.3333333333333333, 0.3333333333333333, -0.3333333333333333, 0.0, 0.0, 0.3333333333333333, -0.3333333333333333, 0.3333333333333333, 0.0, 0.0, 0.0]}

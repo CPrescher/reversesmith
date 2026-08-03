@@ -92,6 +92,7 @@ Machine-learning interatomic potentials can encode angular and higher-body
 environment information that a simple pair potential cannot. `rsmith` supports:
 
 - native linear or quadratic SNAP models from FitSNAP/LAMMPS model files;
+- native PACE product-basis energies from pacemaker C-tilde `.yace` files;
 - GAP models through an optional QUIP bridge; and
 - MACE checkpoints through a persistent Python worker, with full, local, and
   incremental energy-delta strategies for the models that support them.
@@ -338,6 +339,18 @@ weight = 0.001
 
 The cutoff is derived from the SNAP files and must not be set manually. The cell
 must be larger than twice the largest model cutoff in each direction.
+
+Native PACE likewise needs no external runtime:
+
+```toml
+[ml_potential]
+backend = "pace_native"
+model = "potential.yace"
+weight = 0.001
+```
+
+The cutoff is derived from the directed bonds in the C-tilde model. Do not set
+`cutoff` or `delta` for this backend.
 
 MACE uses a Python environment containing MACE, PyTorch, and ASE:
 

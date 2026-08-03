@@ -6,7 +6,7 @@ A Reverse Monte Carlo (RMC) structure refinement tool written in Rust. Refines a
 
 - **S(Q) and g(r) fitting** -- simultaneous refinement against structure factor and pair distribution function
 - **Hybrid RMC** -- pair potentials (Lennard-Jones, Buckingham, Pedone, Coulomb DSF, tabulated) bias refinement toward energetically favorable configurations
-- **ML-potential-regularized RMC** -- optional native SNAP, GAP/QUIP, or MACE energy regularizers
+- **ML-potential-regularized RMC** -- optional native PACE and SNAP, GAP/QUIP, or MACE energy regularizers
 - **Hard constraints** -- minimum interatomic distances and coordination number bounds
 - **Simulated annealing** -- exponential cooling schedule with adaptive step size
 - **Delayed acceptance** -- optionally screen proposals against experimental data before invoking GAP, MACE, SNAP, or pair potentials
@@ -331,6 +331,35 @@ energies live in `tests/data/snap`. Run their native checks with:
 ```bash
 cargo test --test snap_model_files --test snap_reference_fixture
 ```
+
+For a PACE potential in pacemaker C-tilde YAML format, rsmith also provides a
+pure-Rust backend:
+
+```toml
+[ml_potential]
+backend = "pace_native"
+model = "potential.yace"
+weight = 0.001
+```
+
+No Python package or LAMMPS installation is used at runtime. The model supplies
+the directed species-pair cutoffs, and rsmith maintains a dedicated cell list
+plus a transactional per-atom energy cache. Do not set `cutoff` or `delta`.
+The current reader supports C-tilde `.yace` files using `ChebPow`,
+`ChebExpCos`, or `ChebLinear` radial bases, Finnis-Sinclair or shifted/scaled
+Finnis-Sinclair embeddings, arbitrary product rank, multiple elements, and
+`density` or `distance` core cutoffs. Legacy plain-text `.ace`, B-basis
+`.yaml`, `SBessel`, and ZBL models are rejected with an explicit error.
+
+Frozen LAMMPS product-evaluator references cover rank 1, a fitted nonlinear
+rank-2 Cu potential, and a rank-4 ChebExpCos model:
+
+```bash
+cargo test --test pace_reference_fixture
+```
+
+The ignored live test can also launch a configured LAMMPS product evaluator;
+see `docs/src/config/ml-potential.md` for its environment variables.
 
 For GAP/QUIP, use:
 

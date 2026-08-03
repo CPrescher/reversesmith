@@ -581,6 +581,60 @@ weight = 0.001
 }
 
 #[test]
+fn valid_pace_native_model_is_accepted_without_runtime_cutoff() {
+    let toml = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+
+[data]
+
+[rmc]
+
+[ml_potential]
+backend = "pace_native"
+model = "potential.yace"
+weight = 0.001
+"#;
+    let config = load_toml(toml).expect("valid native PACE config should parse");
+    let ml = config.ml_potential.unwrap();
+    assert_eq!(ml.model.as_deref(), Some("potential.yace"));
+    assert!(ml.cutoff.is_none());
+}
+
+#[test]
+fn pace_native_requires_model_and_rejects_manual_cutoff() {
+    let missing = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+[data]
+[rmc]
+[ml_potential]
+backend = "pace_native"
+"#;
+    let err = load_toml(missing).unwrap_err();
+    assert!(err.contains("pace_native requires model"), "got: {err}");
+
+    let manual_cutoff = r#"
+[system]
+structure = "test.xyz"
+format = "xyz"
+[data]
+[rmc]
+[ml_potential]
+backend = "pace_native"
+model = "potential.yace"
+cutoff = 5.0
+"#;
+    let err = load_toml(manual_cutoff).unwrap_err();
+    assert!(
+        err.contains("cutoff must be omitted for pace_native"),
+        "got: {err}"
+    );
+}
+
+#[test]
 fn snap_native_requires_both_model_files() {
     for (model_files, missing_field) in [
         (

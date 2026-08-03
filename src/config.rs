@@ -294,6 +294,7 @@ pub enum MaceCompileMode {
 pub enum MlBackend {
     GapQuip,
     MacePython,
+    PaceNative,
     SnapNative,
 }
 
@@ -463,7 +464,9 @@ impl Config {
             {
                 return Err("[ml_potential] cutoff must be finite and greater than 0".into());
             }
-            if ml.delta.is_some() && matches!(ml.backend, MlBackend::SnapNative) {
+            if ml.delta.is_some()
+                && matches!(ml.backend, MlBackend::SnapNative | MlBackend::PaceNative)
+            {
                 return Err(
                     "[ml_potential] delta is only supported for gap_quip and mace_python".into(),
                 );
@@ -511,6 +514,17 @@ impl Config {
                     if ml.cutoff.is_some() {
                         return Err(
                             "[ml_potential] cutoff must be omitted for snap_native; it is derived from the model files"
+                                .into(),
+                        );
+                    }
+                }
+                MlBackend::PaceNative => {
+                    if ml.model.is_none() {
+                        return Err("[ml_potential] pace_native requires model".into());
+                    }
+                    if ml.cutoff.is_some() {
+                        return Err(
+                            "[ml_potential] cutoff must be omitted for pace_native; it is derived from the model file"
                                 .into(),
                         );
                     }

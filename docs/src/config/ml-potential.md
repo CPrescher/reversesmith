@@ -26,11 +26,11 @@ energy_calibration_moves = 1000
 # ... backend-specific settings ...
 ```
 
-This option works with SNAP and every GAP/MACE delta mode. It is especially
+This option works with native PACE and SNAP and every GAP/MACE delta mode. It is especially
 useful with GAP `local` and MACE `incremental`: the accelerated delta mode makes
 each call cheaper, while delayed acceptance skips calls whose data-only stage
 already rejected the proposal. Native SNAP is fast enough that the benefit is
-more workload-dependent.
+more workload-dependent; the same is true for native PACE.
 
 Delayed acceptance retains the exact configured ML energy in the target but
 can reduce the overall acceptance rate. Benchmark accepted moves or independent
@@ -74,6 +74,55 @@ native compatibility checks with:
 
 ```bash
 cargo test --test snap_model_files --test snap_reference_fixture
+```
+
+## Native PACE
+
+PACE models in pacemaker C-tilde YAML format can be evaluated directly in
+Rust, with no Python or LAMMPS runtime dependency:
+
+```toml
+[ml_potential]
+backend = "pace_native"
+model = "potential.yace"
+weight = 0.001
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `backend` | String | required | `pace_native` |
+| `model` | String | required | C-tilde `.yace` model, relative to the config file |
+| `weight` | Float | 0.001 | Scales the PACE energy contribution in the RMC cost |
+
+Do not set `cutoff` or `delta`. The largest directed bond cutoff is read from
+the model. The backend builds its own cutoff-sized cell list, caches accepted
+atomic energies, and recomputes only central environments affected by the old
+or proposed atom position. Every cell dimension must exceed twice the largest
+model cutoff for unambiguous minimum-image environments.
+
+Supported C-tilde features are multiple elements, arbitrary product rank,
+`ChebPow`, `ChebExpCos`, and `ChebLinear` radial bases, Finnis-Sinclair and
+shifted/scaled Finnis-Sinclair embeddings, fitted radial contractions, and
+`density` or `distance` core cutoffs. This first reader deliberately rejects
+legacy plain-text `.ace`, B-basis `.yaml`, `SBessel`, and ZBL models instead of
+silently evaluating a different potential. PACE training, forces, stress, and
+extrapolation grades are outside rsmith's energy-only RMC interface.
+
+The committed tests contain frozen LAMMPS `pair_style pace product` energies
+for radial rank 1, a fitted nonlinear rank-2 Cu model, and a rank-4 angular
+model:
+
+```bash
+cargo test --test pace_reference_fixture
+```
+
+For a live oracle check, point the ignored integration test at LAMMPS and, if
+needed, a directory containing `paceplugin.so`:
+
+```bash
+RSMITH_LAMMPS=lmp_serial \
+RSMITH_LAMMPS_PACE_PLUGIN_DIR=/path/to/plugin \
+cargo test --test pace_reference_fixture live_lammps -- --ignored
 ```
 
 ## GAP/QUIP

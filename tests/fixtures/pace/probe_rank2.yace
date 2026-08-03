@@ -1,0 +1,16 @@
+# Repository-authored nonlinear rank-2 oracle model.
+elements: [Cu]
+E0: [0.05]
+deltaSplineBins: 0.001
+embeddings:
+  0: {ndensity: 2, FS_parameters: [1.0, 1.0, 0.8, 0.5], npoti: FinnisSinclairShiftedScaled, rho_core_cutoff: 100000.0, drho_core_cutoff: 250.0}
+bonds:
+  [0, 0]: {nradmax: 2, lmax: 2, nradbasemax: 3, radbasename: ChebPow, radparameters: [2.0], radcoefficients: [[[1.0, 0.2, -0.1], [0.8, -0.3, 0.2], [0.5, 0.1, 0.4]], [[0.1, 1.0, 0.2], [-0.2, 0.7, 0.3], [0.3, -0.1, 0.9]]], prehc: 0.0, lambdahc: 0.0, rcut: 3.9, dcut: 0.01, rcut_in: 0.0, dcut_in: 0.0, inner_cutoff_type: density}
+functions:
+  0:
+    - {mu0: 0, rank: 1, ndensity: 2, num_ms_combs: 1, mus: [0], ns: [1], ls: [0], ms_combs: [0], ctildes: [0.3, -0.1]}
+    - {mu0: 0, rank: 1, ndensity: 2, num_ms_combs: 1, mus: [0], ns: [2], ls: [0], ms_combs: [0], ctildes: [-0.2, 0.4]}
+    - {mu0: 0, rank: 1, ndensity: 2, num_ms_combs: 1, mus: [0], ns: [3], ls: [0], ms_combs: [0], ctildes: [0.15, 0.25]}
+    - {mu0: 0, rank: 2, ndensity: 2, num_ms_combs: 1, mus: [0, 0], ns: [1, 1], ls: [0, 0], ms_combs: [0, 0], ctildes: [0.12, -0.08]}
+    - {mu0: 0, rank: 2, ndensity: 2, num_ms_combs: 2, mus: [0, 0], ns: [1, 2], ls: [1, 1], ms_combs: [0, 0, 1, -1], ctildes: [0.2, -0.3, -0.4, 0.6]}
+    - {mu0: 0, rank: 2, ndensity: 2, num_ms_combs: 3, mus: [0, 0], ns: [2, 2], ls: [2, 2], ms_combs: [0, 0, 1, -1, 2, -2], ctildes: [0.07, 0.04, -0.14, -0.08, 0.14, 0.08]}
