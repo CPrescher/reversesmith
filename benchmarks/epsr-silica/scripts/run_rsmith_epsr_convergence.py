@@ -142,7 +142,7 @@ if args.control_start_sensitivity:
                     / "starts"
                     / case.name
                     / arm["start"]
-                    / "start.data"
+                    / "start-charge.data"
                 )
                 if not structure.is_file():
                     raise SystemExit(f"missing sensitivity start: {structure}")
@@ -158,9 +158,12 @@ if args.control_start_sensitivity:
                 for refinements in checkpoints:
                     refinements = int(refinements)
                     run = prefix_root / f"iter-{refinements:03d}"
-                    if args.only_missing and (run / "refined.xyz").is_file():
-                        continue
-                    if run.exists():
+                    if args.only_missing:
+                        if (run / "refined.xyz").is_file():
+                            continue
+                        if run.exists():
+                            shutil.rmtree(run)
+                    elif run.exists():
                         if not args.force:
                             raise SystemExit(f"output exists: {run} (pass --force)")
                         shutil.rmtree(run)

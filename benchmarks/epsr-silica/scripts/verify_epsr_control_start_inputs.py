@@ -128,6 +128,19 @@ for case_name, wanted_case in expected["cases"].items():
         if sha256(start_path) != wanted["sha256"]:
             raise SystemExit(f"{case_name}/{start_name}: generated-start hash changed")
         types, positions, box = read_lammps(start_path)
+        rsmith_start_path = run / "start-charge.data"
+        wanted_rsmith_hash = wanted.get("rsmith_sha256")
+        if wanted_rsmith_hash is None:
+            raise SystemExit(f"{case_name}/{start_name}: rsmith mirror not pinned")
+        if sha256(rsmith_start_path) != wanted_rsmith_hash:
+            raise SystemExit(f"{case_name}/{start_name}: rsmith-mirror hash changed")
+        rsmith_types, rsmith_positions, rsmith_box = read_lammps(rsmith_start_path)
+        if not np.array_equal(rsmith_types, types):
+            raise SystemExit(f"{case_name}/{start_name}: mirror atom types differ")
+        if not np.array_equal(rsmith_positions, positions):
+            raise SystemExit(f"{case_name}/{start_name}: mirror coordinates differ")
+        if not np.array_equal(rsmith_box, box):
+            raise SystemExit(f"{case_name}/{start_name}: mirror box differs")
         if len(types) != expected["atom_count"]:
             raise SystemExit(f"{case_name}/{start_name}: wrong atom count")
         if int(np.sum(types == 1)) != expected["si_count"] or int(

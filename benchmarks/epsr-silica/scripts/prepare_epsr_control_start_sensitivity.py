@@ -66,7 +66,7 @@ def scale_table(source: Path, target: Path, scale: float) -> None:
     target.write_text("\n".join(lines) + "\n")
 
 
-def write_lammps_from_xyz(source: Path, target: Path) -> None:
+def write_lammps_from_xyz(source: Path, target: Path, *, charge_style: bool) -> None:
     lines = source.read_text().splitlines()
     count = int(lines[0])
     match = re.search(r'Lattice="([^"]+)"', lines[1])
@@ -96,13 +96,19 @@ def write_lammps_from_xyz(source: Path, target: Path) -> None:
         "1 28.0855",
         "2 15.999",
         "",
-        "Atoms # atomic",
+        "Atoms # charge" if charge_style else "Atoms # atomic",
         "",
     ]
-    output.extend(
-        f"{atom_id} {atom_type} {x:.12f} {y:.12f} {z:.12f}"
-        for atom_id, atom_type, x, y, z in atoms
-    )
+    if charge_style:
+        output.extend(
+            f"{atom_id} {atom_type} 0.0 {x:.12f} {y:.12f} {z:.12f}"
+            for atom_id, atom_type, x, y, z in atoms
+        )
+    else:
+        output.extend(
+            f"{atom_id} {atom_type} {x:.12f} {y:.12f} {z:.12f}"
+            for atom_id, atom_type, x, y, z in atoms
+        )
     target.write_text("\n".join(output) + "\n")
 
 
@@ -186,12 +192,21 @@ for case in sorted(fixture_root.glob("target-*_*")):
         if completed.returncode != 0:
             raise RuntimeError(f"start generation failed in {run}; see driver.log")
         start_path = run / "start.data"
-        write_lammps_from_xyz(run / "refined.xyz", start_path)
+        rsmith_start_path = run / "start-charge.data"
+        write_lammps_from_xyz(
+            run / "refined.xyz", start_path, charge_style=False
+        )
+        write_lammps_from_xyz(
+            run / "refined.xyz", rsmith_start_path, charge_style=True
+        )
         start_manifest[case.name][start_name] = {
             "generator_seed": seed,
             "generator_moves": generator_moves,
             "path": str(start_path),
             "sha256": sha256(start_path),
+            "rsmith_path": str(rsmith_start_path),
+            "rsmith_sha256": sha256(rsmith_start_path),
+            "coordinate_equivalence": "exact atom ids, types, box, and coordinates; only the LAMMPS atom-style representation differs",
         }
 
 manifest = {

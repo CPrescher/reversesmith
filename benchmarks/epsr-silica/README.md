@@ -466,6 +466,12 @@ reference potential is scaled to 0.5 and 1.5 times its baseline strength. Two
 additional common starting configurations are generated using 300,000
 target-blind, energy-only rsmith moves under the unscaled reference potential.
 The same resulting coordinates are then supplied to native EPSR26 and rsmith.
+EPSR26 receives the LAMMPS atomic-style representation; because the current
+rsmith reader accepts charge style, rsmith receives a charge-style mirror with
+zero placeholder charges. The input verifier requires atom ids, types, box,
+and coordinates to be exactly identical between the two representations. This
+adapter amendment was pinned after the initial rsmith start-state jobs stopped
+at parsing and before any rsmith start-state refinement outcome existed.
 
 These controls are comparable operations, not a claim that the two programs'
 feedback update equations are mathematically identical. Native EPSR26 applies

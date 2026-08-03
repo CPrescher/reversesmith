@@ -1,5 +1,6 @@
 status = "epsr_control_start_sensitivity_inputs_frozen_before_refinement_outcomes"
 date = "2026-08-03"
+representation_amendment = "after the first start-state jobs stopped before refinement because rsmith accepts LAMMPS charge style but not atomic style, coordinate-identical charge-style mirrors were added and pinned before any rsmith start-state outcome existed"
 protocol_commit = "5e53d94"
 protocol_sha256 = "08e64ca459d04758e72976a336af43f6fbc1f52868c81a5036ba9f9e6e94ffe1"
 binary_sha256 = "7221482466da60162f902304071e8fbaab3a33bf89899587c5894445adc558c9"
@@ -29,11 +30,13 @@ between_generated_starts_rms_a = 0.09252803072582194
 
 [cases.target-gap_from-pedone.reference-equilibrated-a]
 sha256 = "095d67997e205508821f524ba54b5093986f653b858a76f9a832031159dfea30"
+rsmith_sha256 = "c12aa7817169e4f063ec3191ab84dfbfa35b5681d839a74552acbf6bf1d83e28"
 minimum_distance_a = 1.5088448424848204
 from_original_rms_a = 0.2015583119375734
 
 [cases.target-gap_from-pedone.reference-equilibrated-b]
 sha256 = "b2f9e7539852223d29e5d834f3286c6df4c3678d5b837ca99aae003ae77a13b8"
+rsmith_sha256 = "6c3e28bfa3f2af9ddd33589809ec2a6bf90ceeb31b62e6dfa0adfc2c7a077169"
 minimum_distance_a = 1.5194636160888153
 from_original_rms_a = 0.2010549377184319
 
@@ -44,11 +47,13 @@ between_generated_starts_rms_a = 0.09295533158821459
 
 [cases.target-pedone_from-gap.reference-equilibrated-a]
 sha256 = "d0f5beb8ce6330c6204103aba098f355cd7af0b2554f5f3e15718beb1d8a5ded"
+rsmith_sha256 = "373720884814232ffee69252f92cfe0bf93bd8bf0ea0117e5fa93e788c712cd2"
 minimum_distance_a = 1.5135422627094925
 from_original_rms_a = 0.1837319944616038
 
 [cases.target-pedone_from-gap.reference-equilibrated-b]
 sha256 = "45752aa7ae83c4d4ae3b800140dfb7ab992dd3078d6727b71ca43cb0ecccbb4d"
+rsmith_sha256 = "8b2a804ec1dc01851b5d19ff21a6dfdd9b0bcd2921a6c3cfee1ed733062cf259"
 minimum_distance_a = 1.5089294318969197
 from_original_rms_a = 0.18253633470248948
 

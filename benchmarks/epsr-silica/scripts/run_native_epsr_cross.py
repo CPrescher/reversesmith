@@ -438,10 +438,11 @@ if args.control_start_sensitivity:
                 for refinements in checkpoints:
                     name = f"iter-{int(refinements):03d}"
                     run_dir = prefix_root / name
-                    if args.only_missing and (
-                        run_dir / "DTBsilica.EPSR.v01"
-                    ).is_file():
-                        continue
+                    if args.only_missing:
+                        if (run_dir / "DTBsilica.EPSR.v01").is_file():
+                            continue
+                        if run_dir.exists():
+                            shutil.rmtree(run_dir)
                     run_dir = prepare_run(
                         source,
                         prefix_root,
