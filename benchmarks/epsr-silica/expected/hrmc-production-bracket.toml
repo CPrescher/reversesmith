@@ -1,0 +1,38 @@
+status = "production_bracket_protocol_frozen_before_results"
+date = "2026-08-03"
+scope = "matched 6000-move Pedone/GAP HRMC bracket on both symmetric SiO2 cross-recovery cases"
+parent_pilot = "hrmc-weight-sweep-smoke.toml"
+gap_followup = "hrmc-gap-cliff-followup-smoke.toml"
+
+[budget]
+moves = 6000
+moves_per_atom = 2.0
+seed = 20260802
+threads = 1
+
+[weights]
+pedone = [3.0, 10.0, 30.0]
+gap = [0.1, 0.3, 0.4]
+control = "existing same-seed 6000-move pure-RMC cross-recovery arm"
+
+[sampling]
+delayed_acceptance = true
+energy_calibration_moves = 0
+rationale = "weights were calibrated in the frozen pilots; exact two-stage delayed acceptance avoids expensive energy evaluations after data-stage rejection"
+
+[selection]
+minimum_fit_progress_fraction_of_pure_rmc = 0.5
+reject_if_new_minimum_distance_violation = true
+compare = [
+  "common neutron and X-ray RMS",
+  "regularizer energy change per atom",
+  "withheld partial S(Q) RMS",
+  "withheld partial g(r) RMS",
+  "coordination defects, angles, and ring topology",
+  "accepted moves and wall time",
+]
+policy = "retain all bracket results; nominate a balanced weight only if it passes both symmetric directions"
+
+[claims]
+allowed = "select production-scale Pedone and GAP weights and quantify the fit/energy/runtime trade-off under the synthetic recovery protocol"
+forbidden = "claim MLIP superiority, equilibrium sampling, or experimental physical truth from two same-seed synthetic cases"

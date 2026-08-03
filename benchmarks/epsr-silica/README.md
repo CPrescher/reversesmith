@@ -235,6 +235,61 @@ reduces positive energy drift by 10--12% relative to weight `0.001`. Weight
 GAP-target direction, so it fails the symmetric rule. The selected GAP
 low/knee/high production bracket is therefore 0.1, 0.3, and 0.4.
 
+### Erhard-2024 ACE/PACE validation and calibration
+
+The comparison now also uses the public Si-O ACE potential of Erhard et al.
+(2024; article DOI `10.1038/s41467-024-45840-9`, dataset DOI
+`10.5281/zenodo.10419194`). Its `SBessel` radial basis is evaluated by
+rsmith's native PACE backend. On the 3,000-atom GAP-density cross-start,
+official `python-ace` gives `-25257.654797728312` eV and native rsmith prints
+`-25257.654798` eV. After moving atom 1 by `(0.03, -0.02, 0.01)` A, the two
+energies are `-25257.560323690243` and `-25257.560324` eV. This nonzero-move
+oracle closes the energy-evaluation gate; it does not validate forces or
+training-domain coverage.
+
+A frozen 1,000-move scan found that weights through 3 behave almost like pure
+RMC, weight 10 introduces a measurable energy bias while retaining 84--98% of
+pure-RMC fit progress, and weight 30 retains 50--75% in both symmetric
+directions. Weight 100 fails the X-ray 50% progress guard. The preregistered
+PACE low/knee/high production bracket is therefore 3, 10, and 30. Native PACE
+took 2.37--3.08 s per 1,000 moves, about 20--24 times faster than the matched
+external GAP/QUIP pilot.
+
+### Single-seed joint-acceptance production smoke
+
+The first 6,000-move production attempt used delayed acceptance. GAP weights
+0.1 and 0.3 accepted 0 of 6,000 moves: separating the data and energy tests
+discarded favorable cancellation between opposing increments. That failed
+optimization gate is retained in `hrmc-production-bracket-failure.toml`; the
+scientific comparison uses the intended single Metropolis test on
+`delta_chi2 + weight*delta_energy`.
+
+The superseding run evaluates all selected Pedone, GAP, and PACE brackets from
+both cross-starts. Progress is normalized to the same-seed 6,000-move pure-RMC
+control; values above one are possible from stochastic trajectory differences.
+
+| Regularizer / weight | GAP-target N/X progress | GAP-target RDF RMS | Pedone-target N/X progress | Pedone-target RDF RMS |
+|---|---:|---:|---:|---:|
+| GAP / 0.1 | 1.004 / 0.999 | 0.61159 | 0.970 / 0.973 | 0.45951 |
+| GAP / 0.3 | 0.961 / 0.971 | 0.60968 | 0.969 / 0.966 | 0.46444 |
+| GAP / 0.4 | 0.919 / 0.920 | 0.61066 | 0.943 / 0.956 | 0.46448 |
+| PACE / 3 | 1.030 / 1.002 | 0.59508 | 1.006 / 1.012 | 0.44652 |
+| PACE / 10 | 0.967 / 0.903 | 0.58861 | 0.983 / 0.932 | 0.46371 |
+| PACE / 30 | 0.765 / 0.648 | 0.63613 | 0.737 / 0.619 | 0.54503 |
+| Pedone / 3 | 1.042 / 0.988 | 0.59909 | 0.996 / 1.009 | 0.44614 |
+| Pedone / 10 | 0.992 / 0.932 | 0.58353 | 0.986 / 0.984 | 0.45205 |
+| Pedone / 30 | 0.830 / 0.692 | 0.60258 | 0.744 / 0.758 | 0.51642 |
+| Pure-RMC control | 1.000 / 1.000 | 0.60126 | 1.000 / 1.000 | 0.45858 |
+
+PACE weight 3 is the balanced PACE setting: it preserves essentially all fit
+progress and improves hidden-target mean partial-RDF RMS by 1.0% and 2.6% in
+the two directions. Pedone weight 3 gives a comparably small improvement, so
+this single-seed synthetic smoke does **not** establish a PACE-specific
+structural advantage. It establishes correctness, a usable PACE weight, and
+practical native throughput. The matched 6,000-move PACE arms took 12.3--16.6
+s versus 307.7--354.8 s for GAP/QUIP, a 21--25 times speedup. Repeated timing
+and multi-seed structural ensembles remain publication gates.
+
 ### Local timing diagnostic
 
 End-to-end one-thread wall times on an Apple M4 Pro were:
@@ -275,6 +330,9 @@ RMCProfile build, exact saved move counts, and calibrated energy weights.
   conversion, and one-epoch joint neutron/X-ray rsmith smoke run;
 - `scripts/fetch_public_gap.py`: checksum-gated importer for the public Erhard
   silica GAP and its sparse companions;
+- `scripts/fetch_public_ace2024.py` and `verify_pace2024_oracle.py`:
+  checksum-gated Erhard-2024 ACE acquisition and independent energy-oracle
+  verification;
 - `scripts/prepare_cross_recovery.py`: symmetric hidden-target and cross-start
   fixture generator for the common neutron/X-ray protocol;
 - `scripts/run_rsmith_cross.py`, `run_native_epsr_cross.py`, and
@@ -288,6 +346,10 @@ RMCProfile build, exact saved move counts, and calibrated energy weights.
 - `scripts/prepare_hrmc_gap_cliff_followup.py` and
   `verify_hrmc_gap_cliff_followup.py`: additive GAP cliff-grid preparation and
   its symmetric selection guard;
+- `scripts/prepare_hrmc_pace2024_weight_pilot.py` and its runner/verifier:
+  frozen native-PACE weight calibration;
+- `scripts/prepare_hrmc_production_unscreened.py` and its runner/verifier:
+  matched joint-acceptance Pedone/GAP/PACE production smoke;
 - `scripts/analyze_ambient_models.py`: independent RDF, coordination, angle,
   minimum-distance, and shortest-ring analysis of both model endpoints;
 - `scripts/verify_ambient_models.py`: deterministic verifier for the pinned
@@ -306,6 +368,12 @@ RMCProfile build, exact saved move counts, and calibrated energy weights.
   pilot design, observed Pareto brackets, timings, and claim boundary;
 - `expected/hrmc-gap-cliff-followup.toml` and its `-smoke.toml` record: frozen
   fine-grid design and the selected GAP 0.1/0.3/0.4 production bracket;
+- `expected/pace2024-oracle.toml`: pinned model and official-python-ace energy
+  oracle;
+- `expected/hrmc-pace2024-weight-*.toml`: frozen PACE calibration protocols and
+  observed bracket;
+- `expected/hrmc-production-*.toml`: the retained delayed-acceptance failure,
+  superseding joint-acceptance protocol, and observed three-model comparison;
 - `reference/README.md`: provenance and redistribution rules for upstream data.
 
 ## Local reproduction
@@ -348,4 +416,21 @@ python3 scripts/run_hrmc_weight_sweep.py --model gap --only-missing \
   --binary /path/to/gap-enabled/rsmith
 python3 scripts/score_cross_recovery.py
 python3 scripts/verify_hrmc_gap_cliff_followup.py
+
+python3 scripts/fetch_public_ace2024.py
+python3 scripts/verify_pace2024_oracle.py
+python3 scripts/prepare_hrmc_pace2024_weight_pilot.py --force
+python3 scripts/run_hrmc_pace2024_weight_pilot.py
+python3 scripts/prepare_hrmc_pace2024_weight_followup.py
+python3 scripts/run_hrmc_pace2024_weight_pilot.py --only-missing
+python3 scripts/score_cross_recovery.py
+python3 scripts/verify_hrmc_pace2024_weight_pilot.py
+
+python3 scripts/prepare_hrmc_production_unscreened.py --force
+python3 scripts/run_hrmc_production_unscreened.py --model pedone
+python3 scripts/run_hrmc_production_unscreened.py --model pace
+python3 scripts/run_hrmc_production_unscreened.py --model gap \
+  --binary /path/to/gap-enabled/rsmith
+python3 scripts/score_cross_recovery.py
+python3 scripts/verify_hrmc_production_unscreened.py
 ```

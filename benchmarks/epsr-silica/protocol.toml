@@ -65,6 +65,26 @@ changes = [
   "select the largest weight that retains at least half of pure-RMC neutron and X-ray progress in both symmetric directions",
 ]
 
+[provenance.amendment_2026_08_03_pace2024]
+reason = "The public Erhard-2024 ACE source, independent energy oracle, and PACE weight grids were frozen before their refinement outcomes were scored."
+source_protocol = "expected/pace2024-oracle.toml"
+weight_protocols = ["expected/hrmc-pace2024-weight-pilot.toml", "expected/hrmc-pace2024-weight-followup.toml"]
+changes = [
+  "add native PACE as an MLIP-HRMC implementation control alongside GAP/QUIP",
+  "require official-python-ace agreement before refinement",
+  "select a low/knee/high PACE weight bracket using the same symmetric 50-percent progress guard",
+]
+
+[provenance.amendment_2026_08_03_joint_production]
+reason = "The selected Pedone/GAP/PACE grids and joint-acceptance protocol were frozen before the matched 6000-move outcomes were scored."
+protocol = "expected/hrmc-production-unscreened.toml"
+superseded_protocol = "expected/hrmc-production-bracket.toml"
+changes = [
+  "retain the 0-of-6000 GAP delayed-acceptance result as a failed optimization gate",
+  "compare all three regularizers with one joint Metropolis test on delta_chi2 plus weighted delta_energy",
+  "restrict the single-seed result to implementation, calibration, and throughput claims",
+]
+
 [system]
 formula = "SiO2"
 number_density_atoms_per_a3 = 0.06639997054690536
@@ -115,6 +135,7 @@ fit = ["neutron", "xray"]
 [methods.rsmith_mlip_hrmc]
 purpose = "proposed method"
 fit = ["neutron", "xray"]
+implementations = ["gap_quip", "pace_native"]
 
 [comparison.primary_reproduction_gate]
 methods = ["native_epsr", "rsmith_epsr"]

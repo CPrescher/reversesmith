@@ -1,0 +1,44 @@
+status = "passed_pace2024_weight_calibration_not_production_comparison"
+date = "2026-08-03"
+protocols = ["hrmc-pace2024-weight-pilot.toml", "hrmc-pace2024-weight-followup.toml"]
+moves = 1000
+seed = 20260802
+threads = 1
+hardware = "Apple M4 Pro, 48 GB, macOS arm64"
+
+[guards]
+required_weights = [0.001, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0]
+attempted_moves = 1000
+minimum_fit_progress_fraction = 0.5
+minimum_distance_a = { "Si-Si" = 2.0, "Si-O" = 1.35, "O-O" = 2.0 }
+highest_passing_weight = 30.0
+first_failing_weight = 100.0
+
+[selection]
+pace_production_bracket = [3.0, 10.0, 30.0]
+low = "3 retains 98-101% of pure-RMC progress in both directions"
+knee = "10 retains 84-98% of pure-RMC progress and measurably lowers positive energy drift"
+high = "30 retains 50-75% of progress in both directions; 100 fails the symmetric X-ray progress guard"
+
+[observed.target_gap_from_pedone]
+weights = [0.001, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0]
+neutron_progress_fraction = [1.000000, 1.000000, 1.000000, 1.006149, 0.993469, 1.017674, 1.005851, 0.981052, 0.754850, 0.393645]
+xray_progress_fraction = [1.000000, 1.000000, 1.000000, 1.002728, 1.004860, 1.009362, 0.989284, 0.919534, 0.693412, 0.323170]
+energy_change_ev_per_atom = [0.024088266, 0.024088266, 0.024088266, 0.023964933, 0.023441599, 0.022288266, 0.020181599, 0.014214933, 0.004528266, -0.001251734]
+accepted_moves = [570, 570, 570, 568, 563, 567, 532, 442, 320, 199]
+mean_partial_rdf_rms = [0.725058, 0.725058, 0.725058, 0.724666, 0.725457, 0.723267, 0.724891, 0.736486, 0.751746, 0.772169]
+wall_seconds = [2.398604958, 2.420330000, 2.402933042, 2.397798041, 2.405974292, 2.405025917, 2.407571500, 2.373300542, 2.368695792, 2.367219833]
+
+[observed.target_pedone_from_gap]
+weights = [0.001, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0]
+neutron_progress_fraction = [1.000000, 1.000000, 1.000000, 0.996759, 0.988199, 0.978458, 1.003168, 0.951233, 0.678163, 0.521904]
+xray_progress_fraction = [1.000000, 1.000000, 1.000000, 1.000484, 0.996813, 0.982743, 0.982267, 0.839456, 0.501040, 0.332692]
+energy_change_ev_per_atom = [0.044378961, 0.044378961, 0.044378961, 0.044422294, 0.043808961, 0.041278961, 0.037635627, 0.021685627, 0.002278961, -0.002297706]
+accepted_moves = [615, 615, 615, 615, 615, 601, 576, 477, 302, 221]
+mean_partial_rdf_rms = [0.642419, 0.642419, 0.642419, 0.642839, 0.643230, 0.644762, 0.650226, 0.673513, 0.717481, 0.737868]
+wall_seconds = [2.929692417, 2.985842500, 2.977462333, 2.971473333, 3.080920750, 2.982451250, 2.990572625, 2.976621709, 3.002764000, 2.999372708]
+
+[interpretation]
+speed = "Native PACE took 2.37-3.08 s per 1000 moves, about 20-24 times faster than the matched GAP/QUIP pilot and about 9-11 times slower than pure RMC."
+structure = "At this short budget, increasing the PACE weight trades scattering-fit progress for lower positive energy drift; no independent structural advantage is established."
+boundary = "This follow-up calibrates a numerical weight bracket. It is not evidence of convergence, equilibrium sampling, training-domain validity, or physical superiority."

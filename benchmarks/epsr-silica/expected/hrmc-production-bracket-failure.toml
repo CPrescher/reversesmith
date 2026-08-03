@@ -1,0 +1,15 @@
+status = "failed_delayed_acceptance_gate_superseded"
+date = "2026-08-03"
+protocol = "hrmc-production-bracket.toml"
+superseded_by = "hrmc-production-unscreened.toml"
+
+[observed.target_gap_from_pedone]
+runs = ["gap-w0p1", "gap-w0p3"]
+attempted_moves = [6000, 6000]
+accepted_moves = [0, 0]
+wall_seconds = [183.717900750, 182.544008417]
+
+[diagnosis]
+cause = "Separate data and energy Metropolis stages reject moves whose opposing increments would pass the intended joint delta_chi2 + weight*delta_energy criterion."
+decision = "Retain the result as a failed optimization gate and use one joint acceptance test for the matched production comparison."
+boundary = "This diagnoses the sampling-kernel substitution; it is not a result about the GAP potential itself."

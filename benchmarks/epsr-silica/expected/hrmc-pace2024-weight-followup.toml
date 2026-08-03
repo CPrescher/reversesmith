@@ -1,0 +1,24 @@
+status = "pace2024_weight_followup_frozen_before_results"
+date = "2026-08-03"
+scope = "extend the Erhard-2024 PACE pilot around rsmith's observed balance scale"
+parent = "hrmc-pace2024-weight-pilot.toml"
+trigger = "Weights through 3 retained approximately all pure-RMC fit progress; the GAP-target diagnostic suggested a balance weight near 24."
+
+[budget]
+moves = 1000
+seed = 20260802
+threads = 1
+same_starts_targets_constraints_and_joint_acceptance_as_parent = true
+
+[weights]
+pace = [10.0, 30.0, 100.0]
+rationale = "log-spaced continuation bracketing the observed order-24 balance scale"
+
+[selection]
+minimum_fit_progress_fraction_of_pure_rmc = 0.5
+reject_if_new_minimum_distance_violation = true
+policy = "select low, knee, and high weights that pass both symmetric directions; refine only if the 50% transition remains unresolved"
+
+[claims]
+allowed = "complete the PACE weight bracket for a matched 6000-move comparison"
+forbidden = "claim PACE superiority, convergence, equilibrium sampling, or physical truth"

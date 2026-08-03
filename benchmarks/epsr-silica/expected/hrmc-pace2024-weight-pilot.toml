@@ -1,0 +1,28 @@
+status = "pace2024_weight_pilot_protocol_frozen_before_refinement_results"
+date = "2026-08-03"
+scope = "Erhard et al. 2024 Si-O ACE weight calibration on both symmetric SiO2 cross-recovery cases"
+oracle = "pace2024-oracle.toml"
+
+[budget]
+moves = 1000
+moves_per_atom = 0.3333333333333333
+seed = 20260802
+threads = 1
+
+[weights]
+pace = [0.001, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0]
+control = "existing same-seed 1000-move pure-RMC arm from hrmc-weight-sweep"
+rationale = "broad log-spaced grid centered on the order-unity scale observed for the earlier silica GAP, frozen before any PACE refinement result"
+
+[sampling]
+delayed_acceptance = false
+rationale = "use the joint Metropolis criterion during calibration because the GAP production gate showed pathological two-stage rejection when data and energy terms oppose"
+
+[selection]
+minimum_fit_progress_fraction_of_pure_rmc = 0.5
+reject_if_new_minimum_distance_violation = true
+policy = "select low, knee, and high weights that pass both symmetric directions; refine the grid if the first failure interval is too coarse"
+
+[claims]
+allowed = "calibrate PACE regularizer influence and speed after the independent oracle gate"
+forbidden = "claim PACE superiority, convergence, equilibrium sampling, or physical truth"

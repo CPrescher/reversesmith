@@ -427,7 +427,8 @@ def rsmith_fit(run_dir: Path, target_root: Path | None = None):
         result["accepted_moves"] = int(accepted.group(1))
         result["attempted_moves"] = int(accepted.group(2))
     initial_energy = re.search(
-        r"Initial (?:pair potentials|GAP/QUIP) energy =\s*([+\-0-9.eE]+) eV", log
+        r"Initial (?:pair potentials|GAP/QUIP|PACE/native) energy =\s*([+\-0-9.eE]+) eV",
+        log,
     )
     final_energies = re.findall(r"\[E:\s*([+\-0-9.eE]+)\]", log)
     suggested = re.search(
@@ -563,18 +564,16 @@ for case in sorted(fixture_root.glob("target-*_*")):
 )
 print(json.dumps(summary, indent=2, sort_keys=True))
 
-sweep_root = case_root / "results/hrmc-weight-sweep"
-if sweep_root.is_dir():
-    sweep_summary = {
-        "status": "available_hrmc_weight_pilot_outputs_scored",
-        "scope": "one-third move per atom pilot, not production comparison",
-        "cases": {},
-    }
-    for sweep_case in sorted(sweep_root.glob("target-*_*")):
-        cross_case = fixture_root / sweep_case.name
+
+def score_hrmc_root(root: Path, status: str, scope: str):
+    if not root.is_dir():
+        return
+    hrmc_summary = {"status": status, "scope": scope, "cases": {}}
+    for hrmc_case in sorted(root.glob("target-*_*")):
+        cross_case = fixture_root / hrmc_case.name
         target = structure_metrics(cross_case / "hidden-target.data")
         runs = {}
-        for run in sorted(sweep_case.iterdir()):
+        for run in sorted(hrmc_case.iterdir()):
             refined = run / "refined.xyz"
             if run.is_dir() and refined.is_file():
                 model = structure_metrics(refined)
@@ -590,8 +589,30 @@ if sweep_root.is_dir():
                         key: value for key, value in model.items() if key != "rdf"
                     },
                 }
-        sweep_summary["cases"][sweep_case.name] = runs
-    (sweep_root / "score-summary.json").write_text(
-        json.dumps(sweep_summary, indent=2, sort_keys=True) + "\n"
+        hrmc_summary["cases"][hrmc_case.name] = runs
+    (root / "score-summary.json").write_text(
+        json.dumps(hrmc_summary, indent=2, sort_keys=True) + "\n"
     )
-    print(json.dumps(sweep_summary, indent=2, sort_keys=True))
+    print(json.dumps(hrmc_summary, indent=2, sort_keys=True))
+
+
+score_hrmc_root(
+    case_root / "results/hrmc-weight-sweep",
+    "available_hrmc_weight_pilot_outputs_scored",
+    "one-third move per atom pilot, not production comparison",
+)
+score_hrmc_root(
+    case_root / "results/hrmc-pace2024-weight-pilot",
+    "available_pace2024_weight_pilot_outputs_scored",
+    "one-third move per atom PACE pilot, not production comparison",
+)
+score_hrmc_root(
+    case_root / "results/hrmc-production-bracket",
+    "available_hrmc_production_bracket_outputs_scored",
+    "two moves per atom, single-seed bracket; not the final multi-seed comparison",
+)
+score_hrmc_root(
+    case_root / "results/hrmc-production-unscreened",
+    "available_joint_acceptance_hrmc_production_outputs_scored",
+    "two moves per atom, single-seed Pedone/GAP/PACE bracket; not the final multi-seed comparison",
+)

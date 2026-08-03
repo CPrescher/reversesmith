@@ -1,0 +1,37 @@
+status = "joint_acceptance_production_protocol_frozen_before_results"
+date = "2026-08-03"
+scope = "matched 6000-move Pedone, GAP, and Erhard-2024 PACE brackets on both symmetric SiO2 cases"
+supersedes_sampling_kernel = "hrmc-production-bracket.toml"
+reason = "The frozen delayed-acceptance gate accepted 0/6000 moves for GAP weights 0.1 and 0.3 because separate stages lost favorable cancellation between opposing data and energy increments."
+
+[budget]
+moves = 6000
+moves_per_atom = 2.0
+seed = 20260802
+threads = 1
+
+[weights]
+pedone = [3.0, 10.0, 30.0]
+gap = [0.1, 0.3, 0.4]
+pace = [3.0, 10.0, 30.0]
+control = "existing same-seed 6000-move pure-RMC cross-recovery arm"
+
+[sampling]
+delayed_acceptance = false
+criterion = "single joint Metropolis test on delta_chi2 + weight*delta_energy"
+
+[selection]
+minimum_fit_progress_fraction_of_pure_rmc = 0.5
+reject_if_new_minimum_distance_violation = true
+compare = [
+  "common neutron and X-ray RMS",
+  "regularizer energy change per atom",
+  "withheld partial S(Q) and g(r) RMS",
+  "coordination defects, angles, and ring topology",
+  "accepted moves and wall time",
+]
+policy = "retain all arms and nominate balanced weights only if they pass both symmetric directions"
+
+[claims]
+allowed = "compare calibrated regularizers under a matched synthetic move budget and select later multi-seed settings"
+forbidden = "claim physical or universal superiority from single-seed synthetic recovery"

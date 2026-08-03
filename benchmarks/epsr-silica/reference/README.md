@@ -60,3 +60,25 @@ and its five sparse companions below ignored `reference/local/public-gap/`.
 The files are not vendored because the two SOAP sparse tables alone occupy
 about 334 MB. The model label used by QUIP is
 `GAP_2021_4_19_120_7_32_55_336`.
+
+## Public 2024 Si-O ACE parameterization
+
+The native PACE comparison uses the Si-O ACE model from Erhard, Rohrer, Albe,
+and Deringer, *Nature Communications* **15**, 1927 (2024), article DOI
+`10.1038/s41467-024-45840-9` and dataset DOI
+`10.5281/zenodo.10419194`. Only the public `potential.zip` archive is needed;
+the much larger deposited trajectory archive is not downloaded.
+
+Run `../scripts/fetch_public_ace2024.py` to download and checksum-gate the
+archive. The ZIP has MD5 `c8eb4cd111af60d10c15bc3f1de9adbb` and SHA-256
+`28b29becd2c3185c6a44e872f304af7689b30b22842f21ec91e52f3641dd72cb`.
+The extracted `SiOx_potential.yace` has SHA-256
+`c8f00d8f0cbc131b0298b79260ba8098975624363c9d178223e51e48f025e97a`.
+It remains under ignored `reference/local/public-ace2024/`; provenance,
+independent oracle values, and reproduction tooling are committed.
+
+The model uses the PACE `SBessel` radial basis. Native rsmith energies for the
+3,000-atom cross-start and for a nonzero single-atom displacement agree with
+the official `python-ace` implementation to the six decimals printed by the
+CLI. This checks model parsing and energy evaluation, not force correctness or
+whether a configuration lies inside the model's training domain.

@@ -1,0 +1,41 @@
+status = "passed_erhard_2024_ace_energy_oracle"
+date = "2026-08-03"
+
+[source]
+article_doi = "10.1038/s41467-024-45840-9"
+dataset_doi = "10.5281/zenodo.10419194"
+archive_file = "potential.zip"
+archive_md5 = "c8eb4cd111af60d10c15bc3f1de9adbb"
+archive_sha256 = "28b29becd2c3185c6a44e872f304af7689b30b22842f21ec91e52f3641dd72cb"
+model_file = "potential/SiOx_potential.yace"
+model_sha256 = "c8f00d8f0cbc131b0298b79260ba8098975624363c9d178223e51e48f025e97a"
+model_bytes = 432633
+radial_basis = "SBessel"
+
+[oracle]
+implementation = "official ICAMS python-ace PyACECalculator"
+python_ace_commit = "b143ac3c5d18c55d8a1f0701fae855b2638536fe"
+pyace_version = "0+untagged.1.gb143ac3"
+ase_version = "3.29.0"
+ml_pace_source_commit = "99aa6e685cce24c24f81ce35b241d1b480d1ad05"
+
+[configuration]
+source = "cross-recovery/target-gap_from-pedone/cross-start.data"
+atoms = 3000
+box_a = 35.2301271712257
+displaced_atom_one_delta_a = [0.03, -0.02, 0.01]
+
+[observed]
+oracle_initial_energy_ev = -25257.654797728312
+rsmith_initial_energy_ev_printed = -25257.654798
+oracle_moved_energy_ev = -25257.560323690243
+rsmith_moved_energy_ev_printed = -25257.560324
+oracle_move_delta_ev = 0.094474038069
+rsmith_move_delta_ev_from_printed_totals = 0.094474
+
+[guards]
+total_energy_abs_error_ev_max = 1.0e-6
+move_delta_abs_error_ev_max = 1.0e-6
+
+[interpretation]
+boundary = "The oracle validates native PACE energy evaluation and a nonzero displacement for this model/configuration. It does not validate forces, training-domain coverage, or physical superiority."

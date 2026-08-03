@@ -192,15 +192,49 @@ of pure-RMC neutron/X-ray progress and reducing positive energy drift by
 Pedone target but retains only 37--39% progress in the reverse direction. The
 selected GAP low/knee/high production bracket is therefore 0.1, 0.3, and 0.4.
 
+### Native PACE silica control
+
+The benchmark also pins the public Si-O ACE model of Erhard et al. (2024), DOI
+`10.5281/zenodo.10419194`. The model uses the `SBessel` radial basis and is
+evaluated directly by rsmith's native PACE backend. Against the official
+`python-ace` implementation, total energies for the 3,000-atom cross-start and
+for a nonzero single-atom displacement agree to the six decimals printed by
+the rsmith CLI. The pinned source hashes, software commits, configurations,
+and numeric oracle are recorded in `expected/pace2024-oracle.toml`.
+
+A preregistered 1,000-move scan selected PACE weights 3, 10, and 30. Weight 30
+is the highest point retaining at least 50% of pure-RMC neutron and X-ray
+progress in both directions; weight 100 fails the symmetric guard. Native PACE
+takes 2.37--3.08 s per 1,000 moves in this control, 20--24 times less wall time
+than the matched external GAP/QUIP path.
+
+### Joint-acceptance Pedone/GAP/PACE production smoke
+
+An initial delayed-acceptance optimization was rejected after GAP weights 0.1
+and 0.3 accepted no moves in 6,000 attempts. The separate Metropolis stages
+lost favorable cancellation between opposing data and energy increments. The
+failed gate is retained for audit, and the replacement protocol uses the
+intended single test on `delta_chi2 + weight*delta_energy`.
+
+The single-seed replacement runs the frozen Pedone 3/10/30, GAP 0.1/0.3/0.4,
+and PACE 3/10/30 brackets for 6,000 moves in both symmetric directions. PACE
+weight 3 retains 100--103% of same-seed pure-RMC neutron/X-ray progress and
+improves hidden-target mean partial-RDF RMS by 1.0% and 2.6%. Pedone weight 3
+gives a comparably small improvement, so no PACE-specific structural advantage
+is established. The matched PACE arms take 12.3--16.6 s versus 307.7--354.8 s
+for GAP/QUIP, a 21--25 times speedup. This is an implementation, calibration,
+and throughput result; repeated timings and multi-seed structural uncertainty
+are still required for a paper claim.
+
 ## Remaining publication gates
 
 1. Validate liquid-Ga structures against held-out data or an independent
    atomistic/physical oracle.
 2. Test independent equilibrium starts to separate basin sensitivity from
    convergence out of unstructured liquids.
-3. Run the selected Pedone 3/10/30 and GAP 0.1/0.3/0.4 brackets for 6,000
-   moves; repair the RMCProfile parallel runtime and freeze exact
-   coordinate-save and timing rules.
+3. Repeat the completed Pedone/GAP/PACE bracket comparison across seeds and
+   cold/warm timing replicates; repair the RMCProfile parallel runtime and
+   freeze exact coordinate-save and timing rules.
 4. Run the matched multi-seed native/rsmith silica ensembles, estimate native
    seed-to-seed spread, and freeze stochastic equivalence margins before
    comparing pair-potential and MLIP-regularized refinements.

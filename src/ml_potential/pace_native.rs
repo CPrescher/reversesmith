@@ -73,6 +73,7 @@ enum RadialKind {
     PowerScaled,
     ExponentialCosine,
     LinearScaled,
+    SimplifiedBessel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -358,6 +359,9 @@ impl Bond {
                 distance,
             ),
             RadialKind::LinearScaled => cheb_linear(self.nradbasemax, self.cutoff, distance),
+            RadialKind::SimplifiedBessel => {
+                simplified_bessel(self.nradbasemax, self.cutoff, distance)
+            }
         };
 
         if self.inner_kind == InnerCutoffKind::Distance {
@@ -531,6 +535,65 @@ fn cheb_linear(count: usize, cutoff: f64, distance: f64) -> (Vec<f64>, Vec<f64>)
     for order in 1..=count {
         values.push(0.5 - 0.5 * polynomials[order]);
         derivatives.push(0.5 * polynomial_derivatives[order] / cutoff);
+    }
+    (values, derivatives)
+}
+
+fn sinc(value: f64) -> f64 {
+    if value.abs() < 1.0e-8 {
+        1.0 - value * value / 6.0
+    } else {
+        value.sin() / value
+    }
+}
+
+fn sinc_derivative(value: f64) -> f64 {
+    if value.abs() < 1.0e-6 {
+        -value / 3.0 + value.powi(3) / 30.0
+    } else {
+        (value.cos() * value - value.sin()) / (value * value)
+    }
+}
+
+fn simplified_bessel_aux(distance: f64, cutoff: f64, order: usize) -> (f64, f64) {
+    let first = (order + 1) as f64;
+    let second = (order + 2) as f64;
+    let sign = if order % 2 == 0 { 1.0 } else { -1.0 };
+    let prefactor =
+        sign * 2.0_f64.sqrt() * std::f64::consts::PI / cutoff.powf(1.5) * first * second
+            / (first * first + second * second).sqrt();
+    let first_scale = first * std::f64::consts::PI / cutoff;
+    let second_scale = second * std::f64::consts::PI / cutoff;
+    let value = prefactor * (sinc(distance * first_scale) + sinc(distance * second_scale));
+    let derivative = prefactor
+        * (sinc_derivative(distance * first_scale) * first_scale
+            + sinc_derivative(distance * second_scale) * second_scale);
+    (value, derivative)
+}
+
+fn simplified_bessel(count: usize, cutoff: f64, distance: f64) -> (Vec<f64>, Vec<f64>) {
+    if distance >= cutoff {
+        return (vec![0.0; count], vec![0.0; count]);
+    }
+    let mut values = Vec::with_capacity(count);
+    let mut derivatives = Vec::with_capacity(count);
+    if count == 0 {
+        return (values, derivatives);
+    }
+    let (first, first_derivative) = simplified_bessel_aux(distance, cutoff, 0);
+    values.push(first);
+    derivatives.push(first_derivative);
+    let mut previous_d = 1.0;
+    for order in 1..count {
+        let n = order as f64;
+        let e = n.powi(2) * (n + 2.0).powi(2) / (4.0 * (n + 1.0).powi(4) + 1.0);
+        let d = 1.0 - e / previous_d;
+        let mixing = (e / previous_d).sqrt();
+        let normalization = d.sqrt();
+        let (auxiliary, auxiliary_derivative) = simplified_bessel_aux(distance, cutoff, order);
+        values.push((auxiliary + mixing * values[order - 1]) / normalization);
+        derivatives.push((auxiliary_derivative + mixing * derivatives[order - 1]) / normalization);
+        previous_d = d;
     }
     (values, derivatives)
 }
@@ -868,6 +931,7 @@ fn parse_bond(body: &str) -> Result<Bond, String> {
         "ChebPow" => RadialKind::PowerScaled,
         "ChebExpCos" => RadialKind::ExponentialCosine,
         "ChebLinear" => RadialKind::LinearScaled,
+        "SBessel" => RadialKind::SimplifiedBessel,
         value => return Err(format!("unsupported PACE radial basis {value}")),
     };
     let radial_parameters = field_f64_array(&fields, "radparameters")?;
@@ -1164,5 +1228,22 @@ mod tests {
         assert_eq!(descending_polynomial_switch(2.0, 2.0, 0.5), 0.0);
         let (middle, _) = descending_polynomial_switch_with_derivative(1.75, 2.0, 0.5);
         assert!((middle - 0.5).abs() < 1.0e-14);
+    }
+
+    #[test]
+    fn simplified_bessel_derivatives_match_finite_differences() {
+        let distance = 2.137;
+        let step = 1.0e-6;
+        let (values, derivatives) = simplified_bessel(15, 5.0, distance);
+        let (lower, _) = simplified_bessel(15, 5.0, distance - step);
+        let (upper, _) = simplified_bessel(15, 5.0, distance + step);
+        for index in 0..values.len() {
+            let numerical = (upper[index] - lower[index]) / (2.0 * step);
+            assert!(
+                (derivatives[index] - numerical).abs() < 2.0e-9,
+                "basis {index}: analytic={}, numerical={numerical}",
+                derivatives[index]
+            );
+        }
     }
 }

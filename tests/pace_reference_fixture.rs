@@ -121,6 +121,31 @@ fn rank_one_chebpow_matches_lammps_oracle() {
 }
 
 #[test]
+fn sbessel_rank_one_matches_python_ace_oracle() {
+    // Frozen from official ICAMS python-ace commit
+    // b143ac3c5d18c55d8a1f0701fae855b2638536fe.
+    for (distance, oracle_total_energy) in [
+        (0.5, 1.3642287395620389),
+        (1.0, 1.2030019100150908),
+        (2.0, 0.7042495846821467),
+        (4.25, 0.013172351831062924),
+        (4.75, 0.0004587334497791528),
+        (5.1, 0.0),
+    ] {
+        let configuration = copper_configuration(distance);
+        let model =
+            PaceModel::load(&fixture("probe_sbessel.yace"), &configuration.species).unwrap();
+        let runtime = PaceNativeModel::new(model, &configuration, 1.0).unwrap();
+        let error = (runtime.cached_total_energy() - oracle_total_energy).abs();
+        assert!(
+            error < 2.0e-11,
+            "r={distance}: native={:.16e}, python-ace={oracle_total_energy:.16e}, error={error:.3e}",
+            runtime.cached_total_energy()
+        );
+    }
+}
+
+#[test]
 fn core_repulsion_and_e0_match_lammps_oracle() {
     for (distance, lammps_total) in [
         (0.5, 24.167511919302636869),

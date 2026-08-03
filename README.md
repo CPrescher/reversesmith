@@ -346,13 +346,13 @@ No Python package or LAMMPS installation is used at runtime. The model supplies
 the directed species-pair cutoffs, and rsmith maintains a dedicated cell list
 plus a transactional per-atom energy cache. Do not set `cutoff` or `delta`.
 The current reader supports C-tilde `.yace` files using `ChebPow`,
-`ChebExpCos`, or `ChebLinear` radial bases, Finnis-Sinclair or shifted/scaled
-Finnis-Sinclair embeddings, arbitrary product rank, multiple elements, and
-`density` or `distance` core cutoffs. Legacy plain-text `.ace`, B-basis
-`.yaml`, `SBessel`, and ZBL models are rejected with an explicit error.
+`ChebExpCos`, `ChebLinear`, or `SBessel` radial bases, Finnis-Sinclair or
+shifted/scaled Finnis-Sinclair embeddings, arbitrary product rank, multiple
+elements, and `density` or `distance` core cutoffs. Legacy plain-text `.ace`,
+B-basis `.yaml`, and ZBL models are rejected with an explicit error.
 
-Frozen LAMMPS product-evaluator references cover rank 1, a fitted nonlinear
-rank-2 Cu potential, and a rank-4 ChebExpCos model:
+Frozen LAMMPS and official python-ace references cover rank 1, `SBessel`, a
+fitted nonlinear rank-2 Cu potential, and a rank-4 ChebExpCos model:
 
 ```bash
 cargo test --test pace_reference_fixture

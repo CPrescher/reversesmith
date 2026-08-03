@@ -101,16 +101,16 @@ or proposed atom position. Every cell dimension must exceed twice the largest
 model cutoff for unambiguous minimum-image environments.
 
 Supported C-tilde features are multiple elements, arbitrary product rank,
-`ChebPow`, `ChebExpCos`, and `ChebLinear` radial bases, Finnis-Sinclair and
-shifted/scaled Finnis-Sinclair embeddings, fitted radial contractions, and
-`density` or `distance` core cutoffs. This first reader deliberately rejects
-legacy plain-text `.ace`, B-basis `.yaml`, `SBessel`, and ZBL models instead of
-silently evaluating a different potential. PACE training, forces, stress, and
-extrapolation grades are outside rsmith's energy-only RMC interface.
+`ChebPow`, `ChebExpCos`, `ChebLinear`, and `SBessel` radial bases,
+Finnis-Sinclair and shifted/scaled Finnis-Sinclair embeddings, fitted radial
+contractions, and `density` or `distance` core cutoffs. This first reader
+deliberately rejects legacy plain-text `.ace`, B-basis `.yaml`, and ZBL models
+instead of silently evaluating a different potential. PACE training, forces,
+stress, and extrapolation grades are outside rsmith's energy-only RMC interface.
 
-The committed tests contain frozen LAMMPS `pair_style pace product` energies
-for radial rank 1, a fitted nonlinear rank-2 Cu model, and a rank-4 angular
-model:
+The committed tests contain frozen LAMMPS `pair_style pace product` and
+official python-ace energies for radial rank 1, `SBessel`, a fitted nonlinear
+rank-2 Cu model, and a rank-4 angular model:
 
 ```bash
 cargo test --test pace_reference_fixture

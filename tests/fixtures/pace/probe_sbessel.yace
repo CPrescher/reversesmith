@@ -1,0 +1,10 @@
+elements: [Cu]
+E0: [0.0]
+deltaSplineBins: 0.001
+embeddings:
+  0: {ndensity: 1, FS_parameters: [1.0, 1.0], npoti: FinnisSinclair, rho_core_cutoff: 100000.0, drho_core_cutoff: 250.0}
+bonds:
+  [0, 0]: {nradmax: 1, lmax: 2, nradbasemax: 3, radbasename: SBessel, radparameters: [5.0], radcoefficients: [[[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 0.0]]], prehc: 0.0, lambdahc: 0.0, rcut: 5.0, dcut: 0.5, rcut_in: 0.0, dcut_in: 0.0, inner_cutoff_type: density}
+functions:
+  0:
+    - {mu0: 0, rank: 1, ndensity: 1, num_ms_combs: 1, mus: [0], ns: [1], ls: [0], ms_combs: [0], ctildes: [1.0]}

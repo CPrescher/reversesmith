@@ -1,0 +1,61 @@
+status = "passed_single_seed_joint_acceptance_hrmc_production_smoke"
+date = "2026-08-03"
+protocol = "hrmc-production-unscreened.toml"
+moves = 6000
+seed = 20260802
+threads = 1
+hardware = "Apple M4 Pro, 48 GB, macOS arm64"
+
+[guards]
+required_runs = ["pedone-w3", "pedone-w10", "pedone-w30", "gap-w0p1", "gap-w0p3", "gap-w0p4", "pace-w3", "pace-w10", "pace-w30"]
+attempted_moves = 6000
+minimum_fit_progress_fraction = 0.5
+minimum_distance_a = { "Si-Si" = 2.0, "Si-O" = 1.35, "O-O" = 2.0 }
+pace_selected_weight = 3.0
+pace_minimum_speedup_over_gap = 20.0
+
+[control.target_gap_from_pedone]
+pure_neutron_rms = 0.091217510
+pure_xray_rms = 0.103386637
+pure_mean_partial_rdf_rms = 0.601264363
+pure_wall_seconds = 0.529350042
+
+[control.target_pedone_from_gap]
+pure_neutron_rms = 0.085414716
+pure_xray_rms = 0.101743113
+pure_mean_partial_rdf_rms = 0.458580467
+pure_wall_seconds = 0.521959333
+
+[observed.target_gap_from_pedone]
+runs = ["gap-w0p1", "gap-w0p3", "gap-w0p4", "pace-w3", "pace-w10", "pace-w30", "pedone-w3", "pedone-w10", "pedone-w30"]
+neutron_progress_fraction = [1.0038, 0.9614, 0.9193, 1.0301, 0.9668, 0.7648, 1.0416, 0.9922, 0.8298]
+xray_progress_fraction = [0.9988, 0.9714, 0.9202, 1.0021, 0.9031, 0.6482, 0.9882, 0.9321, 0.6921]
+energy_change_ev_per_atom = [0.662287, 0.641400, 0.615840, 0.111528, 0.064015, 0.017602, 0.089235, 0.059698, 0.016261]
+mean_partial_rdf_rms = [0.611594, 0.609681, 0.610662, 0.595079, 0.588610, 0.636131, 0.599088, 0.583532, 0.602580]
+accepted_moves = [2883, 2665, 2486, 2735, 2286, 1664, 2734, 2434, 1806]
+wall_seconds = [309.095692917, 309.373191250, 307.678521958, 12.637205667, 12.335456209, 12.474842833, 0.676725333, 0.676010250, 0.639966959]
+
+[observed.target_pedone_from_gap]
+runs = ["gap-w0p1", "gap-w0p3", "gap-w0p4", "pace-w3", "pace-w10", "pace-w30", "pedone-w3", "pedone-w10", "pedone-w30"]
+neutron_progress_fraction = [0.9695, 0.9686, 0.9427, 1.0058, 0.9834, 0.7369, 0.9959, 0.9862, 0.7439]
+xray_progress_fraction = [0.9726, 0.9657, 0.9559, 1.0119, 0.9322, 0.6192, 1.0090, 0.9843, 0.7580]
+energy_change_ev_per_atom = [0.644910, 0.618857, 0.607867, 0.161352, 0.077219, 0.008396, 0.155430, 0.097230, 0.028050]
+mean_partial_rdf_rms = [0.459512, 0.464444, 0.464480, 0.446524, 0.463711, 0.545032, 0.446141, 0.452049, 0.516419]
+accepted_moves = [2897, 2779, 2731, 2766, 2352, 1694, 2819, 2467, 1791]
+wall_seconds = [349.582849500, 351.039504333, 354.778523917, 15.852166583, 16.117032625, 16.632309291, 0.649079834, 0.654515541, 0.691452375]
+
+[selection]
+pace_weight = 3.0
+reason = "PACE weight 3 preserves 100-103% of pure-RMC neutron/X-ray progress and improves hidden-target mean partial-RDF RMS in both directions; larger weights do not improve this symmetric tradeoff."
+pace_rdf_improvement_fraction = [0.010285, 0.026292]
+pedone_comparator = "Pedone weight 3 gives a statistically unresolved similar single-seed RDF improvement, so this smoke does not establish a PACE-specific structural advantage."
+
+[timing]
+pace_seconds = [12.335456209, 16.632309291]
+gap_seconds = [307.678521958, 354.778523917]
+pace_speedup_over_matched_gap_range = [21.33, 25.08]
+pace_slowdown_vs_pure_rmc_range = [23.30, 31.87]
+
+[interpretation]
+result = "Native PACE makes ACE-regularized 3000-atom silica refinement practical and provides a balanced weight-3 trajectory, but Pedone is comparably effective in this synthetic recovery smoke."
+boundary = "Single-seed synthetic cross-recovery supports implementation, calibration, and throughput claims only. It does not establish physical superiority over EPSR, GAP, Pedone, or any other method."
