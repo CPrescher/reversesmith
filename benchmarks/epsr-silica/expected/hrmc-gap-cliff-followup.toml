@@ -1,0 +1,26 @@
+status = "followup_protocol_frozen_before_results"
+date = "2026-08-03"
+scope = "resolve the GAP-HRMC acceptance cliff between weights 0.3 and 1.0"
+parent_protocol = "hrmc-weight-sweep.toml"
+trigger = "The frozen coarse pilot retained 89-94% of pure-RMC fit progress at weight 0.3 but accepted only 0-10 of 1000 moves at weight 1.0."
+
+[budget]
+moves = 1000
+seed = 20260802
+threads = 1
+same_starts_targets_and_constraints_as_parent = true
+
+[weights]
+gap = [0.4, 0.5, 0.6, 0.8]
+rationale = "linear refinement of the predeclared unresolved interval, retaining 0.3 and 1.0 as boundary observations from the parent pilot"
+
+[selection]
+minimum_fit_progress_fraction_of_pure_rmc = 0.5
+reject_if_new_minimum_distance_violation = true
+high_weight = "largest tested weight that passes both neutron and X-ray progress guards in both cross-recovery directions"
+knee_weight = "nondominated lower weight nearest the onset of a material energy-drift reduction"
+production_policy = "combine the selected high and knee weights with the parent low control for matched 6000-move follow-up"
+
+[claims]
+allowed = "resolve the location of the GAP acceptance cliff and select a bounded production bracket"
+forbidden = "claim MLIP superiority, convergence, equilibrium sampling, or recovered physical truth"

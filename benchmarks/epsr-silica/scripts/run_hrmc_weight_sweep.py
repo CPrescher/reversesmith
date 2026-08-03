@@ -14,6 +14,11 @@ from pathlib import Path
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", choices=("pure", "pedone", "gap"), required=True)
 parser.add_argument("--binary", type=Path)
+parser.add_argument(
+    "--only-missing",
+    action="store_true",
+    help="skip configurations that already contain refined.xyz",
+)
 args = parser.parse_args()
 
 case_root = Path(__file__).resolve().parents[1]
@@ -43,6 +48,8 @@ for case in sorted(root.glob("target-*_*")):
     case_summary = summary["cases"].setdefault(case.name, {})
     runs = [case / pattern] if args.model == "pure" else sorted(case.glob(pattern))
     for run in runs:
+        if args.only_missing and (run / "refined.xyz").is_file():
+            continue
         config = run / "run.toml"
         if not config.is_file():
             raise SystemExit(f"missing configuration {config}")

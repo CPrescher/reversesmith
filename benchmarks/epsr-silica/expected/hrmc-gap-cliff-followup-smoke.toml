@@ -1,0 +1,46 @@
+status = "passed_gap_acceptance_cliff_followup_not_production_comparison"
+date = "2026-08-03"
+protocol = "hrmc-gap-cliff-followup.toml"
+moves = 1000
+seed = 20260802
+threads = 1
+hardware = "Apple M4 Pro, 48 GB, macOS arm64"
+
+[guards]
+required_weights = [0.4, 0.5, 0.6, 0.8]
+attempted_moves = 1000
+minimum_fit_progress_fraction = 0.5
+minimum_distance_a = { "Si-Si" = 2.0, "Si-O" = 1.35, "O-O" = 2.0 }
+highest_passing_weight = 0.4
+first_failing_weight = 0.5
+weight_0p4_minimum_fit_progress_fraction = 0.78
+weight_0p4_minimum_energy_drift_reduction_fraction_vs_0p001 = 0.10
+
+[selection]
+gap_production_bracket = [0.1, 0.3, 0.4]
+low = "0.1 retains 93-102% of pure-RMC progress and provides a weak-bias control"
+knee = "0.3 retains 89-94% of progress and first gives a repeatable 6-8% energy-drift reduction"
+high = "0.4 retains 79-85% of progress and gives a 10-12% energy-drift reduction; 0.5 fails the cross-direction progress guard"
+
+[observed.target_gap_from_pedone]
+weights = [0.3, 0.4, 0.5, 0.6, 0.8, 1.0]
+neutron_progress_fraction = [0.937369, 0.789721, 0.393677, 0.183708, 0.012125, 0.000000]
+xray_progress_fraction = [0.912597, 0.801513, 0.368529, 0.172238, 0.018412, 0.000000]
+energy_change_ev_per_atom = [0.552270153, 0.513236820, 0.321756820, 0.148240153, 0.012480153, 0.000000153]
+accepted_moves = [405, 307, 107, 43, 3, 0]
+mean_partial_rdf_rms = [0.733735, 0.743220, 0.768354, 0.776349, 0.785052, 0.785757]
+wall_seconds = [57.890542292, 58.726329250, 58.475030458, 58.194025167, 58.864143208, 56.916638084]
+
+[observed.target_pedone_from_gap]
+weights = [0.3, 0.4, 0.5, 0.6, 0.8, 1.0]
+neutron_progress_fraction = [0.908312, 0.852119, 0.794254, 0.687187, 0.375209, 0.046529]
+xray_progress_fraction = [0.889079, 0.842471, 0.794594, 0.651056, 0.339844, 0.039845]
+energy_change_ev_per_atom = [0.455850039, 0.444326706, 0.442040039, 0.413976706, 0.271050039, 0.041116706]
+accepted_moves = [521, 461, 389, 292, 118, 10]
+mean_partial_rdf_rms = [0.658012, 0.665353, 0.678883, 0.697219, 0.739404, 0.767287]
+wall_seconds = [66.197799000, 67.916235625, 67.671528000, 67.699015417, 68.536690917, 66.852741917]
+
+[interpretation]
+asymmetry = "The cliff occurs earlier for the Pedone start fitted toward the GAP target; the high production weight is therefore selected by the worse of the two symmetric directions."
+structure = "At this short budget, hidden-target RDF recovery decreases with lost scattering-fit progress; no independent structural advantage is established."
+boundary = "This follow-up resolves a numerical weight bracket. It is not evidence of MLIP superiority, convergence, equilibrium sampling, or physical truth."

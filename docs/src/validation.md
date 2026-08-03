@@ -185,15 +185,22 @@ pilot is required before the matched 6,000-move comparison. These results
 calibrate regularizer influence; they do not establish convergence or a
 structural advantage over EPSR.
 
+The frozen fine-grid follow-up tested 0.4, 0.5, 0.6, and 0.8. Weight 0.4 is the
+largest value that passes the 50% guard in both directions, retaining 79--85%
+of pure-RMC neutron/X-ray progress and reducing positive energy drift by
+10--12% relative to `0.001`. Weight 0.5 passes from the GAP start toward the
+Pedone target but retains only 37--39% progress in the reverse direction. The
+selected GAP low/knee/high production bracket is therefore 0.1, 0.3, and 0.4.
+
 ## Remaining publication gates
 
 1. Validate liquid-Ga structures against held-out data or an independent
    atomistic/physical oracle.
 2. Test independent equilibrium starts to separate basin sensitivity from
    convergence out of unstructured liquids.
-3. Refine the GAP acceptance cliff between weights 0.3 and 1.0, then run the
-   selected Pedone and GAP brackets for 6,000 moves; repair the RMCProfile
-   parallel runtime and freeze exact coordinate-save and timing rules.
+3. Run the selected Pedone 3/10/30 and GAP 0.1/0.3/0.4 brackets for 6,000
+   moves; repair the RMCProfile parallel runtime and freeze exact
+   coordinate-save and timing rules.
 4. Run the matched multi-seed native/rsmith silica ensembles, estimate native
    seed-to-seed spread, and freeze stochastic equivalence margins before
    comparing pair-potential and MLIP-regularized refinements.

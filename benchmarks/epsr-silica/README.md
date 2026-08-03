@@ -227,6 +227,14 @@ model. At this short budget the independently scored RDF distance generally
 tracks the amount of scattering-fit progress. The defensible result is weight
 calibration and detection of the GAP acceptance cliff, not HRMC superiority.
 
+The preregistered follow-up resolves that cliff with weights 0.4, 0.5, 0.6,
+and 0.8. Weight 0.4 is the largest value that passes the 50% progress guard in
+both directions: it retains 79--85% of pure-RMC neutron/X-ray progress and
+reduces positive energy drift by 10--12% relative to weight `0.001`. Weight
+0.5 retains 79% progress in the Pedone-target direction but only 37--39% in the
+GAP-target direction, so it fails the symmetric rule. The selected GAP
+low/knee/high production bracket is therefore 0.1, 0.3, and 0.4.
+
 ### Local timing diagnostic
 
 End-to-end one-thread wall times on an Apple M4 Pro were:
@@ -277,6 +285,9 @@ RMCProfile build, exact saved move counts, and calibrated energy weights.
 - `scripts/prepare_hrmc_weight_sweep.py`, `run_hrmc_weight_sweep.py`, and
   `verify_hrmc_weight_sweep.py`: frozen Pedone/GAP weight-pilot preparation,
   execution, scoring, and regression guards;
+- `scripts/prepare_hrmc_gap_cliff_followup.py` and
+  `verify_hrmc_gap_cliff_followup.py`: additive GAP cliff-grid preparation and
+  its symmetric selection guard;
 - `scripts/analyze_ambient_models.py`: independent RDF, coordination, angle,
   minimum-distance, and shortest-ring analysis of both model endpoints;
 - `scripts/verify_ambient_models.py`: deterministic verifier for the pinned
@@ -293,6 +304,8 @@ RMCProfile build, exact saved move counts, and calibrated energy weights.
   adapter regression guards, explicitly not publication equivalence limits;
 - `expected/hrmc-weight-sweep.toml` and `hrmc-weight-sweep-smoke.toml`: frozen
   pilot design, observed Pareto brackets, timings, and claim boundary;
+- `expected/hrmc-gap-cliff-followup.toml` and its `-smoke.toml` record: frozen
+  fine-grid design and the selected GAP 0.1/0.3/0.4 production bracket;
 - `reference/README.md`: provenance and redistribution rules for upstream data.
 
 ## Local reproduction
@@ -329,4 +342,10 @@ python3 scripts/run_hrmc_weight_sweep.py --model gap \
   --binary /path/to/gap-enabled/rsmith
 python3 scripts/score_cross_recovery.py
 python3 scripts/verify_hrmc_weight_sweep.py
+
+python3 scripts/prepare_hrmc_gap_cliff_followup.py
+python3 scripts/run_hrmc_weight_sweep.py --model gap --only-missing \
+  --binary /path/to/gap-enabled/rsmith
+python3 scripts/score_cross_recovery.py
+python3 scripts/verify_hrmc_gap_cliff_followup.py
 ```

@@ -57,6 +57,14 @@ changes = [
   "use the pilot only to bracket matched 6000-move production weights, not to claim MLIP superiority",
 ]
 
+[provenance.amendment_2026_08_03_gap_cliff_followup]
+reason = "The coarse GAP pilot left an unresolved acceptance cliff between weights 0.3 and 1.0; the linear follow-up grid and worst-direction selection rule were frozen before its outcomes were scored."
+protocol = "expected/hrmc-gap-cliff-followup.toml"
+changes = [
+  "test GAP weights 0.4, 0.5, 0.6, and 0.8 under the unchanged 1000-move pilot",
+  "select the largest weight that retains at least half of pure-RMC neutron and X-ray progress in both symmetric directions",
+]
+
 [system]
 formula = "SiO2"
 number_density_atoms_per_a3 = 0.06639997054690536
