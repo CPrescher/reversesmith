@@ -418,6 +418,18 @@ that every EPSR calculation fails. The next paper-facing gate is a multi-seed,
 dense-checkpoint replication plus parameter/start sensitivity and an
 experimental or held-out physical validation case.
 
+### Frozen dense matched-fit ensemble
+
+The next gate is frozen before ensemble outcomes in
+`expected/epsr-convergence-ensemble.toml`. It reuses the ten established seeds
+and keeps independent deterministic prefixes, but concentrates native EPSR26
+checkpoints at iterations 5--100 and unconstrained-rsmith checkpoints at
+iterations 2--50, where the pilot shows overlapping achieved-fit support.
+Each case/seed is written independently under the convergence-ensemble result
+directory, so scientific runs may execute concurrently. Their wall times are
+explicitly excluded from speed claims; the cold/warm serial timing protocol
+remains separate.
+
 ### Repeated one-thread timing diagnostic
 
 The ten independent fresh-process timings per method and case are reported in
@@ -604,4 +616,10 @@ python3 scripts/run_rsmith_epsr_convergence.py --no-hard-constraints \
   --checkpoint 100 --force
 python3 scripts/score_cross_recovery.py
 python3 scripts/verify_epsr_convergence.py
+
+# Dense ensemble; --convergence-seed can be used to dispatch independent jobs.
+python3 scripts/run_native_epsr_cross.py --convergence-ensemble \
+  --convergence-seed 20260803 --force
+python3 scripts/run_rsmith_epsr_convergence.py --convergence-ensemble \
+  --convergence-seed 20260803 --force
 ```

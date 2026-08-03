@@ -326,6 +326,8 @@ parser.add_argument("--force", action="store_true")
 parser.add_argument("--zero-only", action="store_true")
 parser.add_argument("--ensemble", action="store_true")
 parser.add_argument("--convergence-pilot", action="store_true")
+parser.add_argument("--convergence-ensemble", action="store_true")
+parser.add_argument("--convergence-seed", type=int, action="append")
 parser.add_argument("--checkpoint", type=int, action="append")
 parser.add_argument(
     "--native-rminex-control",
@@ -351,71 +353,115 @@ if not binary.is_file():
     raise SystemExit(f"EPSR executable not found: {binary}")
 
 fixture_root = case_root / "results/cross-recovery"
-if args.convergence_pilot:
-    protocol = tomllib.loads(
-        (case_root / "expected/epsr-convergence-pilot.toml").read_text()
+if args.convergence_pilot or args.convergence_ensemble:
+    if args.convergence_pilot and args.convergence_ensemble:
+        raise SystemExit("choose only one convergence protocol")
+    if args.convergence_ensemble and args.native_rminex_control:
+        raise SystemExit("the rminex sensitivity control is not part of the ensemble")
+    protocol_name = (
+        "epsr-convergence-ensemble.toml"
+        if args.convergence_ensemble
+        else "epsr-convergence-pilot.toml"
     )
-    pilot_root = case_root / "results/epsr-convergence-pilot"
+    protocol = tomllib.loads(
+        (case_root / "expected" / protocol_name).read_text()
+    )
+    convergence_root = case_root / "results" / (
+        "epsr-convergence-ensemble"
+        if args.convergence_ensemble
+        else "epsr-convergence-pilot"
+    )
     method = (
         "native-epsr26-rminex-control"
         if args.native_rminex_control
         else "native-epsr26"
     )
-    summary_path = pilot_root / (
-        "native-epsr26-rminex-control-run-summary.json"
-        if args.native_rminex_control
-        else "native-epsr-run-summary.json"
+    configured_seeds = (
+        [int(seed) for seed in protocol["design"]["seeds"]]
+        if args.convergence_ensemble
+        else [int(protocol["design"]["seed"])]
     )
-    summary = {
-        "program": "EPSR26",
-        "binary": str(binary),
-        "threads": 1,
-        "sampling": "independent deterministic prefixes",
-        "cases": {},
-    }
-    seed = int(protocol["design"]["seed"])
-    moves_per_refinement = int(protocol["sampling"]["moves_per_refinement"])
-    for case in sorted(fixture_root.glob("target-*_*")):
-        targets = []
-        for filename in ("epsr-native-target-neutron.dat", "epsr-native-target-xray.dat"):
-            rows = read_iq(case / filename)
-            targets.append([row for row in rows if 0.5 <= row[0] < 25.0])
-        prefix_root = pilot_root / case.name / method / f"seed-{seed}"
-        prefix_root.mkdir(parents=True, exist_ok=True)
-        case_summary = summary["cases"].setdefault(case.name, {})
-        checkpoints = args.checkpoint or protocol["design"]["checkpoints"]
-        for refinements in checkpoints:
-            name = f"iter-{int(refinements):03d}"
-            run_dir = prefix_root / name
-            if args.only_missing and (run_dir / "DTBsilica.EPSR.v01").is_file():
-                continue
-            run_dir = prepare_run(
-                source,
-                prefix_root,
-                name,
-                case / "cross-start.data",
-                moves_per_refinement,
-                seed,
-                tuple(targets),
-                args.force,
-                refinements=int(refinements),
-                rminex=(
-                    {("Si", "Si"): 2.0, ("Si", "O"): 1.35, ("O", "O"): 2.0}
-                    if args.native_rminex_control
-                    else None
-                ),
+    selected_seeds = args.convergence_seed or configured_seeds
+    unknown_seeds = set(selected_seeds) - set(configured_seeds)
+    if unknown_seeds:
+        raise SystemExit(f"seeds not present in {protocol_name}: {sorted(unknown_seeds)}")
+    moves_per_refinement = int(
+        protocol["design"]["moves_per_refinement"]
+        if args.convergence_ensemble
+        else protocol["sampling"]["moves_per_refinement"]
+    )
+    checkpoints = args.checkpoint or (
+        protocol["methods"]["native_epsr26"]["checkpoints"]
+        if args.convergence_ensemble
+        else protocol["design"]["checkpoints"]
+    )
+    for seed in selected_seeds:
+        summary_path = convergence_root / (
+            f"{method}-seed-{seed}-run-summary.json"
+            if args.convergence_ensemble
+            else (
+                "native-epsr26-rminex-control-run-summary.json"
+                if args.native_rminex_control
+                else "native-epsr-run-summary.json"
             )
-            wall = run_epsr(binary, run_dir)
-            case_summary[name] = {
-                "status": "completed",
-                "wall_seconds": wall,
-                "seed": seed,
-                "refinements": int(refinements),
-                "attempted_moves": int(refinements) * moves_per_refinement,
-            }
-            summary_path.parent.mkdir(parents=True, exist_ok=True)
-            summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
-            print(json.dumps({case.name: {name: case_summary[name]}}, indent=2))
+        )
+        summary = {
+            "program": "EPSR26",
+            "binary": str(binary),
+            "threads": 1,
+            "sampling": "independent deterministic prefixes",
+            "seed": seed,
+            "cases": {},
+        }
+        for case in sorted(fixture_root.glob("target-*_*")):
+            targets = []
+            for filename in (
+                "epsr-native-target-neutron.dat",
+                "epsr-native-target-xray.dat",
+            ):
+                rows = read_iq(case / filename)
+                targets.append([row for row in rows if 0.5 <= row[0] < 25.0])
+            prefix_root = convergence_root / case.name / method / f"seed-{seed}"
+            prefix_root.mkdir(parents=True, exist_ok=True)
+            case_summary = summary["cases"].setdefault(case.name, {})
+            for refinements in checkpoints:
+                name = f"iter-{int(refinements):03d}"
+                run_dir = prefix_root / name
+                if args.only_missing and (run_dir / "DTBsilica.EPSR.v01").is_file():
+                    continue
+                run_dir = prepare_run(
+                    source,
+                    prefix_root,
+                    name,
+                    case / "cross-start.data",
+                    moves_per_refinement,
+                    seed,
+                    tuple(targets),
+                    args.force,
+                    refinements=int(refinements),
+                    rminex=(
+                        {
+                            ("Si", "Si"): 2.0,
+                            ("Si", "O"): 1.35,
+                            ("O", "O"): 2.0,
+                        }
+                        if args.native_rminex_control
+                        else None
+                    ),
+                )
+                wall = run_epsr(binary, run_dir)
+                case_summary[name] = {
+                    "status": "completed",
+                    "wall_seconds": wall,
+                    "seed": seed,
+                    "refinements": int(refinements),
+                    "attempted_moves": int(refinements) * moves_per_refinement,
+                }
+                summary_path.parent.mkdir(parents=True, exist_ok=True)
+                summary_path.write_text(
+                    json.dumps(summary, indent=2, sort_keys=True) + "\n"
+                )
+                print(json.dumps({case.name: {name: case_summary[name]}}, indent=2))
     raise SystemExit(0)
 
 if args.ensemble:

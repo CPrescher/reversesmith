@@ -1,0 +1,45 @@
+status = "epsr_dense_matched_fit_ensemble_frozen_before_outcomes"
+date = "2026-08-03"
+parent = "epsr-convergence-pilot-observed.toml"
+scope = "replicate the two-case native-EPSR26 versus unconstrained-rsmith convergence result across ten deterministic seeds and compare hidden structure only at overlapping achieved fit"
+
+[design]
+seeds = [20260802, 20260803, 20260804, 20260805, 20260806, 20260807, 20260808, 20260809, 20260810, 20260811]
+threads_per_run = 1
+independent_prefix_runs = true
+moves_per_refinement = 15000
+parallel_scientific_runs_allowed = true
+timing_claims_from_parallel_runs = false
+
+[methods.native_epsr26]
+checkpoints = [5, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 75, 100]
+ntimes = 5
+ireset = 2
+iinit = 1
+feedback = 0.9
+constraints = "stock EPSR26 tutorial-like controls; no effective hard pair-distance rejection"
+
+[methods.rsmith_epsr_unconstrained]
+checkpoints = [2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50]
+mode = "pure"
+feedback = 0.9
+temperature_ev = 0.025852
+constraints = "no hard minimum-distance table"
+
+[outcomes]
+fit_scalar = "sqrt((neutron_iq_rms^2 + xray_iq_rms^2)/2) from the common independent scorer"
+matching_tolerance = 0.002
+minimum_seeds_for_claim = 8
+primary_structural = "mean hidden partial g(r) RMS at the nearest cross-method fit match within each seed and case"
+secondary_structural = ["mean hidden partial S(Q) RMS", "coordination defects", "angle errors", "ring total variation", "minimum pair distances"]
+native_failure_threshold_si_si_a = 2.0
+statistics = ["all seeds", "median", "interquartile range", "paired bootstrap 95-percent confidence interval"]
+
+[matching]
+policy = "within each case and seed, construct one-to-one native/rsmith checkpoint pairs in increasing fit order; accept only pairs within tolerance and never reuse a checkpoint"
+primary_pair = "the accepted pair nearest the median of the common achieved-fit overlap for that seed and case"
+sensitivity = "report all accepted pairs and repeat the paired structural comparison at the best-fit and worst-fit ends of common support"
+
+[claims]
+allowed = "stochastic replication of fit-matched hidden-structure recovery and incidence of the preregistered native Si-Si close-contact failure for these two synthetic cases"
+forbidden = "universal EPSR superiority, equilibrium sampling, experimental validity, or timing ratios from concurrently executed ensemble runs"

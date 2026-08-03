@@ -726,3 +726,56 @@ def score_epsr_convergence_root(root: Path):
 
 
 score_epsr_convergence_root(case_root / "results/epsr-convergence-pilot")
+
+
+def score_epsr_convergence_ensemble_root(root: Path):
+    if not root.is_dir():
+        return
+    result = {
+        "status": "available_epsr_dense_matched_fit_ensemble_outputs_scored",
+        "scope": "ten-seed independent deterministic prefixes with timing excluded from scientific claims",
+        "cases": {},
+    }
+    for ensemble_case in sorted(root.glob("target-*_*")):
+        cross_case = fixture_root / ensemble_case.name
+        target = structure_metrics(cross_case / "hidden-target.data")
+        methods = {}
+        for method_path in sorted(path for path in ensemble_case.iterdir() if path.is_dir()):
+            method = method_path.name
+            seeds = {}
+            for seed_path in sorted(method_path.glob("seed-*")):
+                checkpoints = {}
+                for run in sorted(seed_path.glob("iter-*")):
+                    if method == "native-epsr26":
+                        structure = run / "Cross.ato"
+                        fit = epsr_fit(run)
+                    else:
+                        structure = run / "refined.xyz"
+                        fit = rsmith_fit(run, cross_case)
+                    if not structure.is_file():
+                        continue
+                    model = structure_metrics(structure)
+                    checkpoints[run.name] = {
+                        "fit": fit,
+                        "common_reciprocal_distance_from_hidden_target": common_reciprocal_distance(
+                            cross_case, model
+                        ),
+                        "structural_distance_from_hidden_target": structural_distance(
+                            target, model
+                        ),
+                        "model_metrics": {
+                            key: value for key, value in model.items() if key != "rdf"
+                        },
+                    }
+                seeds[seed_path.name] = checkpoints
+            methods[method] = seeds
+        result["cases"][ensemble_case.name] = methods
+    (root / "raw-score-summary.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n"
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+score_epsr_convergence_ensemble_root(
+    case_root / "results/epsr-convergence-ensemble"
+)
