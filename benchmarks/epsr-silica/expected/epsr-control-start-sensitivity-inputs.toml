@@ -1,0 +1,57 @@
+status = "epsr_control_start_sensitivity_inputs_frozen_before_refinement_outcomes"
+date = "2026-08-03"
+protocol_commit = "5e53d94"
+protocol_sha256 = "08e64ca459d04758e72976a336af43f6fbc1f52868c81a5036ba9f9e6e94ffe1"
+binary_sha256 = "7221482466da60162f902304071e8fbaab3a33bf89899587c5894445adc558c9"
+atom_count = 3000
+si_count = 1000
+o_count = 2000
+
+[reference_potentials.scale_0p5]
+Si-Si = "113532852a134e461002736204785710fe3d59164a108c27ad780d61cfab11f2"
+Si-O = "cb3f0fcce033c7106e798d5e5e90ed4866dcc2c54b4c33a4100d22af368c78e6"
+O-O = "28f9ff6bbfbb190005b3cd3d0d575c3a735a970d709c98b6509d82cf485ccc6e"
+
+[reference_potentials.scale_1p0]
+Si-Si = "700521417d201e3578d996130db398c158a58dfda61c428189553a0869b50910"
+Si-O = "e82ccad2cd5e10e7aaa436c1860d6287f7da25525f98795cb2e190a9693b565c"
+O-O = "5e105e26c69dc6eaecc3a176a488d295668d99a1cabb8b34fa7eb8b420ae6f67"
+
+[reference_potentials.scale_1p5]
+Si-Si = "db576cb7853e702373d1e354a1de207b575f04c976c05868e2becc0747841be2"
+Si-O = "68523ae63c51812f2a0f5049125c5f436b80d5ca38d2345d574a262ff5c2da33"
+O-O = "23db766a9b244bb66f60c00a7b5d5e06305352febcb9f538cc57a77a65c9aa6c"
+
+[cases.target-gap_from-pedone]
+original_sha256 = "cdcee77abefc18a21714ec3c1be92cada1aeeb8eec9376b138839173914b99ed"
+box_a = 35.2301271712257
+between_generated_starts_rms_a = 0.09252803072582194
+
+[cases.target-gap_from-pedone.reference-equilibrated-a]
+sha256 = "095d67997e205508821f524ba54b5093986f653b858a76f9a832031159dfea30"
+minimum_distance_a = 1.5088448424848204
+from_original_rms_a = 0.2015583119375734
+
+[cases.target-gap_from-pedone.reference-equilibrated-b]
+sha256 = "b2f9e7539852223d29e5d834f3286c6df4c3678d5b837ca99aae003ae77a13b8"
+minimum_distance_a = 1.5194636160888153
+from_original_rms_a = 0.2010549377184319
+
+[cases.target-pedone_from-gap]
+original_sha256 = "e4cd4c2538a75d37a65ac97c24189619653d220e1bdb2a5e752b3af05401e9ea"
+box_a = 33.9028595371531
+between_generated_starts_rms_a = 0.09295533158821459
+
+[cases.target-pedone_from-gap.reference-equilibrated-a]
+sha256 = "d0f5beb8ce6330c6204103aba098f355cd7af0b2554f5f3e15718beb1d8a5ded"
+minimum_distance_a = 1.5135422627094925
+from_original_rms_a = 0.1837319944616038
+
+[cases.target-pedone_from-gap.reference-equilibrated-b]
+sha256 = "45752aa7ae83c4d4ae3b800140dfb7ab992dd3078d6727b71ca43cb0ecccbb4d"
+minimum_distance_a = 1.5089294318969197
+from_original_rms_a = 0.18253633470248948
+
+[claims]
+allowed = "the prepared target-blind inputs are deterministic, physically nonpathological, composition/box preserving, and distinct"
+forbidden = "any inference about the sensitivity refinement outcomes"

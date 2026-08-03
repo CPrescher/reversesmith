@@ -549,9 +549,10 @@ hardware/software metadata.
   paired-bootstrap analysis, close-contact counts, and strict provenance
   verification;
 - `scripts/prepare_epsr_control_start_sensitivity.py`, the two EPSR runners,
-  and `summarize_epsr_control_start_sensitivity.py`: scaled-reference and
-  target-blind common-start preparation, the frozen six-arm/five-seed matrix,
-  and preregistered robustness decisions;
+  `verify_epsr_control_start_inputs.py`, and
+  `summarize_epsr_control_start_sensitivity.py`: scaled-reference and
+  target-blind common-start preparation and verification, the frozen
+  six-arm/five-seed matrix, and preregistered robustness decisions;
 - `scripts/prepare_hrmc_weight_sweep.py`, `run_hrmc_weight_sweep.py`, and
   `verify_hrmc_weight_sweep.py`: frozen Pedone/GAP weight-pilot preparation,
   execution, scoring, and regression guards;
@@ -595,6 +596,8 @@ hardware/software metadata.
   extension decisions, and verified convergence observations;
 - `expected/epsr-control-start-sensitivity.toml`: frozen feedback,
   reference-strength, and common-start sensitivity design and claim boundary;
+- `expected/epsr-control-start-sensitivity-inputs.toml`: hashes and geometric
+  audit of the generated inputs, frozen before refinement outcomes;
 - `reference/README.md`: provenance and redistribution rules for upstream data.
 
 ## Local reproduction
@@ -688,6 +691,7 @@ python3 scripts/verify_epsr_convergence_ensemble.py
 
 # Six-arm control/start sensitivity; arms and seeds can be dispatched separately.
 python3 scripts/prepare_epsr_control_start_sensitivity.py --force
+python3 scripts/verify_epsr_control_start_inputs.py
 python3 scripts/run_native_epsr_cross.py --control-start-sensitivity \
   --sensitivity-arm feedback-0p5 --convergence-seed 20260802 --force
 python3 scripts/run_rsmith_epsr_convergence.py --control-start-sensitivity \
