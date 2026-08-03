@@ -26,3 +26,6 @@ local_reference_ato_sha256 = "f6a5528c0f8adea3502a718e470b3b3e44b589d76556e95618
 forward_baseline_status = "passed_regression_guards"
 reference_potential_status = "passed_native_curve_and_energy_guards"
 joint_neutron_xray_smoke_status = "passed_one_epoch"
+ambient_model_reference_status = "gap_and_pedone_endpoints_pinned_and_characterized"
+ambient_model_source_commit = "b05590846c87eb58cf1ed2e09a6787c1d67f9e53"
+ambient_model_raw_files_committed = false

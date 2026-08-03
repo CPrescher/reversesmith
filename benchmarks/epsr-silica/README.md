@@ -109,6 +109,44 @@ The deterministic forward and reference-potential blockers are therefore
 closed. The remaining reproduction gate is a matched, multi-epoch native and
 rsmith ensemble with frozen seed-to-seed equivalence margins.
 
+## Ambient GAP and Pedone model references
+
+Two 3,000-atom 300 K endpoints from the private `CPrescher/SiO2_glass`
+repository are now pinned as secondary structural references at commit
+`b05590846c87eb58cf1ed2e09a6787c1d67f9e53`:
+
+- a Pedone-pre-equilibrated structure quenched and held with the Erhard et al.
+  silica GAP;
+- a Pedone-only structure produced with the same fast schedule.
+
+Both use a single deterministic seed and a `10^14 K/s` quench, so they are
+model endpoints rather than equilibrium ensembles. They also adopt different
+0-bar model densities. The GAP endpoint is 2.282 g/cm3 (3.33% above the EPSR
+worked number density), whereas Pedone is 2.560 g/cm3 (15.94% above it).
+
+An independent minimum-image analysis gives:
+
+| Diagnostic | GAP | Pedone |
+|---|---:|---:|
+| Si coordination defects, 2.2 A cutoff | 0.40% | 0.40% |
+| O coordination defects, 2.2 A cutoff | 0.60% | 0.85% |
+| mean O-Si-O angle | 109.40 deg | 109.31 deg |
+| mean Si-O-Si angle | 139.21 deg | 148.06 deg |
+| Si-Si RDF peak | 2.99 A | 3.11 A |
+| Si-O RDF peak | 1.61 A | 1.61 A |
+| O-O RDF peak | 2.59 A | 2.57 A |
+
+The independently regenerated RDF table agrees with the source repository's
+preserved curves to `1.16e-13` maximum absolute difference.
+
+The analyzer also freezes the complete coordination counts, angle summaries,
+minimum distances, and an edge-weighted shortest-cycle diagnostic for the Si
+network. These references can reveal whether a fitted ensemble has gross
+network defects and provide Pedone/GAP recovery tests. Closeness to GAP is not
+itself the paper's superiority criterion: held-out scattering and independently
+defined chemical diagnostics remain primary, and RDF comparisons must state
+the density mismatch.
+
 The scientific claim is not "smaller chi-squared than EPSR". The meaningful
 test is whether MLIP-HRMC gives better held-out or chemically diagnostic
 structure at the same data agreement.
@@ -119,6 +157,8 @@ structure at the same data agreement.
 - `PERMISSION_REQUEST.md`: ready-to-send publication/reuse request;
 - `fetch_reference.sh`: explicit, locally gated acquisition with SHA-256 log;
 - `import_local_reference.sh`: local-only DTBsilicaNX importer and hasher;
+- `import_ambient_models.sh`: local-only importer for the pinned private
+  `SiO2_glass` GAP and Pedone endpoints;
 - `scripts/run_native_zero_move.py`: clean one-configuration EPSR26 runner;
 - `scripts/compare_forward.py`: exact-structure rsmith comparison and
   independent RDF oracle;
@@ -126,10 +166,16 @@ structure at the same data agreement.
 - `scripts/run_reference_potential_smoke.py`: independent EPSR reference-
   potential reconstruction, native curve/energy gate, normalization
   conversion, and one-epoch joint neutron/X-ray rsmith smoke run;
+- `scripts/analyze_ambient_models.py`: independent RDF, coordination, angle,
+  minimum-distance, and shortest-ring analysis of both model endpoints;
+- `scripts/verify_ambient_models.py`: deterministic verifier for the pinned
+  structure hashes and derived observations;
 - `expected/native-forward.toml`: provenance hashes, observations, and
   regression guards;
 - `expected/reference-potential-smoke.toml`: frozen potential and smoke-run
   observations plus regression guards;
+- `expected/ambient-model-endpoints.toml`: pinned source hashes, model
+  provenance, structural observations, and claim boundary;
 - `reference/README.md`: provenance and redistribution rules for upstream data.
 
 ## Local reproduction
@@ -142,4 +188,8 @@ cargo build --release --manifest-path ../../Cargo.toml
 python3 scripts/compare_forward.py
 python3 scripts/verify_forward.py
 python3 scripts/run_reference_potential_smoke.py
+
+SIO2_GLASS_ROOT=/path/to/SiO2_glass ./import_ambient_models.sh
+python3 scripts/analyze_ambient_models.py
+python3 scripts/verify_ambient_models.py
 ```

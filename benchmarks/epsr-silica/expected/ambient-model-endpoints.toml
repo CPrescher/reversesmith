@@ -1,0 +1,76 @@
+status = "ambient_model_endpoints_characterized"
+date = "2026-08-03"
+source_repository = "CPrescher/SiO2_glass"
+source_commit = "b05590846c87eb58cf1ed2e09a6787c1d67f9e53"
+redistribution = "local-only-until-repository-license-is-explicit"
+scope = "one 300 K endpoint per model; not an equilibrium ensemble or ground truth"
+
+[analysis]
+rdf_dr_a = 0.02
+rdf_rmax_a = 8.0
+si_o_bond_cutoff_a = 2.2
+ring_definition = "edge-weighted smallest alternate-path cycle in the Si network"
+upstream_rdf_sha256 = "cae4c04c38d70a9cc46ebb163e21fadb9f188f33f95e945fcd3cfec66d1dec69"
+rdf_max_absolute_difference_vs_upstream_max = 2.0e-12
+
+[gap]
+description = "Pedone-pre-equilibrated, GAP-quenched endpoint"
+sha256 = "6a37ec929c10118d8c32cef3612668488dcb05b93cc427197d9ebb8a61425448"
+atom_count = 3000
+si_count = 1000
+o_count = 2000
+box_a = 35.230127171225675
+number_density_atoms_a3 = 0.068608610226754
+mass_density_g_cm3 = 2.2817469090218543
+number_density_difference_from_epsr_percent = 3.326266053519489
+si_coordination_defect_fraction = 0.004
+o_coordination_defect_fraction = 0.006
+o_si_o_mean_degrees = 109.39591207952135
+o_si_o_standard_deviation_degrees = 6.239822330249178
+si_o_si_mean_degrees = 139.2060572514204
+si_o_si_standard_deviation_degrees = 15.758242718957915
+si_si_peak_a = 2.99
+si_o_peak_a = 1.61
+o_o_peak_a = 2.59
+si_network_edges = 1987
+si_network_acyclic_edges = 0
+edge_cycle_size_3 = 232
+edge_cycle_size_4 = 686
+edge_cycle_size_5 = 721
+edge_cycle_size_6 = 294
+edge_cycle_size_7 = 51
+edge_cycle_size_8 = 2
+edge_cycle_size_9 = 1
+
+[pedone]
+description = "Pedone-only fast-quench endpoint"
+sha256 = "71489f0a99d34a1d78c7527396346974bd50ad98531a8caad64b706a986ebef5"
+atom_count = 3000
+si_count = 1000
+o_count = 2000
+box_a = 33.90285953715307
+number_density_atoms_a3 = 0.07698609012135238
+mass_density_g_cm3 = 2.5603604648381846
+number_density_difference_from_epsr_percent = 15.942958238165073
+si_coordination_defect_fraction = 0.004
+o_coordination_defect_fraction = 0.0085
+o_si_o_mean_degrees = 109.30677476802238
+o_si_o_standard_deviation_degrees = 7.544180124299567
+si_o_si_mean_degrees = 148.05641415123472
+si_o_si_standard_deviation_degrees = 13.753254641454662
+si_si_peak_a = 3.11
+si_o_peak_a = 1.61
+o_o_peak_a = 2.57
+si_network_edges = 2008
+si_network_acyclic_edges = 0
+edge_cycle_size_3 = 108
+edge_cycle_size_4 = 550
+edge_cycle_size_5 = 908
+edge_cycle_size_6 = 404
+edge_cycle_size_7 = 37
+edge_cycle_size_8 = 1
+
+[interpretation]
+primary_physical_oracle = false
+use_for = ["secondary structural context", "pipeline recovery tests", "Pedone and GAP model controls"]
+do_not_use_for = ["selecting a best run", "claiming experimental truth", "unqualified RDF-distance ranking across unequal densities"]

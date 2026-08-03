@@ -15,6 +15,16 @@ changes = [
   "reference package identified by file hashes rather than unavailable ZIP",
 ]
 
+[provenance.amendment_2026_08_03_ambient_models]
+reason = "Two pre-existing 300 K GAP and Pedone model endpoints were registered before any multi-epoch stochastic rsmith silica reproduction or superiority result was generated."
+source_repository = "CPrescher/SiO2_glass"
+source_commit = "b05590846c87eb58cf1ed2e09a6787c1d67f9e53"
+changes = [
+  "add the GAP-quenched and Pedone-only endpoints as secondary structural reference models",
+  "freeze a 2.2 A Si-O coordination cutoff plus angle and shortest-ring diagnostics",
+  "prohibit treating closeness to either model as the primary physical-superiority criterion",
+]
+
 [system]
 formula = "SiO2"
 number_density_atoms_per_a3 = 0.06639997054690536
@@ -92,6 +102,22 @@ primary_metrics = [
   "ring_distribution_distance",
 ]
 secondary_metrics = ["wall_time", "acceptance_rate", "seed_variability"]
+
+[comparison.ambient_model_context]
+reference_endpoints = ["gap_300K", "pedone_300K"]
+role = "secondary model context, not experimental ground truth"
+metrics = [
+  "g_SiSi",
+  "g_SiO",
+  "g_OO",
+  "Si_coordination_distribution_at_2.2A",
+  "O_coordination_distribution_at_2.2A",
+  "O_Si_O_angle_distribution",
+  "Si_O_Si_angle_distribution",
+  "edge_weighted_shortest_ring_distribution",
+]
+density_policy = "Analyze each endpoint at its native 0-bar model density; report density explicitly and do not rank raw RDF distance across unequal densities without qualification."
+claim_rule = "Agreement with GAP or Pedone alone cannot establish physical superiority; held-out scattering and independently defined defect/topology criteria remain primary."
 
 [held_out_protocol]
 runs = [

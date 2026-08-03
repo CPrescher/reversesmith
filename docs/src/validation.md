@@ -126,6 +126,22 @@ are deliberately not presented as performance or convergence results. The
 next scientific gate is the preregistered matched multi-seed, multi-epoch
 native/rsmith reproduction.
 
+### Ambient GAP and Pedone structure controls
+
+The silica protocol additionally pins two 3,000-atom, 300 K endpoints from the
+private `CPrescher/SiO2_glass` repository: a Pedone-pre-equilibrated GAP quench
+and a Pedone-only fast quench. Independent analysis records RDFs, coordination,
+O-Si-O and Si-O-Si angles, minimum distances, and a shortest-cycle diagnostic
+for the Si network.
+
+The GAP endpoint has 0.40% Si and 0.60% O coordination defects at a frozen
+2.2 A Si-O cutoff; the Pedone endpoint has 0.40% and 0.85%. Mean Si-O-Si angles
+are 139.21 and 148.06 degrees, respectively. These are useful model controls,
+but neither is experimental ground truth: each is a single deterministic
+endpoint from a `10^14 K/s` quench, and their densities differ substantially
+(2.282 versus 2.560 g/cm3). The preregistered claim rule therefore forbids
+using agreement with GAP alone as evidence of physical superiority.
+
 ## Remaining publication gates
 
 1. Validate liquid-Ga structures against held-out data or an independent
