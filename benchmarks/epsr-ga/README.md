@@ -146,6 +146,85 @@ zero. The input is now converted back to internal S(Q) before the EPSR update,
 with a round-trip regression test. Without this correction the empirical
 potential would contain a spurious constant residual.
 
-The next stages are (1) add independent physical-structure validation to this
-Ga comparison, then (2) repeat the protocol for the 6,000-atom `DTBsilicaNX`
-neutron-plus-X-ray example.
+## Independent-start convergence and time to target
+
+The matched-start calculation above is a re-equilibration test, not a useful
+convergence test: the supplied endpoint already has a 1.352% external residual.
+A second protocol therefore generates ten independent periodic hard-sphere
+liquids without using the worked coordinates. Every native/rsmith pair receives
+identical coordinates, with a frozen 2.25 A minimum separation. The starts have
+a median external residual of 5.186%.
+
+Fresh prefix runs are evaluated at 0, 1, 2, 4, 8, 16, 24, 32, and 40 epochs.
+This avoids comparing the programs' differently weighted internal residuals.
+“Time to target” is the first observed checkpoint below the external target for
+which every later checkpoint also remains below it. All timings are sequential,
+single-thread executable wall times. The one-seed pilot used a disjoint seed;
+the protocol was frozen before inspecting the ten reported seeds.
+
+| Sustained external residual | Native EPSR26 | rsmith | Result |
+|---:|---:|---:|---:|
+| 4.0% | 0.888 s, 1 epoch | 0.752 s, 1 epoch | rsmith 1.18x faster |
+| 3.0% | 22.40 s, 32 median epochs | 2.02 s, 4 epochs | **rsmith 11.11x faster** |
+| 2.5% | 22.58 s, 32 epochs | 3.72 s, 8 epochs | **rsmith 6.07x faster** |
+| 2.0% | 0/10 reached | 10/10 reached in 7.11 s, 16 epochs | rsmith only |
+| 1.5% | 0/10 reached | 10/10 reached in 13.88 s, 32 epochs | rsmith only |
+
+After the full one-million-move budget, native EPSR has a median residual of
+2.390% [2.298%, 2.467%], while rsmith reaches **1.369% [1.338%,
+1.402%]**. Median full-run times are 28.17 and 17.32 seconds, respectively.
+The native convergence curve is non-monotonic: its median residual improves to
+2.943% at four epochs, worsens to 3.599% at sixteen, and then reaches 2.361%
+at 32 epochs. rsmith improves consistently after the two-epoch checkpoint.
+
+### Structural diagnostics
+
+The final ensemble diagnostics provide failure detection and characterize the
+different structures; the supplied EPSR g(r) is not treated as ground truth.
+
+| Median diagnostic | Native EPSR26 | rsmith |
+|---|---:|---:|
+| g(r) residual versus supplied worked ensemble | **2.087%** | 2.444% |
+| First RDF peak position | 2.707 A | 2.708 A |
+| Coordination integral through 3.93 A | 12.945 | 12.793 |
+| Direct final-configuration coordination | 12.898 | 12.959 |
+| Mean nearest-neighbor distance | 2.589 A | 2.552 A |
+| Median minimum distance per replicate | 1.912 A | 2.263 A |
+
+One native replicate (`20260816`) develops a 0.786 A pair and its combined
+energy rises from 20.83 kJ/mol/atom at epoch 32 to 6,220.76 kJ/mol/atom at
+epoch 40. An independent repeat reproduced its ATO coordinates, energy
+history, total fit, and RDF bit for bit. This is a deterministic native-EPSR
+instability under the frozen protocol, not evidence that all EPSR calculations
+collapse. The rsmith minimum-distance range is 2.248--2.273 A and its energy
+distribution remains narrow. Absolute energies are not compared across codes
+because the empirical-potential conventions and energy zeroes differ.
+
+This result supports a strong, specific claim: for this paired convergence
+test, rsmith reaches the same externally evaluated data agreement much faster,
+reaches tighter targets that EPSR does not reach within the budget, and avoids
+the observed catastrophic close-contact event. It still does not establish
+greater physical accuracy. As in the fixed-budget test, native EPSR handles
+the interpolated total and its background internally while rsmith is driven by
+the supplied background-corrected partial; the external score is common, but
+the optimized objectives are not identical. The observed time-to-target gain
+therefore combines implementation speed with refinement-path efficiency. The
+starts are deliberately unstructured hard-sphere liquids rather than
+independent equilibrium samples, and the structural observables lack an
+independent experimental or atomistic oracle.
+
+Run or resume the sequential benchmark with:
+
+```bash
+python3 scripts/run_independent_starts.py --jobs 1
+python3 scripts/verify_independent_starts.py
+```
+
+The frozen aggregate and per-seed convergence histories are in
+`expected/independent-starts.toml`; the plot-ready median curve is in
+`expected/independent-starts-convergence.csv`. Raw inputs, generated starts,
+and executable outputs remain local and ignored.
+
+The next stages are (1) validate the Ga structures against an independent
+physical oracle or held-out data, then (2) repeat the protocol for the
+6,000-atom `DTBsilicaNX` neutron-plus-X-ray example.

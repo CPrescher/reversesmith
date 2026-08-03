@@ -35,6 +35,15 @@ list reduced the ten-seed, one-million-move median from 44.64 s to 16.71 s;
 native EPSR26 required 29.09 s under the same one-thread protocol. Acceptance,
 S(Q), and g(r) distributions were numerically unchanged.
 
+A separate ten-seed convergence test starts both programs from identical
+independently generated hard-sphere liquids. Using a common external residual,
+rsmith reaches a sustained 3.0% fit in a median 2.02 s versus 22.40 s for
+native EPSR26 (11.11x faster), and 2.5% in 3.72 s versus 22.58 s (6.07x).
+All ten rsmith runs reach 2.0% within 7.11 s and 1.5% within 13.88 s; no native
+run reaches either target within one million moves. See the
+`benchmarks/epsr-ga` record for the frozen checkpoint rule, censoring,
+structural diagnostics, and scientific limitations.
+
 ## Delayed acceptance
 
 Hybrid RMC can optionally apply the cheap experimental-data Metropolis test

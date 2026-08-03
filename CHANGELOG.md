@@ -10,6 +10,10 @@ All notable changes to rsmith will be documented in this file.
 - Pure EPSR refinement mode validated against the EPSR26 LiquidGa50C worked
   example, including deterministic forward parity and a ten-seed stochastic
   comparison.
+- A paired independent-start EPSR benchmark with externally evaluated
+  convergence histories, censoring-aware time-to-target metrics, RDF and
+  coordination analysis, nearest-neighbor diagnostics, and energy-stability
+  checks.
 - Cutoff-plus-skin Verlet neighbor lists for analytical pair-potential Monte
   Carlo, with conservative rebuild tracking and brute-force periodic tests.
 - Release-mode GAP/QUIP atom-count benchmark using the same diamond-Si
@@ -25,11 +29,15 @@ All notable changes to rsmith will be documented in this file.
   16.71 s without changing the accepted trajectories or scientific metrics.
   On the same Apple M4 Pro, rsmith is 1.740x faster than native EPSR26 for the
   fixed one-million-move protocol.
+- From neutral independent starts, rsmith reaches a sustained 3.0% external
+  LiquidGa residual 11.11x faster and a 2.5% residual 6.07x faster than native
+  EPSR26; all ten rsmith runs reach 2.0% and 1.5% within the move budget while
+  none of the native runs do.
 
 ### Documentation
 - Added the EPSR benchmark ladder, local-only workshop-data import workflow,
-  frozen LiquidGa results, and the silica acquisition/publication-permission
-  protocol.
+  frozen LiquidGa fixed-budget and independent-start results, and the silica
+  acquisition/publication-permission protocol.
 - Documented current GAP/QUIP whole-system evaluation scaling and published Si
   GAP benchmark results alongside native SNAP and incremental MACE.
 
