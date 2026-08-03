@@ -1,0 +1,95 @@
+status = "epsr_control_and_start_sensitivity_frozen_before_outcomes"
+date = "2026-08-03"
+parent = "epsr-convergence-ensemble-observed.toml"
+scope = "test whether the two-case matched-fit hidden-structure advantage survives reasonable feedback, reference-potential-strength, and common-start choices"
+
+[design]
+refinement_seeds = [20260802, 20260803, 20260804, 20260805, 20260806]
+threads_per_run = 1
+independent_prefix_runs = true
+moves_per_refinement = 15000
+parallel_scientific_runs_allowed = true
+timing_claims_from_parallel_runs = false
+baseline_source = "epsr-convergence-ensemble-observed.toml at feedback 0.9, reference scale 1.0, original cross-start"
+
+[starts]
+names = ["original", "reference-equilibrated-a", "reference-equilibrated-b"]
+generator = "unconstrained rsmith pure energy MC under the independently validated EPSR26 reference potential, with no empirical potential acting during coordinate sampling"
+generator_seeds = [20260901, 20260902]
+generator_moves = 300000
+generator_temperature_ev = 0.025852
+target_blind = true
+common_coordinates_for_both_programs = true
+
+[methods.native_epsr26]
+checkpoints = [10, 15, 20, 25, 30, 40, 50, 60, 75, 100]
+constraints = "stock EPSR26 tutorial-like controls; no effective hard pair-distance rejection"
+
+[methods.rsmith_epsr_unconstrained]
+checkpoints = [5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50]
+constraints = "no hard minimum-distance table"
+
+[[arms]]
+name = "feedback-0p5"
+feedback = 0.5
+reference_scale = 1.0
+start = "original"
+kind = "feedback"
+
+[[arms]]
+name = "feedback-0p8"
+feedback = 0.8
+reference_scale = 1.0
+start = "original"
+kind = "feedback"
+
+[[arms]]
+name = "reference-0p5"
+feedback = 0.9
+reference_scale = 0.5
+start = "original"
+kind = "reference_potential"
+
+[[arms]]
+name = "reference-1p5"
+feedback = 0.9
+reference_scale = 1.5
+start = "original"
+kind = "reference_potential"
+
+[[arms]]
+name = "start-equilibrated-a"
+feedback = 0.9
+reference_scale = 1.0
+start = "reference-equilibrated-a"
+kind = "starting_state"
+
+[[arms]]
+name = "start-equilibrated-b"
+feedback = 0.9
+reference_scale = 1.0
+start = "reference-equilibrated-b"
+kind = "starting_state"
+
+[matching]
+fit_scalar = "sqrt((neutron_iq_rms^2 + xray_iq_rms^2)/2) from the common independent scorer"
+tolerance = 0.002
+algorithm = "within each case, arm, and seed: maximum-cardinality monotone matching, then minimum total absolute fit difference"
+primary_pair = "accepted pair nearest the median fit midpoint of common support"
+
+[outcomes]
+primary = "native minus rsmith mean hidden partial-g(r) RMS at the primary matched-fit pair"
+secondary = ["hidden partial-S(Q) RMS", "best-fit-end and worst-fit-end hidden g(r)", "coordination and angle errors", "ring total variation"]
+stability = "native iteration-100 Si-Si minimum below 2.0 A"
+native_failure_threshold_si_si_a = 2.0
+statistics = ["all five seeds", "win count", "median", "paired bootstrap mean 95-percent CI", "independent-resampling bootstrap sensitivity"]
+
+[decisions]
+robust_case = "positive median native-minus-rsmith hidden-RDF difference and rsmith lower hidden RDF in at least four of five seeds"
+strong_case = "robust_case and paired bootstrap mean interval excludes zero"
+sensitive_case = "non-positive mean or rsmith lower hidden RDF in fewer than three of five seeds"
+overall = "retain the bounded superiority claim only if neither target is sensitive in any preregistered arm; name and discuss arms that are robust but not strong"
+
+[claims]
+allowed = "control/start robustness of the already bounded synthetic SiO2 matched-fit result"
+forbidden = "universal EPSR superiority, experimental validity, equilibrium of the refined ensembles, or speed ratios from concurrent runs"

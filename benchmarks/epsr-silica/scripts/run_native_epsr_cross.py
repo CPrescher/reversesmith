@@ -199,10 +199,11 @@ def configure_input(
     moves: int,
     native_target_names=("target-neutron.dat", "target-xray.dat"),
     refinements: int = 1,
+    feedback: float = 0.9,
 ):
     text = path.read_text()
     settings = (
-        ("feedback", "0.9"),
+        ("feedback", f"{feedback:.8f}"),
         ("potfac", "0.0 0.0" if moves == 0 else "1.0 1.0"),
         ("num_threds", "1"),
         ("nq", "500"),
@@ -241,6 +242,8 @@ def prepare_run(
     force: bool,
     refinements: int = 1,
     rminex: dict[tuple[str, str], float] | None = None,
+    feedback: float = 0.9,
+    reference_scale: float = 1.0,
 ):
     run_dir = case / name
     if run_dir.exists():
@@ -250,6 +253,12 @@ def prepare_run(
     shutil.copytree(source, run_dir)
     if rminex is not None:
         set_pcof_rminex(run_dir / "DTBsilica.pcof", rminex)
+    pcof_path = run_dir / "DTBsilica.pcof"
+    pcof_path.write_text(
+        replace_setting(
+            pcof_path.read_text(), "refpotfac", f"{reference_scale:.8f}"
+        )
+    )
     for output in run_dir.glob("DTBsilica.EPSR.*"):
         if output.suffix not in {".inp", ".inpa"}:
             output.unlink()
@@ -267,6 +276,7 @@ def prepare_run(
         "Cross.ato",
         moves,
         refinements=refinements,
+        feedback=feedback,
     )
     return run_dir
 
@@ -327,6 +337,8 @@ parser.add_argument("--zero-only", action="store_true")
 parser.add_argument("--ensemble", action="store_true")
 parser.add_argument("--convergence-pilot", action="store_true")
 parser.add_argument("--convergence-ensemble", action="store_true")
+parser.add_argument("--control-start-sensitivity", action="store_true")
+parser.add_argument("--sensitivity-arm", action="append")
 parser.add_argument("--convergence-seed", type=int, action="append")
 parser.add_argument("--checkpoint", type=int, action="append")
 parser.add_argument(
@@ -353,6 +365,116 @@ if not binary.is_file():
     raise SystemExit(f"EPSR executable not found: {binary}")
 
 fixture_root = case_root / "results/cross-recovery"
+if args.control_start_sensitivity:
+    if args.native_rminex_control:
+        raise SystemExit("the rminex control is not part of the sensitivity matrix")
+    protocol_name = "epsr-control-start-sensitivity.toml"
+    protocol = tomllib.loads((case_root / "expected" / protocol_name).read_text())
+    result_root = case_root / "results/epsr-control-start-sensitivity"
+    inputs_root = result_root / "inputs"
+    if not (inputs_root / "input-manifest.json").is_file():
+        raise SystemExit("run prepare_epsr_control_start_sensitivity.py first")
+    arms = {arm["name"]: arm for arm in protocol["arms"]}
+    selected_arms = args.sensitivity_arm or list(arms)
+    unknown_arms = set(selected_arms) - set(arms)
+    if unknown_arms:
+        raise SystemExit(f"unknown sensitivity arms: {sorted(unknown_arms)}")
+    configured_seeds = [int(seed) for seed in protocol["design"]["refinement_seeds"]]
+    selected_seeds = args.convergence_seed or configured_seeds
+    unknown_seeds = set(selected_seeds) - set(configured_seeds)
+    if unknown_seeds:
+        raise SystemExit(f"seeds not present in {protocol_name}: {sorted(unknown_seeds)}")
+    moves_per_refinement = int(protocol["design"]["moves_per_refinement"])
+    checkpoints = args.checkpoint or protocol["methods"]["native_epsr26"][
+        "checkpoints"
+    ]
+    for arm_name in selected_arms:
+        arm = arms[arm_name]
+        for seed in selected_seeds:
+            summary_path = (
+                result_root
+                / "run-summaries"
+                / f"{arm_name}-native-epsr26-seed-{seed}.json"
+            )
+            summary = {
+                "program": "EPSR26",
+                "binary": str(binary),
+                "arm": arm_name,
+                "feedback": float(arm["feedback"]),
+                "reference_scale": float(arm["reference_scale"]),
+                "start": arm["start"],
+                "threads": 1,
+                "seed": seed,
+                "cases": {},
+            }
+            for case in sorted(fixture_root.glob("target-*_*")):
+                targets = []
+                for filename in (
+                    "epsr-native-target-neutron.dat",
+                    "epsr-native-target-xray.dat",
+                ):
+                    rows = read_iq(case / filename)
+                    targets.append([row for row in rows if 0.5 <= row[0] < 25.0])
+                structure = (
+                    case / "cross-start.data"
+                    if arm["start"] == "original"
+                    else inputs_root
+                    / "starts"
+                    / case.name
+                    / arm["start"]
+                    / "start.data"
+                )
+                if not structure.is_file():
+                    raise SystemExit(f"missing sensitivity start: {structure}")
+                prefix_root = (
+                    result_root
+                    / case.name
+                    / arm_name
+                    / "native-epsr26"
+                    / f"seed-{seed}"
+                )
+                prefix_root.mkdir(parents=True, exist_ok=True)
+                case_summary = summary["cases"].setdefault(case.name, {})
+                for refinements in checkpoints:
+                    name = f"iter-{int(refinements):03d}"
+                    run_dir = prefix_root / name
+                    if args.only_missing and (
+                        run_dir / "DTBsilica.EPSR.v01"
+                    ).is_file():
+                        continue
+                    run_dir = prepare_run(
+                        source,
+                        prefix_root,
+                        name,
+                        structure,
+                        moves_per_refinement,
+                        seed,
+                        tuple(targets),
+                        args.force,
+                        refinements=int(refinements),
+                        feedback=float(arm["feedback"]),
+                        reference_scale=float(arm["reference_scale"]),
+                    )
+                    wall = run_epsr(binary, run_dir)
+                    case_summary[name] = {
+                        "status": "completed",
+                        "wall_seconds": wall,
+                        "seed": seed,
+                        "refinements": int(refinements),
+                        "attempted_moves": int(refinements)
+                        * moves_per_refinement,
+                    }
+                    summary_path.parent.mkdir(parents=True, exist_ok=True)
+                    summary_path.write_text(
+                        json.dumps(summary, indent=2, sort_keys=True) + "\n"
+                    )
+                    print(
+                        json.dumps(
+                            {case.name: {name: case_summary[name]}}, indent=2
+                        )
+                    )
+    raise SystemExit(0)
+
 if args.convergence_pilot or args.convergence_ensemble:
     if args.convergence_pilot and args.convergence_ensemble:
         raise SystemExit("choose only one convergence protocol")

@@ -455,6 +455,31 @@ rsmith recovers hidden real-space
 structure better than stock EPSR26 at matched scattering fit. It is not yet a
 claim about experimental validity, equilibrium sampling, or all EPSR uses.
 
+### EPSR control and common-start sensitivity
+
+The next bounded gate is frozen in
+`expected/epsr-control-start-sensitivity.toml` before its refinement outcomes
+are generated. It tests whether the dense-ensemble result depends on three
+reasonable analyst choices. Feedback is varied one factor at a time from the
+baseline 0.9 to 0.5 and 0.8. The independently validated three-pair EPSR
+reference potential is scaled to 0.5 and 1.5 times its baseline strength. Two
+additional common starting configurations are generated using 300,000
+target-blind, energy-only rsmith moves under the unscaled reference potential.
+The same resulting coordinates are then supplied to native EPSR26 and rsmith.
+
+These controls are comparable operations, not a claim that the two programs'
+feedback update equations are mathematically identical. Native EPSR26 applies
+`refpotfac` to its reference interaction; rsmith applies the corresponding
+scale directly to each tabulated reference-potential energy before adding the
+empirical potential. Each of the six arms uses five preregistered refinement
+seeds and dense checkpoints. The primary comparison remains hidden partial-
+g(r) error at matched joint neutron/X-ray fit. A case/arm is called robust only
+when its median native-minus-rsmith error is positive and rsmith wins at least
+four of five seeds; it is called strong when the paired-bootstrap interval also
+excludes zero. The bounded claim is retained only if neither target is
+sensitive in any arm. Concurrent scientific jobs are allowed, but their wall
+times cannot support speed claims.
+
 ### Repeated one-thread timing diagnostic
 
 The ten independent fresh-process timings per method and case are reported in
@@ -523,6 +548,10 @@ hardware/software metadata.
   `verify_epsr_convergence_ensemble.py`: ten-seed monotone fit matching,
   paired-bootstrap analysis, close-contact counts, and strict provenance
   verification;
+- `scripts/prepare_epsr_control_start_sensitivity.py`, the two EPSR runners,
+  and `summarize_epsr_control_start_sensitivity.py`: scaled-reference and
+  target-blind common-start preparation, the frozen six-arm/five-seed matrix,
+  and preregistered robustness decisions;
 - `scripts/prepare_hrmc_weight_sweep.py`, `run_hrmc_weight_sweep.py`, and
   `verify_hrmc_weight_sweep.py`: frozen Pedone/GAP weight-pilot preparation,
   execution, scoring, and regression guards;
@@ -564,6 +593,8 @@ hardware/software metadata.
   verified 120-endpoint fixed-budget outcome;
 - `expected/epsr-convergence-*.toml`: frozen iterative-EPSR pilot, parity and
   extension decisions, and verified convergence observations;
+- `expected/epsr-control-start-sensitivity.toml`: frozen feedback,
+  reference-strength, and common-start sensitivity design and claim boundary;
 - `reference/README.md`: provenance and redistribution rules for upstream data.
 
 ## Local reproduction
@@ -654,4 +685,13 @@ python3 scripts/run_rsmith_epsr_convergence.py --convergence-ensemble \
 python3 scripts/score_cross_recovery.py --quiet
 python3 scripts/summarize_epsr_convergence_ensemble.py
 python3 scripts/verify_epsr_convergence_ensemble.py
+
+# Six-arm control/start sensitivity; arms and seeds can be dispatched separately.
+python3 scripts/prepare_epsr_control_start_sensitivity.py --force
+python3 scripts/run_native_epsr_cross.py --control-start-sensitivity \
+  --sensitivity-arm feedback-0p5 --convergence-seed 20260802 --force
+python3 scripts/run_rsmith_epsr_convergence.py --control-start-sensitivity \
+  --sensitivity-arm feedback-0p5 --convergence-seed 20260802 --force
+python3 scripts/score_cross_recovery.py --quiet
+python3 scripts/summarize_epsr_control_start_sensitivity.py
 ```
