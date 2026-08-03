@@ -30,5 +30,6 @@
 
 - [Output Files](./output-files.md)
 - [Supported Elements](./elements.md)
+- [Validation and Reference-Code Benchmarks](./validation.md)
 - [Performance Notes](./performance.md)
 - [Full Example](./full-example.md)

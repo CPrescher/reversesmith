@@ -1,8 +1,17 @@
 # EPSR Configuration
 
+For validated native-EPSR comparisons, convergence results, and the limits of
+the current scientific claims, see
+[Validation and Reference-Code Benchmarks](../validation.md).
+
 The `[epsr]` section enables Empirical Potential Structure Refinement (Soper, 1996). When present, an outer loop wraps the RMC refinement, iteratively refining a perturbation potential so the simulation naturally reproduces the experimental data.
 
-This produces thermodynamically consistent structures — configurations that are equilibrium states of a Hamiltonian, not just arbitrary arrangements that match S(Q).
+The aim is to sample configurations from a reference-plus-empirical
+Hamiltonian while improving agreement with the data, rather than accepting
+arbitrary coordinate changes from the data residual alone. Finite sampling,
+the chosen reference potential, and the evolving empirical potential still
+need independent structural validation; enabling EPSR does not by itself prove
+thermodynamic or chemical correctness.
 
 ## Parameters
 
