@@ -695,7 +695,7 @@ def score_epsr_convergence_root(root: Path):
             method = method_path.name
             checkpoints = {}
             for run in sorted(method_path.glob("seed-*/iter-*")):
-                if method == "native-epsr26":
+                if method.startswith("native-epsr26"):
                     structure = run / "Cross.ato"
                     fit = epsr_fit(run)
                 else:

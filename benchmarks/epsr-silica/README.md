@@ -381,6 +381,16 @@ An explicit parity follow-up removes rsmith's hard minimum-distance table.
 Guarded and unguarded rsmith coordinates are byte-identical through iteration
 50, proving that the constraints do not cause the observed difference.
 
+We also tested whether EPSR26's pair-specific `rminex` records could impose the
+same hard minima. EPSR retained requested values of 2.0 A (Si-Si), 1.35 A
+(Si-O), and 2.0 A (O-O), but all seven saved configurations for both targets
+were byte-identical to the tutorial-default EPSR trajectories. The iteration-
+100 Si-Si distances still fell to 1.925 and 1.579 A. Thus `rminex` is not a
+hard move-rejection constraint in this installed EPSR26 workflow. The primary
+parity comparison is consequently stock EPSR26 versus unconstrained rsmith;
+a source-patched EPSR or a matched repulsive energy wall would be a separately
+named sensitivity method, not the stock comparator.
+
 | Target / method | Iteration | Combined fit RMS | Hidden partial-RDF RMS | Minimum Si-Si | Wall time |
 |---|---:|---:|---:|---:|---:|
 | GAP / native EPSR26 | 10 | 0.09597 | 0.41730 | 2.434 A | 5.20 s |
@@ -588,6 +598,8 @@ python3 scripts/run_native_epsr_cross.py --convergence-pilot --force
 python3 scripts/run_rsmith_epsr_convergence.py --force
 python3 scripts/run_rsmith_epsr_convergence.py --no-hard-constraints --force
 python3 scripts/run_native_epsr_cross.py --convergence-pilot --checkpoint 100 --force
+python3 scripts/run_native_epsr_cross.py --convergence-pilot \
+  --native-rminex-control --force
 python3 scripts/run_rsmith_epsr_convergence.py --no-hard-constraints \
   --checkpoint 100 --force
 python3 scripts/score_cross_recovery.py

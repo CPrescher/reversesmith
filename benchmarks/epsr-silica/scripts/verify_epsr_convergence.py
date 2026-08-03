@@ -91,6 +91,57 @@ for case_name in observed["cases"]:
         if guarded.read_bytes() != unguarded.read_bytes():
             raise SystemExit(f"constraint sensitivity changed coordinates: {case_name}/{checkpoint}")
 
+for case_name in observed["cases"]:
+    pcof = (
+        result_root
+        / case_name
+        / "native-epsr26-rminex-control"
+        / "seed-20260802"
+        / "iter-100"
+        / "DTBsilica.pcof"
+    )
+    lines = pcof.read_text().splitlines()
+    retained = {}
+    for index, line in enumerate(lines[:-1]):
+        fields = line.split()
+        if len(fields) >= 2 and (fields[0], fields[1]) in {
+            ("Si", "Si"),
+            ("Si", "O"),
+            ("O", "O"),
+        }:
+            retained[(fields[0], fields[1])] = float(lines[index + 1].split()[0])
+    for pair, expected_value in {
+        ("Si", "Si"): 2.0,
+        ("Si", "O"): 1.35,
+        ("O", "O"): 2.0,
+    }.items():
+        if not math.isclose(retained[pair], expected_value, rel_tol=0.0, abs_tol=5e-7):
+            raise SystemExit(
+                f"retained rminex {case_name}/{pair}: "
+                f"{retained[pair]} != {expected_value}"
+            )
+
+    for iteration in observed["iterations"]:
+        checkpoint = f"iter-{iteration:03d}"
+        default = (
+            result_root
+            / case_name
+            / "native-epsr26"
+            / "seed-20260802"
+            / checkpoint
+            / "Cross.ato"
+        )
+        rminex = (
+            result_root
+            / case_name
+            / "native-epsr26-rminex-control"
+            / "seed-20260802"
+            / checkpoint
+            / "Cross.ato"
+        )
+        if default.read_bytes() != rminex.read_bytes():
+            raise SystemExit(f"native rminex control changed coordinates: {case_name}/{checkpoint}")
+
 for pair in observed["matched_fit"]:
     case = raw["cases"][pair["case"]]
     native = case["native-epsr26"][f"iter-{pair['native_iteration']:03d}"]
@@ -111,4 +162,4 @@ for pair in observed["matched_fit"]:
     if rsmith_rdf >= native_rdf:
         raise SystemExit("matched-fit rsmith RDF recovery is not better")
 
-print("EPSR convergence pilot: PASS (constraint parity, four matched-fit pairs, iteration-100 stop reproduced)")
+print("EPSR convergence pilot: PASS (unconstrained parity, inert rminex control, four matched-fit pairs, iteration-100 stop reproduced)")

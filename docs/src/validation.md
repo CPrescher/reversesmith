@@ -297,6 +297,14 @@ updates and independent seeded prefixes through iterations 1, 2, 5, 10, 25,
 byte-identical coordinates through iteration 50, so constraint asymmetry does
 not explain the result.
 
+A native EPSR control set pair `rminex` values to the same nominal Si-Si,
+Si-O, and O-O minima. EPSR retained those inputs, but every checkpoint for
+both targets was byte-identical to the default trajectory and still crossed
+the requested Si-Si threshold. Therefore `rminex` is not an effective hard
+move-rejection control in this EPSR26 path. The parity comparison uses stock
+EPSR26 and unconstrained rsmith; adding a hard rejection to EPSR source would
+define a separate sensitivity method.
+
 Four native/rsmith checkpoint pairs fall within the frozen `0.002` combined-
 fit tolerance. In all four, rsmith has lower hidden partial-RDF RMS and reaches
 the endpoint 3.12--3.95 times faster. For example, toward GAP native iteration

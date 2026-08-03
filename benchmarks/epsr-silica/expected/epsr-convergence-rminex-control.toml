@@ -1,0 +1,19 @@
+status = "native_epsr_rminex_parity_control_frozen_before_outcomes"
+date = "2026-08-03"
+parent = "epsr-convergence-pilot.toml"
+trigger = "test whether native EPSR26 pair-specific rminex values in DTBsilica.pcof provide a constraint comparable to rsmith and RMCProfile hard minimum distances"
+
+[method]
+name = "native-epsr26-rminex-control"
+only_change = "set the first value in each pcof pair-control record (rminex) before the initial potential reset"
+si_si_a = 2.0
+si_o_a = 1.35
+o_o_a = 2.0
+checkpoints = [1, 2, 5, 10, 25, 50, 100]
+seed = 20260802
+moves_per_refinement = 15000
+
+[comparison]
+primary = "test whether rminex changes native EPSR coordinates and prevents sub-threshold contacts"
+sensitivity = "compare with tutorial-default native EPSR26 at every checkpoint"
+claim_boundary = "call this a hard-constraint parity arm only if it changes move acceptance and enforces all requested pair minima"

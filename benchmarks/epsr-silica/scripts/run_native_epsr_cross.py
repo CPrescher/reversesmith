@@ -148,6 +148,27 @@ def write_epsr_data(path: Path, title: str, rows):
     )
 
 
+def set_pcof_rminex(path: Path, values: dict[tuple[str, str], float]) -> None:
+    lines = path.read_text().splitlines()
+    found = set()
+    for index, line in enumerate(lines[:-1]):
+        fields = line.split()
+        if len(fields) < 2:
+            continue
+        pair = (fields[0], fields[1])
+        if pair not in values:
+            continue
+        controls = lines[index + 1].split()
+        if len(controls) < 3:
+            raise ValueError(f"invalid pcof pair-control record after {line!r}")
+        controls[0] = f"{values[pair]:.8f}"
+        lines[index + 1] = "   " + "   ".join(controls)
+        found.add(pair)
+    if found != set(values):
+        raise ValueError(f"missing pcof pairs: {set(values) - found}")
+    path.write_text("\n".join(lines) + "\n")
+
+
 def provisional_targets(case: Path, source: Path):
     neutron = read_iq(case / "target-neutron-iq.dat")
     xray = read_iq(case / "target-xray-iq.dat")
@@ -219,6 +240,7 @@ def prepare_run(
     targets,
     force: bool,
     refinements: int = 1,
+    rminex: dict[tuple[str, str], float] | None = None,
 ):
     run_dir = case / name
     if run_dir.exists():
@@ -226,6 +248,8 @@ def prepare_run(
             raise FileExistsError(f"output exists: {run_dir} (pass --force)")
         shutil.rmtree(run_dir)
     shutil.copytree(source, run_dir)
+    if rminex is not None:
+        set_pcof_rminex(run_dir / "DTBsilica.pcof", rminex)
     for output in run_dir.glob("DTBsilica.EPSR.*"):
         if output.suffix not in {".inp", ".inpa"}:
             output.unlink()
@@ -303,6 +327,11 @@ parser.add_argument("--zero-only", action="store_true")
 parser.add_argument("--ensemble", action="store_true")
 parser.add_argument("--convergence-pilot", action="store_true")
 parser.add_argument("--checkpoint", type=int, action="append")
+parser.add_argument(
+    "--native-rminex-control",
+    action="store_true",
+    help="test EPSR pcof rminex values; these are not assumed to be hard constraints",
+)
 parser.add_argument("--only-missing", action="store_true")
 args = parser.parse_args()
 if args.moves <= 0:
@@ -327,7 +356,16 @@ if args.convergence_pilot:
         (case_root / "expected/epsr-convergence-pilot.toml").read_text()
     )
     pilot_root = case_root / "results/epsr-convergence-pilot"
-    summary_path = pilot_root / "native-epsr-run-summary.json"
+    method = (
+        "native-epsr26-rminex-control"
+        if args.native_rminex_control
+        else "native-epsr26"
+    )
+    summary_path = pilot_root / (
+        "native-epsr26-rminex-control-run-summary.json"
+        if args.native_rminex_control
+        else "native-epsr-run-summary.json"
+    )
     summary = {
         "program": "EPSR26",
         "binary": str(binary),
@@ -342,7 +380,7 @@ if args.convergence_pilot:
         for filename in ("epsr-native-target-neutron.dat", "epsr-native-target-xray.dat"):
             rows = read_iq(case / filename)
             targets.append([row for row in rows if 0.5 <= row[0] < 25.0])
-        prefix_root = pilot_root / case.name / "native-epsr26" / f"seed-{seed}"
+        prefix_root = pilot_root / case.name / method / f"seed-{seed}"
         prefix_root.mkdir(parents=True, exist_ok=True)
         case_summary = summary["cases"].setdefault(case.name, {})
         checkpoints = args.checkpoint or protocol["design"]["checkpoints"]
@@ -361,6 +399,11 @@ if args.convergence_pilot:
                 tuple(targets),
                 args.force,
                 refinements=int(refinements),
+                rminex=(
+                    {("Si", "Si"): 2.0, ("Si", "O"): 1.35, ("O", "O"): 2.0}
+                    if args.native_rminex_control
+                    else None
+                ),
             )
             wall = run_epsr(binary, run_dir)
             case_summary[name] = {

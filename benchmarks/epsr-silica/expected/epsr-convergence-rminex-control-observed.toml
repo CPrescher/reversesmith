@@ -1,0 +1,13 @@
+status = "native_epsr_rminex_control_does_not_enforce_hard_distances"
+date = "2026-08-03"
+protocol = "epsr-convergence-rminex-control.toml"
+cases = ["target-gap_from-pedone", "target-pedone_from-gap"]
+iterations = [1, 2, 5, 10, 25, 50, 100]
+
+[observed]
+pcof_values_retained = true
+coordinates_byte_identical_to_default = true
+gap_iteration_100_si_si_a = 1.92466634537
+pedone_iteration_100_si_si_a = 1.57937941545
+interpretation = "In this installed EPSR26 path, setting pair rminex values does not provide hard move rejection: every saved trajectory is byte-identical to the tutorial-default trajectory and the requested Si-Si threshold is crossed."
+comparison_rule = "Use stock native EPSR26 and unconstrained rsmith EPSR as the primary parity comparison. A source-patched EPSR hard wall or matched repulsive energy term would be a separately named sensitivity method."
