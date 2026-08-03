@@ -1243,7 +1243,7 @@ fn main() {
             }
 
             // Branch: pure EPSR uses energy-only MC, hybrid uses chi2+energy RMC
-            let (state, partial_sq_flat) = if epsr_mode == EpsrMode::Pure {
+            let (mut state, partial_sq_flat) = if epsr_mode == EpsrMode::Pure {
                 let state = rmc::run_energy_mc(
                     &mut config,
                     &constraints,
@@ -1319,6 +1319,7 @@ fn main() {
                     })
                     .collect();
 
+                let mut post_mc_squared_residual = 0.0;
                 for (dataset_index, ((total_sq, exp_grid), precision)) in total_sq_curves
                     .iter()
                     .zip(epsr_exp_on_grid.iter())
@@ -1339,6 +1340,7 @@ fn main() {
                     } else {
                         0.0
                     };
+                    post_mc_squared_residual += squared_residual;
                     if legacy_single_dataset {
                         // Retain the established log field for benchmark and
                         // downstream parser compatibility.
@@ -1352,6 +1354,12 @@ fn main() {
                             active_points
                         );
                     }
+                }
+                // Energy-only MC does not update RmcState::chi2 internally.
+                // Store the post-epoch scattering diagnostic so the iteration
+                // and final summaries do not misleadingly report zero.
+                if epsr_mode == EpsrMode::Pure {
+                    state.chi2 = post_mc_squared_residual;
                 }
 
                 let residual_datasets: Vec<EpsrResidualDataset<'_>> = (0..experiments.len())

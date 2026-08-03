@@ -1,0 +1,60 @@
+status = "passed_reference_potential_and_joint_epsr_smoke"
+date = "2026-08-03"
+program = "EPSR26"
+case = "DTBsilicaNX"
+
+[provenance]
+si_ato_sha256 = "a45ea309eb01890680d43cbaf8732d594a2d6a4b2edaf4a752147023f92b399c"
+o_ato_sha256 = "ce08babb9d552ee0fb81b67f4050166d13354ece30f801e388b236a05ad358a4"
+pcof_sha256 = "9a7e915cd2d09f04e5cdfcb2120cf25254dbbb113d86e47c1907398c95a55848"
+native_o01_sha256 = "2ebedfe1d6c38eb42c5e22012df6b8341e8aeb600062af81d8a7a45dcf74d841"
+native_report_sha256 = "09df548e6665e09fd379846fc465fbc3efccd0402398cf23a2dd20696a498ebc"
+
+[reference_potential]
+power = 12.0
+short_range_cutoff_onset_a = 9.0
+cutoff_a = 12.0
+epsilon_mixing = "geometric"
+sigma_mixing = "arithmetic"
+electrostatics = "EPSR charge product with Hummer cutoff"
+
+[pair.si_si]
+epsilon_kj_mol = 0.8
+sigma_a = 1.05
+charge_product = 16.0
+rms_over_native_dynamic_range = 3.2527947446738e-8
+
+[pair.si_o]
+epsilon_kj_mol = 0.7211102550927979
+sigma_a = 2.295
+charge_product = -8.0
+rms_over_native_dynamic_range = 6.974917697925319e-8
+
+[pair.o_o]
+epsilon_kj_mol = 0.65
+sigma_a = 3.54
+charge_product = 4.0
+rms_over_native_dynamic_range = 6.998416940856546e-8
+
+[energy]
+native_kj_mol_per_epsr_molecule = -3539.0
+rsmith_kj_mol_per_atom = -3535.2870149035944
+relative_difference = 0.0010491622199507336
+
+[smoke]
+seed = 20260802
+threads = 1
+iterations = 1
+moves = 6000
+acceptance_percent = 7.0
+max_ep_update_ev = 0.202453
+si_si_max_ep_ev = 0.06707815
+si_o_max_ep_ev = 0.20117767
+o_o_max_ep_ev = 0.20245322
+xray_post_mc_rms = 0.239095
+neutron_post_mc_rms = 0.208286
+summed_squared_residual = 47.908949
+
+[guards]
+pair_curve_rms_over_dynamic_range_max = 2.0e-7
+energy_relative_difference_max = 0.01

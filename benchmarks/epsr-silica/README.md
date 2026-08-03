@@ -73,13 +73,41 @@ RDF to better than `6e-8` RMS/range. The committed limits in
 this diagnostic result; they are not preregistered stochastic equivalence
 margins.
 
-The multi-dataset empirical-potential update is now implemented and its
-single-dataset compatibility is tested. The remaining reproduction blocker is
-faithful import of the EPSR reference-potential and mixing conventions from
-`DTBsilica.pcof`.
+## Reference-potential gate and first joint epoch
 
-That potential gate must be closed before `rsmith_epsr` can be called a
-reproduction of the native EPSR calculation.
+The EPSR reference potential is defined jointly by the species records in
+`si.ato` and `o.ato` and the control values in `DTBsilica.pcof`; the latter is
+not, by itself, a complete pair-potential file. Source inspection and an
+independent reconstruction establish the tutorial's exact conventions:
+
+- geometric mixing of epsilon and arithmetic mixing of sigma;
+- EPSR's modified 12--6 expression (algebraically the usual 12--6 form for
+  this case);
+- charge-product electrostatics with the EPSR constant of 1390 kJ A/mol and
+  zero charge-cloud radii;
+- a cosine short-range taper from 9 to 12 A and the separate Hummer Coulomb
+  taper at 12 A.
+
+Over 0.5--12 A, the reconstructed Si-Si, Si-O, and O-O curves agree with a
+fresh native EPSR `.o01` at `3.25e-8`, `6.97e-8`, and `7.00e-8` RMS of their
+dynamic ranges. On the exact 6,000-atom structure, native EPSR reports
+-3539 kJ/mol per EPSR molecule (an atom in this input), while rsmith's 0.001 A
+tables give -3535.287 kJ/mol per atom: a 0.105% difference. This passes the
+frozen 1% energy guard and is consistent with the programs' different
+potential-table grids.
+
+The same script converts the measured neutron `nrtype=5` and X-ray `<f^2>`
+totals to rsmith's Faber-Ziman normalization and runs one energy-only EPSR
+epoch using both contrasts. The 6,000-move, one-thread smoke run completed with
+7.0% acceptance; all three empirical pair potentials changed (maximum changes
+0.0671, 0.2012, and 0.2025 eV for Si-Si, Si-O, and O-O). The post-MC X-ray and
+neutron RMS residuals were 0.2391 and 0.2083. These values prove that the full
+two-contrast reference-plus-empirical path executes; a single epoch is not a
+converged EPSR reproduction or a speed comparison.
+
+The deterministic forward and reference-potential blockers are therefore
+closed. The remaining reproduction gate is a matched, multi-epoch native and
+rsmith ensemble with frozen seed-to-seed equivalence margins.
 
 The scientific claim is not "smaller chi-squared than EPSR". The meaningful
 test is whether MLIP-HRMC gives better held-out or chemically diagnostic
@@ -95,8 +123,13 @@ structure at the same data agreement.
 - `scripts/compare_forward.py`: exact-structure rsmith comparison and
   independent RDF oracle;
 - `scripts/verify_forward.py`: committed forward-regression verifier;
+- `scripts/run_reference_potential_smoke.py`: independent EPSR reference-
+  potential reconstruction, native curve/energy gate, normalization
+  conversion, and one-epoch joint neutron/X-ray rsmith smoke run;
 - `expected/native-forward.toml`: provenance hashes, observations, and
   regression guards;
+- `expected/reference-potential-smoke.toml`: frozen potential and smoke-run
+  observations plus regression guards;
 - `reference/README.md`: provenance and redistribution rules for upstream data.
 
 ## Local reproduction
@@ -108,4 +141,5 @@ python3 scripts/run_native_zero_move.py
 cargo build --release --manifest-path ../../Cargo.toml
 python3 scripts/compare_forward.py
 python3 scripts/verify_forward.py
+python3 scripts/run_reference_potential_smoke.py
 ```

@@ -108,15 +108,33 @@ directly with EPSR's differently normalized totals would create an artificial
 normalizations from its weight files before scoring. Licensed upstream files
 remain local and ignored, with committed hashes providing provenance.
 
+### EPSR26 DTBsilicaNX reference potential
+
+The second deterministic gate independently reconstructs the reference
+potential from the local tutorial's species and control records. It reproduces
+the native Si-Si, Si-O, and O-O potential curves to `3.25e-8`--`7.00e-8` RMS
+of their dynamic ranges and the exact-configuration energy to 0.105%. The
+implementation includes EPSR's geometric epsilon and arithmetic sigma mixing,
+modified 12--6 form, charge-product electrostatics, and its distinct
+short-range and Coulomb cutoff functions.
+
+A one-thread, 6,000-move smoke trajectory then exercised the verified
+reference potential together with both measured neutron and X-ray contrasts.
+All three empirical pair potentials received nonzero updates. This closes the
+reference-potential plumbing gate, but the one-epoch wall time and residuals
+are deliberately not presented as performance or convergence results. The
+next scientific gate is the preregistered matched multi-seed, multi-epoch
+native/rsmith reproduction.
+
 ## Remaining publication gates
 
 1. Validate liquid-Ga structures against held-out data or an independent
    atomistic/physical oracle.
 2. Test independent equilibrium starts to separate basin sensitivity from
    convergence out of unstructured liquids.
-3. Reproduce the EPSR silica neutron-plus-X-ray example with the now-validated
-   joint-update path before comparing pair-potential and MLIP-regularized
-   rsmith refinements.
+3. Run the matched multi-seed native/rsmith silica ensembles, estimate native
+   seed-to-seed spread, and freeze the stochastic equivalence margins before
+   comparing pair-potential and MLIP-regularized refinements.
 4. Apply the preregistered comparison to a complex high-pressure glass, where
    chemically diagnostic coordination, angle, and topology observables can
    establish or reject a physical-superiority claim.
