@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import time
+import tomllib
 from pathlib import Path
 
 
@@ -176,6 +177,7 @@ def configure_input(
     ato_name: str,
     moves: int,
     native_target_names=("target-neutron.dat", "target-xray.dat"),
+    refinements: int = 1,
 ):
     text = path.read_text()
     settings = (
@@ -187,7 +189,7 @@ def configure_input(
         ("ireset", "1" if moves == 0 else "2"),
         ("iinit", "1"),
         ("ntimes", "0" if moves == 0 else str(max(1, moves // 3000))),
-        ("niter", "1"),
+        ("niter", str(refinements)),
         ("nsumt", "0"),
         ("rho", "0.0"),
         ("cellst", "0.02"),
@@ -216,6 +218,7 @@ def prepare_run(
     seed: int,
     targets,
     force: bool,
+    refinements: int = 1,
 ):
     run_dir = case / name
     if run_dir.exists():
@@ -235,7 +238,12 @@ def prepare_run(
     write_epsr_data(
         run_dir / "target-xray.dat", "native-format synthetic X-ray i(Q)", targets[1]
     )
-    configure_input(run_dir / "DTBsilica.EPSR.inp", "Cross.ato", moves)
+    configure_input(
+        run_dir / "DTBsilica.EPSR.inp",
+        "Cross.ato",
+        moves,
+        refinements=refinements,
+    )
     return run_dir
 
 
@@ -292,6 +300,10 @@ parser.add_argument("--moves", type=int, default=6000)
 parser.add_argument("--seed", type=int, default=20260802)
 parser.add_argument("--force", action="store_true")
 parser.add_argument("--zero-only", action="store_true")
+parser.add_argument("--ensemble", action="store_true")
+parser.add_argument("--convergence-pilot", action="store_true")
+parser.add_argument("--checkpoint", type=int, action="append")
+parser.add_argument("--only-missing", action="store_true")
 args = parser.parse_args()
 if args.moves <= 0:
     raise SystemExit("--moves must be positive")
@@ -310,6 +322,103 @@ if not binary.is_file():
     raise SystemExit(f"EPSR executable not found: {binary}")
 
 fixture_root = case_root / "results/cross-recovery"
+if args.convergence_pilot:
+    protocol = tomllib.loads(
+        (case_root / "expected/epsr-convergence-pilot.toml").read_text()
+    )
+    pilot_root = case_root / "results/epsr-convergence-pilot"
+    summary_path = pilot_root / "native-epsr-run-summary.json"
+    summary = {
+        "program": "EPSR26",
+        "binary": str(binary),
+        "threads": 1,
+        "sampling": "independent deterministic prefixes",
+        "cases": {},
+    }
+    seed = int(protocol["design"]["seed"])
+    moves_per_refinement = int(protocol["sampling"]["moves_per_refinement"])
+    for case in sorted(fixture_root.glob("target-*_*")):
+        targets = []
+        for filename in ("epsr-native-target-neutron.dat", "epsr-native-target-xray.dat"):
+            rows = read_iq(case / filename)
+            targets.append([row for row in rows if 0.5 <= row[0] < 25.0])
+        prefix_root = pilot_root / case.name / "native-epsr26" / f"seed-{seed}"
+        prefix_root.mkdir(parents=True, exist_ok=True)
+        case_summary = summary["cases"].setdefault(case.name, {})
+        checkpoints = args.checkpoint or protocol["design"]["checkpoints"]
+        for refinements in checkpoints:
+            name = f"iter-{int(refinements):03d}"
+            run_dir = prefix_root / name
+            if args.only_missing and (run_dir / "DTBsilica.EPSR.v01").is_file():
+                continue
+            run_dir = prepare_run(
+                source,
+                prefix_root,
+                name,
+                case / "cross-start.data",
+                moves_per_refinement,
+                seed,
+                tuple(targets),
+                args.force,
+                refinements=int(refinements),
+            )
+            wall = run_epsr(binary, run_dir)
+            case_summary[name] = {
+                "status": "completed",
+                "wall_seconds": wall,
+                "seed": seed,
+                "refinements": int(refinements),
+                "attempted_moves": int(refinements) * moves_per_refinement,
+            }
+            summary_path.parent.mkdir(parents=True, exist_ok=True)
+            summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+            print(json.dumps({case.name: {name: case_summary[name]}}, indent=2))
+    raise SystemExit(0)
+
+if args.ensemble:
+    protocol = tomllib.loads(
+        (case_root / "expected/multiseed-comparison.toml").read_text()
+    )
+    ensemble_root = case_root / "results/multiseed-comparison"
+    summary_path = ensemble_root / "native-epsr-run-summary.json"
+    summary = (
+        json.loads(summary_path.read_text())
+        if summary_path.is_file()
+        else {"program": "EPSR26", "binary": str(binary), "threads": 1, "cases": {}}
+    )
+    for case in sorted(fixture_root.glob("target-*_*")):
+        targets = []
+        for filename in ("epsr-native-target-neutron.dat", "epsr-native-target-xray.dat"):
+            rows = read_iq(case / filename)
+            targets.append([row for row in rows if 0.5 <= row[0] < 25.0])
+        method_root = ensemble_root / case.name / "native-epsr26"
+        method_root.mkdir(parents=True, exist_ok=True)
+        case_summary = summary["cases"].setdefault(case.name, {})
+        for seed in protocol["budget"]["seeds"]:
+            name = f"seed-{seed}"
+            run_dir = method_root / name
+            if args.only_missing and (run_dir / "DTBsilica.EPSR.v01").is_file():
+                continue
+            run_dir = prepare_run(
+                source,
+                method_root,
+                name,
+                case / "cross-start.data",
+                int(protocol["budget"]["moves"]),
+                int(seed),
+                tuple(targets),
+                args.force,
+            )
+            wall = run_epsr(binary, run_dir)
+            case_summary[name] = {
+                "status": "completed",
+                "wall_seconds": wall,
+                "seed": int(seed),
+            }
+            summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+            print(json.dumps({case.name: {name: case_summary[name]}}, indent=2))
+    raise SystemExit(0)
+
 summary_path = fixture_root / "native-epsr-run-summary.json"
 if args.zero_only and summary_path.is_file():
     summary = json.loads(summary_path.read_text())

@@ -1,0 +1,52 @@
+status = "epsr_convergence_pilot_frozen_before_outcomes"
+date = "2026-08-03"
+scope = "determine whether native EPSR26 and rsmith EPSR reach stable and overlapping fit support on the two synthetic SiO2 cross-recovery cases"
+
+[design]
+seed = 20260802
+threads = 1
+checkpoints = [1, 2, 5, 10, 25, 50]
+independent_prefix_runs = true
+reason = "each checkpoint restarts from the identical seeded cross-start and zero empirical potential; this avoids relying on undocumented checkpoint continuation and permits deterministic prefix checks"
+
+[sampling]
+attempted_moves_per_atom_per_refinement = 5
+atoms = 3000
+moves_per_refinement = 15000
+maximum_refinements_in_pilot = 50
+maximum_attempted_moves = 750000
+tutorial_context = "the imported finished EPSR26 DTBsilicaNX input records nsumt=495; this 50-refinement stage is a convergence-shape pilot, not assumed convergence"
+
+[methods.native_epsr26]
+ntimes = 5
+ireset = 2
+iinit = 1
+potfac = [1.0, 1.0]
+feedback = 0.9
+threads = 1
+
+[methods.rsmith_epsr]
+mode = "pure"
+moves_per_iteration = 15000
+feedback = 0.9
+temperature_ev = 0.025852
+reference_potential = "same independently reconstructed EPSR26 Si/O reference potential used in the fixed-budget comparison"
+
+[outcomes]
+primary = [
+  "common combined neutron/X-ray RMS at every checkpoint",
+  "mean hidden partial S(Q) RMS",
+  "mean hidden partial g(r) RMS",
+  "coordination, angle, ring, and minimum-distance diagnostics",
+  "cumulative one-thread wall time",
+]
+matching_tolerance = 0.002
+
+[decisions]
+extend_to_refinements = [100, 250, 500]
+extension_gate = "extend when either implementation is still changing materially at iteration 50 and no minimum-distance or empirical-potential stability guard fails"
+ensemble_gate = "freeze the final iteration/checkpoint schedule only after inspecting this one-seed convergence shape; compare structures at overlapping achieved fit rather than equal iterations"
+
+[claims]
+allowed = "diagnose convergence shape, stability, fit overlap, and the compute budget for the full ensemble"
+forbidden = "claim EPSR convergence, equilibrium, or method superiority from this single-seed pilot"

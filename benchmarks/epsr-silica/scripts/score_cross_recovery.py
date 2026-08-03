@@ -616,3 +616,113 @@ score_hrmc_root(
     "available_joint_acceptance_hrmc_production_outputs_scored",
     "two moves per atom, single-seed Pedone/GAP/PACE bracket; not the final multi-seed comparison",
 )
+
+
+def score_multiseed_root(root: Path):
+    if not root.is_dir():
+        return
+    result = {
+        "status": "available_multiseed_cross_program_outputs_scored",
+        "scope": "ten-seed, 6000-move fixed-budget comparison with independent common scoring",
+        "cases": {},
+    }
+    for ensemble_case in sorted(root.glob("target-*_*")):
+        cross_case = fixture_root / ensemble_case.name
+        target = structure_metrics(cross_case / "hidden-target.data")
+        methods = {}
+        for method in sorted(path for path in ensemble_case.iterdir() if path.is_dir()):
+            seeds = {}
+            for run in sorted(method.glob("seed-*")):
+                if method.name == "native-epsr26":
+                    structure = run / "Cross.ato"
+                    fit = epsr_fit(run)
+                elif method.name == "rmcprofile":
+                    structure = run / "cross.rmc6f"
+                    fit = rmcprofile_fit(run)
+                    audit_path = run / "move-audit.json"
+                    if audit_path.is_file():
+                        audit = json.loads(audit_path.read_text())
+                        fit["attempted_moves"] = audit["total_moves"]
+                        fit["accepted_moves"] = audit["total_accepted"]
+                        fit["sampling_wall_seconds"] = audit[
+                            "sampling_wall_seconds"
+                        ]
+                        fit["exact_tail_wall_seconds"] = audit[
+                            "exact_tail_wall_seconds"
+                        ]
+                else:
+                    structure = run / "refined.xyz"
+                    fit = rsmith_fit(run, cross_case)
+                if not structure.is_file():
+                    continue
+                model = structure_metrics(structure)
+                seeds[run.name] = {
+                    "fit": fit,
+                    "common_reciprocal_distance_from_hidden_target": common_reciprocal_distance(
+                        cross_case, model
+                    ),
+                    "structural_distance_from_hidden_target": structural_distance(
+                        target, model
+                    ),
+                    "model_metrics": {
+                        key: value for key, value in model.items() if key != "rdf"
+                    },
+                }
+            methods[method.name] = seeds
+        result["cases"][ensemble_case.name] = methods
+    (root / "raw-score-summary.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n"
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+score_multiseed_root(case_root / "results/multiseed-comparison")
+
+
+def score_epsr_convergence_root(root: Path):
+    if not root.is_dir():
+        return
+    result = {
+        "status": "available_epsr_convergence_pilot_outputs_scored",
+        "scope": "single-seed independent deterministic prefixes through 100 empirical-potential refinements",
+        "cases": {},
+    }
+    for pilot_case in sorted(root.glob("target-*_*")):
+        cross_case = fixture_root / pilot_case.name
+        target = structure_metrics(cross_case / "hidden-target.data")
+        methods = {}
+        for method_path in sorted(path for path in pilot_case.iterdir() if path.is_dir()):
+            method = method_path.name
+            checkpoints = {}
+            for run in sorted(method_path.glob("seed-*/iter-*")):
+                if method == "native-epsr26":
+                    structure = run / "Cross.ato"
+                    fit = epsr_fit(run)
+                else:
+                    structure = run / "refined.xyz"
+                    fit = rsmith_fit(run, cross_case)
+                if not structure.is_file():
+                    continue
+                model = structure_metrics(structure)
+                checkpoints[run.name] = {
+                    "seed": run.parent.name,
+                    "fit": fit,
+                    "common_reciprocal_distance_from_hidden_target": common_reciprocal_distance(
+                        cross_case, model
+                    ),
+                    "structural_distance_from_hidden_target": structural_distance(
+                        target, model
+                    ),
+                    "model_metrics": {
+                        key: value for key, value in model.items() if key != "rdf"
+                    },
+                }
+            methods[method] = checkpoints
+        result["cases"][pilot_case.name] = methods
+    (root / "raw-score-summary.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n"
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+score_epsr_convergence_root(case_root / "results/epsr-convergence-pilot")

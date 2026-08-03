@@ -1,0 +1,14 @@
+status = "epsr_constraint_parity_followup_frozen_before_outcomes"
+date = "2026-08-03"
+parent = "epsr-convergence-pilot.toml"
+trigger = "the native iteration-50 Pedone-target endpoint reached a 1.9492 A Si-Si minimum, while rsmith inherited an explicit 2.0 A hard constraint"
+
+[change]
+method = "rsmith-epsr-unconstrained"
+only_change = "remove the rsmith hard minimum-distance table and rely on the same reconstructed EPSR reference-potential repulsion used by both EPSR implementations"
+checkpoints = [1, 2, 5, 10, 25, 50]
+seed = 20260802
+
+[decision]
+extension_gate = "use the unconstrained rsmith arm for EPSR algorithm-parity claims; retain the guarded arm as a documented safety-policy sensitivity control"
+claim_boundary = "the earlier guarded pilot may guide debugging but cannot by itself support native-versus-rsmith EPSR superiority"

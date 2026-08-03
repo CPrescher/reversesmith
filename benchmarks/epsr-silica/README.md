@@ -308,14 +308,117 @@ and multi-seed structural ensembles remain publication gates.
 
 The next multi-seed campaign therefore excludes GAP/QUIP. Its completed arms
 remain an archived performance and MLIP-path diagnostic, but no additional GAP
-replicas will be run. Compute is focused on pure rsmith RMC, Pedone weight 3,
-native PACE weight 3, rsmith EPSR, native EPSR26, and native RMCProfile. The
-scope and remaining comparability gaps are frozen in
-`expected/next-campaign-scope.toml` before those ensemble outcomes exist.
+replicas are run. The campaign scope was frozen in
+`expected/next-campaign-scope.toml`, and the detailed comparison and claim
+rules in `expected/multiseed-comparison.toml`, before its ensemble outcomes
+existed.
 
-### Local timing diagnostic
+### Ten-seed cross-program comparison
 
-End-to-end one-thread wall times on an Apple M4 Pro were:
+The completed comparison contains 120 endpoints: six methods, two symmetric
+cross-recovery cases, and ten seeds at 6,000 attempted moves per endpoint. All
+runs use one thread and the same common independent final-coordinate scorer.
+RMCProfile now receives the intended neutron uncertainty, an information-
+matched scalar X-ray uncertainty after finer encodings proved unusable, an
+explicit seed, and an audited exact 6,000-move final configuration. Its timing
+is the uninterrupted sampling stage, excluding exact-checkpoint recovery.
+
+Medians below are followed by the interquartile range in parentheses. `Fit` is
+the common combined neutron/X-ray RMS and `RDF` is the mean hidden partial-RDF
+RMS.
+
+| Hidden target / method | Fit | RDF | Wall time |
+|---|---:|---:|---:|
+| GAP / native EPSR26 | 0.11489 (0.11488--0.11492) | 0.76711 (0.76521--0.76880) | 1.045 s |
+| GAP / RMCProfile | 0.11422 (0.11405--0.11431) | 0.72140 (0.71863--0.72464) | 6.606 s |
+| GAP / rsmith EPSR | 0.11177 (0.11160--0.11188) | 0.71034 (0.70710--0.71585) | 0.390 s |
+| GAP / rsmith PACE weight 3 | 0.09747 (0.09731--0.09758) | 0.59747 (0.59467--0.60122) | 12.986 s |
+| GAP / rsmith Pedone weight 3 | 0.09750 (0.09729--0.09765) | 0.59841 (0.59441--0.60123) | 0.675 s |
+| GAP / rsmith RMC | 0.09757 (0.09750--0.09789) | 0.60507 (0.60135--0.60838) | 0.510 s |
+| Pedone / native EPSR26 | 0.11796 (0.11791--0.11799) | 0.76684 (0.76573--0.76829) | 1.075 s |
+| Pedone / RMCProfile | 0.11576 (0.11555--0.11612) | 0.59904 (0.59686--0.60213) | 6.404 s |
+| Pedone / rsmith EPSR | 0.11559 (0.11552--0.11573) | 0.72070 (0.71922--0.72549) | 0.407 s |
+| Pedone / rsmith PACE weight 3 | 0.09378 (0.09357--0.09425) | 0.45780 (0.45030--0.45898) | 15.690 s |
+| Pedone / rsmith Pedone weight 3 | 0.09404 (0.09371--0.09443) | 0.45839 (0.45172--0.46113) | 0.668 s |
+| Pedone / rsmith RMC | 0.09431 (0.09396--0.09466) | 0.46323 (0.45865--0.46778) | 0.515 s |
+
+At identical seeds, PACE lowers RDF RMS relative to pure RMC by median
+`0.00761` (95% paired bootstrap interval `0.00254--0.01299`) for the GAP
+target and `0.00802` (`0.00540--0.01015`) for the Pedone target. PACE and
+Pedone weight 3 remain unresolved from each other because both paired intervals
+include zero. Thus the ensemble supports an energy-regularization benefit over
+pure RMC, but not a PACE-specific benefit over the inexpensive Pedone model.
+
+The external-code result must be read differently. The native and rsmith EPSR
+arms each perform only their first potential-refinement iteration after an
+empirical-potential reset; rsmith's updated potential is produced after the
+scored MC endpoint. By contrast, the imported finished EPSR tutorial records
+495 accumulated iterations. The short arms are therefore initialization and
+throughput controls, not a test of converged EPSR. Applying only two attempted
+moves per atom to every algorithm favors direct data-fitting RMC and is not how
+EPSR is intended to be used.
+
+After 6,000 moves the PACE, Pedone, and pure-RMC arms occupy a substantially
+lower fit-residual range than EPSR26 or RMCProfile. None of the PACE endpoints
+overlaps either external code within the preregistered `0.002` matched-fit
+tolerance. Consequently this campaign does **not** support a structural-
+superiority claim for rsmith over EPSR or RMCProfile. Where external endpoints
+do overlap, RMCProfile has lower hidden RDF error than native EPSR for the GAP
+target and lower error than rsmith EPSR for the Pedone target. The proper next
+comparison must run EPSR toward convergence and retain trajectories so all
+programs can be evaluated at common achieved residuals.
+
+### Iterative EPSR convergence pilot
+
+A separately frozen single-seed pilot now tests EPSR on its own iteration
+scale: five attempted moves per atom between potential refinements, with
+checkpoints at 1, 2, 5, 10, 25, 50, and 100 refinements. The 100-refinement
+endpoint contains 1.5 million attempted moves. Native EPSR26 uses its tutorial
+`ntimes=5`, potential reset, and feedback 0.9; rsmith uses the independently
+validated reconstruction of the same reference potential and feedback 0.9.
+
+An explicit parity follow-up removes rsmith's hard minimum-distance table.
+Guarded and unguarded rsmith coordinates are byte-identical through iteration
+50, proving that the constraints do not cause the observed difference.
+
+| Target / method | Iteration | Combined fit RMS | Hidden partial-RDF RMS | Minimum Si-Si | Wall time |
+|---|---:|---:|---:|---:|---:|
+| GAP / native EPSR26 | 10 | 0.09597 | 0.41730 | 2.434 A | 5.20 s |
+| GAP / rsmith EPSR, unguarded | 5 | 0.09661 | 0.32782 | 2.451 A | 1.64 s |
+| GAP / native EPSR26 | 50 | 0.08553 | 0.31162 | 2.362 A | 22.93 s |
+| GAP / rsmith EPSR, unguarded | 25 | 0.08491 | 0.28626 | 2.604 A | 7.36 s |
+| Pedone / native EPSR26 | 10 | 0.09598 | 0.55230 | 2.235 A | 5.55 s |
+| Pedone / rsmith EPSR, unguarded | 5 | 0.09591 | 0.40366 | 2.245 A | 1.74 s |
+| Pedone / native EPSR26 | 25 | 0.08828 | 0.47629 | 2.260 A | 12.99 s |
+| Pedone / rsmith EPSR, unguarded | 10 | 0.08945 | 0.26303 | 2.265 A | 3.29 s |
+
+These are the four checkpoint pairs inside the frozen `0.002` fit tolerance.
+rsmith has lower hidden-RDF error in all four and reaches them 3.12--3.95 times
+faster. This is encouraging algorithm-parity evidence, but one seed and four
+pairs are insufficient for a stochastic superiority claim.
+
+At iteration 100, native EPSR26 continues improving its scattering residual
+but develops Si-Si minima of 1.925 A toward GAP and 1.579 A toward Pedone;
+the hidden targets are at 2.257 and 2.445 A. Unguarded rsmith remains at 2.706
+and 2.311 A while reaching lower fit and RDF errors in about 60% of the wall
+time. The preregistered extension is therefore stopped rather than spending
+iterations 250 and 500 after a structural-stability failure. This is a
+reproducible local failure for the chosen tutorial-like setup, not evidence
+that every EPSR calculation fails. The next paper-facing gate is a multi-seed,
+dense-checkpoint replication plus parameter/start sensitivity and an
+experimental or held-out physical validation case.
+
+### Repeated one-thread timing diagnostic
+
+The ten independent fresh-process timings per method and case are reported in
+the table above. On this Apple M4 Pro, pure rsmith RMC is about 2.1 times faster
+than native EPSR26 and 12--13 times faster than the installed serial RMCProfile
+executable. rsmith EPSR mode is about 2.6--2.7 times faster than native EPSR26
+at this short epoch. Pedone regularization costs about 30%; native PACE costs
+about 25--30 times pure RMC but remains practical at 13--16 seconds for 3,000
+atoms and 6,000 moves.
+
+For historical context, the original one-seed adapter timings were:
 
 | Method, joint fit | GAP target | Pedone target |
 |---|---:|---:|
@@ -325,16 +428,13 @@ End-to-end one-thread wall times on an Apple M4 Pro were:
 | RMCProfile | 6.920 s | 6.709 s |
 | rsmith GAP/QUIP | 321.9 s | 343.3 s |
 
-rsmith pure RMC is about 13 times faster than this installed RMCProfile path
-and about twice as fast as native EPSR in the smoke. Those are not yet paper
-speed claims. The official RMCProfile macOS wrapper fell back to its serial
-binary because its parallel executable references an unavailable x86-64
-`libgomp`; it also checkpoints coordinates by wall-clock time, so the
-independently scored snapshots represent 5,315 and 5,490 of the 6,000 completed
-moves. Conversely, GAP/QUIP model loading and local SOAP evaluation dominate
-and make the present GAP-HRMC path roughly 600 times slower than pure RMC.
-Production timing needs repeated cold/warm runs, a working parallel
-RMCProfile build, exact saved move counts, and calibrated energy weights.
+The new ensemble fixes the old RMCProfile coordinate-count problem. The
+official parallel executable remains unusable on this installation because it
+references an unavailable `libgomp`, so the scientifically fair table uses one
+thread for every method. These are repeated warm-cache implementation timings,
+not the separately preregistered five cold and five warm measurements; final
+paper speed ratios still require that timing-only campaign and complete
+hardware/software metadata.
 
 ## Files
 
@@ -360,9 +460,18 @@ RMCProfile build, exact saved move counts, and calibrated energy weights.
   fixture generator for the common neutron/X-ray protocol;
 - `scripts/run_rsmith_cross.py`, `run_native_epsr_cross.py`, and
   `run_rmcprofile_cross.py`: matched adapter smoke runners;
+- `scripts/prepare_multiseed_comparison.py`, `run_multiseed_rsmith.py`, and
+  `run_multiseed_rmcprofile.py`: deterministic six-method, two-case, ten-seed
+  ensemble preparation and execution;
 - `scripts/run_pdfgui_cross_forward.py`: PDFgui/PDFfit2 forward-only control;
 - `scripts/score_cross_recovery.py` and `verify_cross_recovery.py`: common
   coordinate scoring and committed smoke guards;
+- `scripts/summarize_multiseed_comparison.py` and
+  `verify_multiseed_comparison.py`: paired bootstrap analysis, achieved-fit
+  matching, and committed-result verification;
+- `scripts/run_rsmith_epsr_convergence.py` and
+  `verify_epsr_convergence.py`: tutorial-scale EPSR prefix runs, constraint-
+  parity control, matched-fit checks, and the iteration-100 stability stop;
 - `scripts/prepare_hrmc_weight_sweep.py`, `run_hrmc_weight_sweep.py`, and
   `verify_hrmc_weight_sweep.py`: frozen Pedone/GAP weight-pilot preparation,
   execution, scoring, and regression guards;
@@ -399,6 +508,11 @@ RMCProfile build, exact saved move counts, and calibrated energy weights.
   superseding joint-acceptance protocol, and observed three-model comparison;
 - `expected/next-campaign-scope.toml`: post-smoke decision to archive GAP/QUIP
   and focus the multi-seed campaign on RMC, Pedone, PACE, EPSR, and RMCProfile;
+- `expected/multiseed-comparison.toml` and
+  `multiseed-comparison-observed.toml`: preregistered comparison rules and the
+  verified 120-endpoint fixed-budget outcome;
+- `expected/epsr-convergence-*.toml`: frozen iterative-EPSR pilot, parity and
+  extension decisions, and verified convergence observations;
 - `reference/README.md`: provenance and redistribution rules for upstream data.
 
 ## Local reproduction
@@ -458,4 +572,24 @@ python3 scripts/run_hrmc_production_unscreened.py --model gap \
   --binary /path/to/gap-enabled/rsmith
 python3 scripts/score_cross_recovery.py
 python3 scripts/verify_hrmc_production_unscreened.py
+
+python3 scripts/prepare_multiseed_comparison.py --force
+python3 scripts/run_multiseed_rsmith.py --method rsmith-rmc
+python3 scripts/run_multiseed_rsmith.py --method rsmith-pedone-w3
+python3 scripts/run_multiseed_rsmith.py --method rsmith-pace-w3
+python3 scripts/run_multiseed_rsmith.py --method rsmith-epsr
+python3 scripts/run_native_epsr_cross.py --ensemble --force
+python3 scripts/run_multiseed_rmcprofile.py --force
+python3 scripts/score_cross_recovery.py
+python3 scripts/summarize_multiseed_comparison.py
+python3 scripts/verify_multiseed_comparison.py
+
+python3 scripts/run_native_epsr_cross.py --convergence-pilot --force
+python3 scripts/run_rsmith_epsr_convergence.py --force
+python3 scripts/run_rsmith_epsr_convergence.py --no-hard-constraints --force
+python3 scripts/run_native_epsr_cross.py --convergence-pilot --checkpoint 100 --force
+python3 scripts/run_rsmith_epsr_convergence.py --no-hard-constraints \
+  --checkpoint 100 --force
+python3 scripts/score_cross_recovery.py
+python3 scripts/verify_epsr_convergence.py
 ```

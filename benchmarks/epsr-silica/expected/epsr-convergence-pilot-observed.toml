@@ -1,0 +1,76 @@
+status = "epsr_convergence_pilot_stopped_after_iteration_100"
+date = "2026-08-03"
+protocols = [
+  "epsr-convergence-pilot.toml",
+  "epsr-convergence-constraint-parity.toml",
+  "epsr-convergence-extension-100.toml",
+]
+raw_score_sha256 = "7641d0af974a97a53c2182eca60c7fc0e9c3ae8ff75c2be8e76c3751e1f41e60"
+iterations = [1, 2, 5, 10, 25, 50, 100]
+
+[interpretation]
+hybrid_rmc = "The earlier PACE/Pedone hybrid-RMC arms work as fixed-budget refiners, but two attempted moves per atom are not a proper comparison with iterative EPSR."
+constraint_control = "Removing rsmith's hard minimum-distance table produces byte-identical coordinates through iteration 50, so the observed native/rsmith difference is not caused by those cutoffs."
+matched_fit = "Four preregistered-tolerance checkpoint pairs exist. In all four, rsmith EPSR has lower hidden partial-RDF RMS and reaches the checkpoint 3.12-3.95 times faster; this is a single-seed pilot, not a stochastic superiority claim."
+stop = "Do not extend native EPSR to iterations 250/500 in this protocol: at iteration 100 its Si-Si minimum is 1.9247 A toward GAP and 1.5794 A toward Pedone, versus hidden-target minima 2.2565 and 2.4446 A."
+claim_boundary = "The pilot identifies a reproducible local EPSR26 close-contact failure and a promising rsmith advantage for this setup. Multiple seeds, dense matched-fit checkpoints, and an experimental/held-out validation case are required for a journal claim."
+
+[cases.target-gap_from-pedone.native-epsr26]
+fit = [0.110840004751, 0.105396193799, 0.0994065488263, 0.0959711520603, 0.0906093649806, 0.0855338550728, 0.0774510050380]
+rdf = [0.705034096815, 0.614471492402, 0.500507993871, 0.417296548708, 0.346422772839, 0.311616841143, 0.292226662362]
+partial_sq = [0.241624094030, 0.229418981620, 0.211248006974, 0.198029532015, 0.183510368795, 0.171669540478, 0.158003678860]
+min_si_si_a = [2.48660778975, 2.46707256151, 2.46056211998, 2.43351201020, 2.39965923236, 2.36207056034, 1.92466634537]
+wall_s = [1.185095083, 1.615252084, 2.942646292, 5.197225875, 12.056177959, 22.926839375, 43.270799458]
+
+[cases.target-gap_from-pedone.rsmith-epsr-unconstrained]
+fit = [0.107708853862, 0.102864341202, 0.0966066351689, 0.0933095870040, 0.0849115411464, 0.0721577148693, 0.0554606668524]
+rdf = [0.644886751664, 0.534208831817, 0.327816242900, 0.340317540823, 0.286255303273, 0.239584538024, 0.203330558764]
+partial_sq = [0.234448325145, 0.223478383403, 0.202070290199, 0.187273550985, 0.168410567466, 0.148243690382, 0.124136974455]
+min_si_si_a = [2.49198625462, 2.47944900091, 2.45094741397, 2.44671895216, 2.60358591728, 2.69060115335, 2.70584859536]
+wall_s = [0.483427875, 0.769668458, 1.640254250, 3.076443750, 7.359987166, 14.543751625, 28.094598500]
+
+[cases.target-pedone_from-gap.native-epsr26]
+fit = [0.114456965768, 0.109686483237, 0.102022934336, 0.0959837708498, 0.0882823198994, 0.0813417011435, 0.0723382517846]
+rdf = [0.739646492471, 0.692129263618, 0.604348214711, 0.552301054536, 0.476289984890, 0.433273662669, 0.381513082077]
+partial_sq = [0.249223968858, 0.240538928918, 0.222785219385, 0.206991352520, 0.185838430361, 0.169526437663, 0.149795080062]
+min_si_si_a = [2.15196222121, 2.14023393386, 2.18143979051, 2.23496571975, 2.26049466160, 1.94919867529, 1.57937941545]
+wall_s = [1.239072042, 1.744154542, 3.169486084, 5.549923416, 12.990650083, 24.715434458, 47.454165250]
+
+[cases.target-pedone_from-gap.rsmith-epsr-unconstrained]
+fit = [0.111873788965, 0.107163569875, 0.0959132595723, 0.0894513212524, 0.0780370244938, 0.0632615315606, 0.0455542675894]
+rdf = [0.678351117402, 0.616693303172, 0.403659543983, 0.263032795223, 0.230032744904, 0.196195854833, 0.159574505184]
+partial_sq = [0.244534362999, 0.235253863623, 0.208939846940, 0.184618958108, 0.156893137332, 0.132728795957, 0.106221965957]
+min_si_si_a = [2.18053008562, 2.21831336079, 2.24544767955, 2.26474281536, 2.28446509629, 2.31080332991, 2.31066092904]
+wall_s = [0.509530500, 0.821185000, 1.743121792, 3.290981875, 7.913150000, 15.724402958, 30.217302708]
+
+[[matched_fit]]
+case = "target-gap_from-pedone"
+native_iteration = 10
+rsmith_iteration = 5
+absolute_fit_difference = 0.000635483109
+native_minus_rsmith_rdf = 0.089480305807
+native_over_rsmith_wall = 3.168548946
+
+[[matched_fit]]
+case = "target-gap_from-pedone"
+native_iteration = 50
+rsmith_iteration = 25
+absolute_fit_difference = 0.000622313926
+native_minus_rsmith_rdf = 0.025361537870
+native_over_rsmith_wall = 3.115065130
+
+[[matched_fit]]
+case = "target-pedone_from-gap"
+native_iteration = 10
+rsmith_iteration = 5
+absolute_fit_difference = 0.000070511278
+native_minus_rsmith_rdf = 0.148641510553
+native_over_rsmith_wall = 3.183898820
+
+[[matched_fit]]
+case = "target-pedone_from-gap"
+native_iteration = 25
+rsmith_iteration = 10
+absolute_fit_difference = 0.001169001353
+native_minus_rsmith_rdf = 0.213257189667
+native_over_rsmith_wall = 3.947347806

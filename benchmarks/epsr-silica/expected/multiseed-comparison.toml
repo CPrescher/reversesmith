@@ -1,0 +1,71 @@
+status = "multiseed_cross_program_protocol_frozen_before_ensemble_outcomes"
+date = "2026-08-03"
+scope = "two symmetric 3000-atom SiO2 cross-recovery cases with corrected RMCProfile weighting and exact final-coordinate audits"
+parent = "next-campaign-scope.toml"
+
+[budget]
+moves = 6000
+moves_per_atom = 2.0
+seeds = [20260802, 20260803, 20260804, 20260805, 20260806, 20260807, 20260808, 20260809, 20260810, 20260811]
+threads = 1
+
+[methods]
+names = [
+  "rsmith-rmc",
+  "rsmith-pedone-w3",
+  "rsmith-pace-w3",
+  "rsmith-epsr",
+  "native-epsr26",
+  "rmcprofile",
+]
+gap_quip = "archived diagnostic only; no ensemble replicas"
+
+[data]
+neutron_sigma_s_q = 0.02
+xray_sigma_s_q = 0.02
+fit_q_min_a_inverse = 0.5
+fit_q_max_a_inverse = 25.0
+targets = "exact noise-free hidden-coordinate neutron and X-ray Faber-Ziman totals"
+
+[rmcprofile]
+executable = "official 6.7.9.5 serial binary; one thread"
+seed = "explicit second command-line argument"
+neutron_weight = "0.02 constant standard deviation"
+xray_transform = "F(Q)=Q[S(Q)-1]"
+xray_weight = "one F(Q) section with sigma_F=0.02*sqrt(mean(Q^2)), preserving expected total X-ray chi-squared for constant sigma_S(Q)=0.02"
+xray_weight_amendment = "Before any trajectory outcome, both 490- and 99-section encodings aborted RMCProfile 6.7.9.5; its log also showed every section inheriting the first weight. The scalar RMS uncertainty is the stable total-information match, but cannot reproduce pointwise S(Q) weighting."
+exact_final = "run with a periodic checkpoint, reset only checkpoint counters, then complete the missing moves with SAVE_PERIOD=0.0; audit checkpoint plus tail equals 6000"
+timing = "report the uninterrupted 6000-move stage separately from exact-coordinate recovery overhead"
+
+[native_epsr]
+seed = "explicit deterministic state in Cross.ato"
+target_gate = "reuse the passed program-native hidden-coordinate targets and zero-move replay"
+
+[outcomes.fixed_budget]
+primary = [
+  "common neutron and X-ray RMS",
+  "mean hidden partial S(Q) RMS",
+  "mean hidden partial g(r) RMS",
+  "Si and O coordination-defect fractions",
+  "O-Si-O and Si-O-Si angle errors",
+  "ring-distribution total variation",
+  "minimum pair distances",
+]
+statistics = ["all seeds", "median", "interquartile range", "bootstrap 95-percent confidence interval"]
+
+[outcomes.matched_fit]
+scalar = "sqrt((neutron_rms^2 + xray_rms^2)/2) in the common independent scorer"
+matching = "within each case, sort each method's ten endpoints by the scalar and pair equal ranks"
+maximum_absolute_scalar_difference = 0.002
+minimum_pairs_for_claim = 5
+policy = "report structural contrasts only inside overlapping achieved-fit support; otherwise report that the matched-fit comparison is unresolved"
+
+[timing]
+scope = "end-to-end one-thread wall time including model and data initialization"
+cold_repeats = 5
+warm_repeats = 5
+separate_scientific_and_timing_runs = true
+
+[claims]
+allowed = "compare fixed-budget stochastic distributions, achieved-fit overlap, and repeated one-thread implementation throughput"
+forbidden = "claim equilibrium convergence, experimental truth, or superiority when achieved-fit support does not overlap"

@@ -243,19 +243,88 @@ weight 3, rsmith EPSR, native EPSR26, and RMCProfile. This decision and the
 remaining matching limitations are frozen in
 `expected/next-campaign-scope.toml`.
 
+### Ten-seed fixed-budget silica comparison
+
+The completed ensemble contains 120 independently scored endpoints: six
+methods, two symmetric 3,000-atom cross-recovery cases, and ten seeds after
+6,000 attempted moves. RMCProfile now uses the intended neutron uncertainty,
+an information-matched scalar X-ray uncertainty, explicit seeds, and audited
+exact 6,000-move configurations. All programs use one thread.
+
+| Hidden target / method | Combined fit RMS, median | Hidden partial-RDF RMS, median | Wall time, median |
+|---|---:|---:|---:|
+| GAP / native EPSR26 | 0.11489 | 0.76711 | 1.045 s |
+| GAP / RMCProfile | 0.11422 | 0.72140 | 6.606 s |
+| GAP / rsmith EPSR | 0.11177 | 0.71034 | 0.390 s |
+| GAP / PACE weight 3 | 0.09747 | 0.59747 | 12.986 s |
+| GAP / Pedone weight 3 | 0.09750 | 0.59841 | 0.675 s |
+| GAP / pure RMC | 0.09757 | 0.60507 | 0.510 s |
+| Pedone / native EPSR26 | 0.11796 | 0.76684 | 1.075 s |
+| Pedone / RMCProfile | 0.11576 | 0.59904 | 6.404 s |
+| Pedone / rsmith EPSR | 0.11559 | 0.72070 | 0.407 s |
+| Pedone / PACE weight 3 | 0.09378 | 0.45780 | 15.690 s |
+| Pedone / Pedone weight 3 | 0.09404 | 0.45839 | 0.668 s |
+| Pedone / pure RMC | 0.09431 | 0.46323 | 0.515 s |
+
+At identical seeds PACE lowers mean partial-RDF RMS relative to pure RMC by
+`0.00761` and `0.00802`; the paired 95% bootstrap intervals exclude zero in
+both directions. Its difference from Pedone weight 3 is unresolved in both
+directions. This supports a modest benefit from energy-regularized hybrid RMC,
+but not a PACE-specific benefit over Pedone.
+
+The fixed move count is not a full EPSR comparison. Native EPSR26 resets the
+empirical potential and performs one potential-refinement iteration; rsmith
+also uses one iteration, so its first updated empirical potential is produced
+only after the scored MC endpoint. The imported finished tutorial records 495
+accumulated iterations. These EPSR endpoints therefore test initialization and
+short-epoch throughput, not the converged method. This explains why the direct
+data-fitting hybrid-RMC arms reach a different residual range after only two
+attempted moves per atom.
+
+No PACE endpoint overlaps native EPSR26 or RMCProfile within the preregistered
+`0.002` achieved-fit tolerance. The ensemble consequently does not establish
+rsmith superiority over either external code. Where support does overlap,
+RMCProfile recovers a lower hidden RDF error than native EPSR for the GAP
+target and than rsmith EPSR for the Pedone target. A proper EPSR test must run
+the potential-refinement schedule toward convergence, save trajectory
+checkpoints, and compare methods only at common achieved residuals.
+
+### Iterative EPSR pilot
+
+The follow-up uses five attempted moves per atom between empirical-potential
+updates and independent seeded prefixes through iterations 1, 2, 5, 10, 25,
+50, and 100. Removing rsmith's explicit minimum-distance constraints gives
+byte-identical coordinates through iteration 50, so constraint asymmetry does
+not explain the result.
+
+Four native/rsmith checkpoint pairs fall within the frozen `0.002` combined-
+fit tolerance. In all four, rsmith has lower hidden partial-RDF RMS and reaches
+the endpoint 3.12--3.95 times faster. For example, toward GAP native iteration
+10 gives fit/RDF `0.09597/0.41730` in 5.20 s, while rsmith iteration 5 gives
+`0.09661/0.32782` in 1.64 s. Toward Pedone the corresponding values are
+`0.09598/0.55230` and `0.09591/0.40366` in 5.55 and 1.74 s.
+
+At iteration 100, native EPSR26 has Si-Si minima of 1.925 A toward GAP and
+1.579 A toward Pedone, well below the hidden-target values of 2.257 and 2.445
+A. Unguarded rsmith remains at 2.706 and 2.311 A and has lower common fit and
+hidden-RDF errors. The planned 250/500 extension is stopped on structural-
+stability grounds. This is promising evidence for rsmith and a reproducible
+failure of this native setup, but it is a single-seed synthetic pilot. A paper
+claim requires seed replication, denser matched-fit checkpoints, sensitivity
+to EPSR controls and starting state, and held-out or experimental validation.
+
 ## Remaining publication gates
 
 1. Validate liquid-Ga structures against held-out data or an independent
    atomistic/physical oracle.
 2. Test independent equilibrium starts to separate basin sensitivity from
    convergence out of unstructured liquids.
-3. Run pure RMC, Pedone weight 3, and native PACE weight 3 across the frozen
-   seed set and cold/warm timing replicates; do not add further GAP/QUIP runs.
-   Repair the RMCProfile parallel runtime and freeze exact coordinate-save and
-   timing rules.
-4. Run the matched multi-seed native/rsmith silica ensembles, estimate native
-   seed-to-seed spread, and freeze stochastic equivalence margins before
-   comparing pair-potential and MLIP-regularized refinements.
-5. Apply the preregistered comparison to a complex high-pressure glass, where
+3. Replicate the native/rsmith EPSR convergence result across seeds with dense
+   checkpoints around common achieved residuals, and test whether the native
+   close-contact failure survives reasonable control/start sensitivity.
+4. Complete the separately preregistered cold/warm timing-only campaign. The
+   ten fresh-process scientific timings are repeatable warm-cache diagnostics,
+   not final publication speed ratios.
+5. Apply the matched-fit comparison to a complex high-pressure glass, where
    chemically diagnostic coordination, angle, and topology observables can
    establish or reject a physical-superiority claim.

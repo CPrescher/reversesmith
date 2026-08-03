@@ -94,6 +94,16 @@ changes = [
   "separate current adapter-smoke evidence from the future stochastic and matched-fit publication comparison",
 ]
 
+[provenance.amendment_2026_08_03_multiseed_comparison]
+reason = "The cross-program ensemble, corrected RMCProfile uncertainty mapping, exact final-coordinate audit, and achieved-fit overlap rule were frozen before ensemble outcomes were generated."
+protocol = "expected/multiseed-comparison.toml"
+changes = [
+  "pass explicit seeds to every implementation",
+  "map sigma_S(Q)=0.02 to constant neutron and Q-dependent X-ray F(Q) weights in RMCProfile",
+  "require exact 6000-move RMCProfile coordinates through an audited checkpoint-plus-tail procedure",
+  "make fixed-budget distributions primary and prohibit matched-fit claims outside overlapping residual support",
+]
+
 [system]
 formula = "SiO2"
 number_density_atoms_per_a3 = 0.06639997054690536

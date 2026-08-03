@@ -1,0 +1,17 @@
+status = "epsr_convergence_iteration_100_extension_frozen_before_outcomes"
+date = "2026-08-03"
+parent = "epsr-convergence-pilot.toml"
+parity_control = "epsr-convergence-constraint-parity.toml"
+trigger = "both native and rsmith common residuals are still decreasing materially between iterations 25 and 50; the unconstrained rsmith control is byte-identical to the guarded arm through iteration 50"
+
+[design]
+checkpoint = 100
+seed = 20260802
+independent_prefix_run = true
+moves_per_refinement = 15000
+attempted_moves = 1500000
+methods = ["native-epsr26", "rsmith-epsr-unconstrained"]
+
+[decision]
+next = "score iteration 100 before deciding whether to spend the 250- and 500-iteration budget"
+claim_boundary = "single-seed convergence extension; no stochastic or equilibrium claim"

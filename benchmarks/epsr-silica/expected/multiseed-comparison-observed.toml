@@ -1,0 +1,63 @@
+status = "completed_multiseed_cross_program_comparison"
+date = "2026-08-03"
+protocol = "multiseed-comparison.toml"
+raw_score_sha256 = "a3e96b501bfc8d3853db831af03c8e7ebe98c422c2812f324013eebc47dc7c74"
+summary_sha256 = "8f58d538e7f508701fd037a4accf3ad0679de50ea111c4e48084686d3c20064e"
+runs = 120
+runs_per_method_per_case = 10
+
+[interpretation]
+fixed_budget = "PACE weight 3, Pedone weight 3, and pure RMC reach a lower residual range after 6000 moves; fixed-budget values measure direct-refinement progress and throughput, not matched-fit structural superiority. The EPSR arms perform only their first sampling/refinement cycle and are initialization controls, not converged EPSR comparisons."
+pace_vs_rmc = "At identical seeds and move budget, PACE weight 3 lowers mean partial-RDF RMS relative to pure RMC in both directions; both paired 95% bootstrap intervals exclude zero."
+pace_vs_pedone = "PACE and Pedone weight 3 are unresolved: paired mean partial-RDF RMS intervals include zero in both directions."
+external_codes = "No PACE/RMC endpoint overlaps the EPSR26 or RMCProfile achieved-fit range within the preregistered 0.002 tolerance, so superiority over either external program is not supported by this campaign."
+epsr_scope = "Native EPSR26 uses niter=1 after resetting its empirical potential; rsmith uses iterations=1, so its updated empirical potential is written only after the scored MC endpoint. The imported tutorial state records nsumt=495, demonstrating the intended iteration scale."
+next_gate = "Run native and rsmith EPSR over a convergence schedule approaching the tutorial's iteration scale, retain trajectory checkpoints, and compare hidden structure only at common achieved residuals."
+
+[timing]
+scope = "ten independent fresh-process, one-thread scientific runs per method and case; median wall time includes initialization"
+qualification = "These ensemble timings are repeated warm-cache implementation measurements. The separately preregistered five cold and five warm timing runs remain incomplete, so do not present these ratios as final publication speed claims."
+rmcprofile = "sampling_wall_seconds is the uninterrupted 6000-move stage; exact-coordinate checkpoint-tail bookkeeping is excluded"
+
+[audit]
+all_endpoint_counts_complete = true
+all_rmcprofile_attempted_moves = 6000
+minimum_distance_guard = "All endpoints retain Si-O >= 1.3500 A, O-O >= 2.0056 A, and Si-Si >= 2.0087 A."
+
+[cases.target-gap_from-pedone.methods]
+"native-epsr26" = { fit = 0.114891467671, fit_q1 = 0.114875790025, fit_q3 = 0.114919957748, neutron = 0.106847825334, xray = 0.122405660956, partial_sq = 0.249164345569, rdf = 0.767113848566, rdf_q1 = 0.765209150027, rdf_q3 = 0.768804859412, wall_s = 1.0448648335 }
+"rmcprofile" = { fit = 0.114224541210, fit_q1 = 0.114052817581, fit_q3 = 0.114307224252, neutron = 0.106706509791, xray = 0.121297865628, partial_sq = 0.247949166291, rdf = 0.721397414280, rdf_q1 = 0.718634304433, rdf_q3 = 0.724641522117, wall_s = 6.6056292080 }
+"rsmith-epsr" = { fit = 0.111769616776, fit_q1 = 0.111600984687, fit_q3 = 0.111878993025, neutron = 0.102661325298, xray = 0.120148087457, partial_sq = 0.243545989417, rdf = 0.710340527934, rdf_q1 = 0.707095691397, rdf_q3 = 0.715845496835, wall_s = 0.3900339370 }
+"rsmith-pace-w3" = { fit = 0.097470011579, fit_q1 = 0.097311239791, fit_q3 = 0.097582268720, neutron = 0.090733933188, xray = 0.103706855204, partial_sq = 0.224669803288, rdf = 0.597473789045, rdf_q1 = 0.594665665986, rdf_q3 = 0.601221945390, wall_s = 12.9858500210 }
+"rsmith-pedone-w3" = { fit = 0.097500423006, fit_q1 = 0.097291524694, fit_q3 = 0.097650828335, neutron = 0.090777917688, xray = 0.103615275252, partial_sq = 0.224751264963, rdf = 0.598411249175, rdf_q1 = 0.594412969866, rdf_q3 = 0.601232501005, wall_s = 0.6754910215 }
+"rsmith-rmc" = { fit = 0.097573082290, fit_q1 = 0.097498442913, fit_q3 = 0.097888984008, neutron = 0.091127945779, xray = 0.103817646232, partial_sq = 0.224513586693, rdf = 0.605073241203, rdf_q1 = 0.601347614300, rdf_q3 = 0.608384989089, wall_s = 0.5099469995 }
+
+[cases.target-gap_from-pedone.paired]
+pace_minus_rmc_rdf_median = -0.007607635775
+pace_minus_rmc_rdf_ci95 = [-0.012992221876, -0.002538925353]
+pace_minus_pedone_rdf_median = 0.000026297901
+pace_minus_pedone_rdf_ci95 = [-0.003131493990, 0.004211823901]
+
+[cases.target-gap_from-pedone.matched_fit]
+native_epsr26_vs_rmcprofile_pairs = 10
+native_epsr26_minus_rmcprofile_rdf_median = 0.043599064259
+external_vs_pace_pairs = 0
+
+[cases.target-pedone_from-gap.methods]
+"native-epsr26" = { fit = 0.117964293656, fit_q1 = 0.117910192051, fit_q3 = 0.117985452957, neutron = 0.110521546762, xray = 0.124967553353, partial_sq = 0.255331770697, rdf = 0.766842869547, rdf_q1 = 0.765726580539, rdf_q3 = 0.768294498778, wall_s = 1.0753695415 }
+"rmcprofile" = { fit = 0.115762530335, fit_q1 = 0.115548279755, fit_q3 = 0.116117734946, neutron = 0.108205828028, xray = 0.122931384695, partial_sq = 0.252842154886, rdf = 0.599039743503, rdf_q1 = 0.596858464313, rdf_q3 = 0.602129834216, wall_s = 6.4040057705 }
+"rsmith-epsr" = { fit = 0.115589300328, fit_q1 = 0.115516366293, fit_q3 = 0.115734277303, neutron = 0.107836775046, xray = 0.122920765016, partial_sq = 0.251319036701, rdf = 0.720698503481, rdf_q1 = 0.719220978826, rdf_q3 = 0.725487266357, wall_s = 0.4072901670 }
+"rsmith-pace-w3" = { fit = 0.093775936752, fit_q1 = 0.093569033512, fit_q3 = 0.094249456407, neutron = 0.085134204832, xray = 0.101775084793, partial_sq = 0.225451211078, rdf = 0.457799665226, rdf_q1 = 0.450304157754, rdf_q3 = 0.458983346299, wall_s = 15.6900747915 }
+"rsmith-pedone-w3" = { fit = 0.094042448086, fit_q1 = 0.093711462828, fit_q3 = 0.094427982228, neutron = 0.085533746982, xray = 0.101784840185, partial_sq = 0.225862975745, rdf = 0.458389670560, rdf_q1 = 0.451724161431, rdf_q3 = 0.461132999259, wall_s = 0.6684314160 }
+"rsmith-rmc" = { fit = 0.094309255536, fit_q1 = 0.093959545260, fit_q3 = 0.094659441013, neutron = 0.085704003575, xray = 0.102006737337, partial_sq = 0.225739531091, rdf = 0.463226761225, rdf_q1 = 0.458651183794, rdf_q3 = 0.467775129324, wall_s = 0.5149987085 }
+
+[cases.target-pedone_from-gap.paired]
+pace_minus_rmc_rdf_median = -0.008023970251
+pace_minus_rmc_rdf_ci95 = [-0.010147007065, -0.005402876269]
+pace_minus_pedone_rdf_median = -0.000152004688
+pace_minus_pedone_rdf_ci95 = [-0.004287101631, 0.001354780284]
+
+[cases.target-pedone_from-gap.matched_fit]
+rmcprofile_vs_rsmith_epsr_pairs = 10
+rmcprofile_minus_rsmith_epsr_rdf_median = -0.123582341808
+external_vs_pace_pairs = 0
