@@ -550,9 +550,11 @@ hardware/software metadata.
   verification;
 - `scripts/prepare_epsr_control_start_sensitivity.py`, the two EPSR runners,
   `verify_epsr_control_start_inputs.py`, and
+  `run_epsr_control_start_matrix.py`, and
   `summarize_epsr_control_start_sensitivity.py`: scaled-reference and
-  target-blind common-start preparation and verification, the frozen
-  six-arm/five-seed matrix, and preregistered robustness decisions;
+  target-blind common-start preparation and verification, bounded-concurrency
+  dispatch of the frozen six-arm/five-seed matrix, and preregistered robustness
+  decisions;
 - `scripts/prepare_hrmc_weight_sweep.py`, `run_hrmc_weight_sweep.py`, and
   `verify_hrmc_weight_sweep.py`: frozen Pedone/GAP weight-pilot preparation,
   execution, scoring, and regression guards;
@@ -692,10 +694,14 @@ python3 scripts/verify_epsr_convergence_ensemble.py
 # Six-arm control/start sensitivity; arms and seeds can be dispatched separately.
 python3 scripts/prepare_epsr_control_start_sensitivity.py --force
 python3 scripts/verify_epsr_control_start_inputs.py
+# Full matrix; completed endpoints are retained and concurrency is bounded.
+python3 scripts/run_epsr_control_start_matrix.py --workers 8
+# A single arm/seed can instead be run directly:
 python3 scripts/run_native_epsr_cross.py --control-start-sensitivity \
   --sensitivity-arm feedback-0p5 --convergence-seed 20260802 --force
 python3 scripts/run_rsmith_epsr_convergence.py --control-start-sensitivity \
   --sensitivity-arm feedback-0p5 --convergence-seed 20260802 --force
-python3 scripts/score_cross_recovery.py --quiet
+python3 scripts/score_cross_recovery.py --quiet \
+  --only-epsr-control-start-sensitivity
 python3 scripts/summarize_epsr_control_start_sensitivity.py
 ```

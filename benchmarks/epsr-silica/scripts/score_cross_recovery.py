@@ -17,6 +17,11 @@ import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--quiet", action="store_true")
+parser.add_argument(
+    "--only-epsr-control-start-sensitivity",
+    action="store_true",
+    help="skip unchanged benchmark roots and score only the control/start matrix",
+)
 args = parser.parse_args()
 
 
@@ -513,7 +518,11 @@ summary = {
     "scope": "smoke adapter validation, not production comparison",
     "cases": {},
 }
-for case in sorted(fixture_root.glob("target-*_*")):
+for case in (
+    []
+    if args.only_epsr_control_start_sensitivity
+    else sorted(fixture_root.glob("target-*_*"))
+):
     target = structure_metrics(case / "hidden-target.data")
     structure_paths = {"cross_start": case / "cross-start.data"}
     candidates = {
@@ -570,13 +579,16 @@ for case in sorted(fixture_root.glob("target-*_*")):
         },
     }
 
-(fixture_root / "score-summary.json").write_text(
-    json.dumps(summary, indent=2, sort_keys=True) + "\n"
-)
-emit(summary)
+if not args.only_epsr_control_start_sensitivity:
+    (fixture_root / "score-summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n"
+    )
+    emit(summary)
 
 
 def score_hrmc_root(root: Path, status: str, scope: str):
+    if args.only_epsr_control_start_sensitivity:
+        return
     if not root.is_dir():
         return
     hrmc_summary = {"status": status, "scope": scope, "cases": {}}
@@ -630,6 +642,8 @@ score_hrmc_root(
 
 
 def score_multiseed_root(root: Path):
+    if args.only_epsr_control_start_sensitivity:
+        return
     if not root.is_dir():
         return
     result = {
@@ -691,6 +705,8 @@ score_multiseed_root(case_root / "results/multiseed-comparison")
 
 
 def score_epsr_convergence_root(root: Path):
+    if args.only_epsr_control_start_sensitivity:
+        return
     if not root.is_dir():
         return
     result = {
@@ -740,6 +756,8 @@ score_epsr_convergence_root(case_root / "results/epsr-convergence-pilot")
 
 
 def score_epsr_convergence_ensemble_root(root: Path):
+    if args.only_epsr_control_start_sensitivity:
+        return
     if not root.is_dir():
         return
     result = {

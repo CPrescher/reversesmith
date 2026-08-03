@@ -234,9 +234,18 @@ for case_index, (case_name, arms) in enumerate(sorted(raw["cases"].items())):
         rdf = np.asarray(primary_rdf_differences, dtype=float)
         paired_rdf = distribution(primary_rdf_differences, random_seed)
         win_count = int(np.sum(rdf > 0.0))
-        robust = paired_rdf["median"] > 0.0 and win_count >= 4
-        strong = robust and paired_rdf["bootstrap_mean_95_ci"][0] > 0.0
-        sensitive = paired_rdf["mean"] <= 0.0 or win_count < 3
+        complete = len(available_seeds) == len(expected_seeds)
+        robust = (
+            paired_rdf["median"] > 0.0 and win_count >= 4 if complete else None
+        )
+        strong = (
+            robust and paired_rdf["bootstrap_mean_95_ci"][0] > 0.0
+            if complete
+            else None
+        )
+        sensitive = (
+            paired_rdf["mean"] <= 0.0 or win_count < 3 if complete else None
+        )
         arm_summary["aggregate"] = {
             "matched_seed_count": len(available_seeds),
             "accepted_pair_count_range": [
@@ -278,6 +287,7 @@ complete_decisions = [
     arm["aggregate"]["decision"]
     for case in summary["cases"].values()
     for arm in case["arms"].values()
+    if arm["aggregate"]["decision"]["sensitive"] is not None
 ]
 summary["overall_decision"] = {
     "evaluated_case_arms": len(complete_decisions),
