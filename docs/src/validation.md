@@ -160,6 +160,15 @@ improves the mean common neutron/X-ray RMS over its cross-start. rsmith pure
 RMC reduces the common totals from 0.10880/0.12332 to 0.09122/0.10339 for the
 GAP target and from 0.11170/0.12596 to 0.08541/0.10174 for the Pedone target.
 
+For native EPSR26 and RMCProfile, “matched” currently means the same hidden
+coordinates, density-rescaled cross-start, neutron/X-ray information, 6,000
+attempted atom moves, and independent final-coordinate scorer. It does not yet
+mean the same accepted-move count, achieved residual, or convergence schedule.
+EPSR26 has one short epoch in this adapter smoke. RMCProfile used the official
+macOS wrapper's serial fallback, and its timed checkpoints contain 5,315 and
+5,490 generated moves although the logs reach 6,000. These are therefore
+correctness and plumbing controls, not a scientific ranking.
+
 This is deliberately not evidence that GAP-HRMC is superior. The smoke's
 `0.001` Pedone/GAP energy weight is orders of magnitude below the calibration
 diagnostic, so both energy-regularized paths remain almost indistinguishable
@@ -226,15 +235,24 @@ for GAP/QUIP, a 21--25 times speedup. This is an implementation, calibration,
 and throughput result; repeated timings and multi-seed structural uncertainty
 are still required for a paper claim.
 
+GAP/QUIP is now archived at this point rather than carried into the multi-seed
+campaign. Its completed single-seed results remain useful for documenting the
+external MLIP path and the 21--25 times native-PACE speed difference, but the
+next compute budget is assigned to pure RMC, Pedone weight 3, native PACE
+weight 3, rsmith EPSR, native EPSR26, and RMCProfile. This decision and the
+remaining matching limitations are frozen in
+`expected/next-campaign-scope.toml`.
+
 ## Remaining publication gates
 
 1. Validate liquid-Ga structures against held-out data or an independent
    atomistic/physical oracle.
 2. Test independent equilibrium starts to separate basin sensitivity from
    convergence out of unstructured liquids.
-3. Repeat the completed Pedone/GAP/PACE bracket comparison across seeds and
-   cold/warm timing replicates; repair the RMCProfile parallel runtime and
-   freeze exact coordinate-save and timing rules.
+3. Run pure RMC, Pedone weight 3, and native PACE weight 3 across the frozen
+   seed set and cold/warm timing replicates; do not add further GAP/QUIP runs.
+   Repair the RMCProfile parallel runtime and freeze exact coordinate-save and
+   timing rules.
 4. Run the matched multi-seed native/rsmith silica ensembles, estimate native
    seed-to-seed spread, and freeze stochastic equivalence margins before
    comparing pair-potential and MLIP-regularized refinements.

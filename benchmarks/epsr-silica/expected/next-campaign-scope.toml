@@ -1,0 +1,39 @@
+status = "next_multiseed_campaign_scope_frozen_before_outcomes"
+date = "2026-08-03"
+scope = "SiO2 symmetric cross-recovery and timing campaign after the single-seed Pedone/GAP/PACE smoke"
+
+[include]
+methods = [
+  "rsmith_rmc",
+  "rsmith_pedone_hrmc_weight_3",
+  "rsmith_pace_hrmc_weight_3",
+  "rsmith_epsr",
+  "native_epsr26",
+  "native_rmcprofile",
+]
+seeds = [20260802, 20260803, 20260804, 20260805, 20260806, 20260807, 20260808, 20260809, 20260810, 20260811]
+timing_repeats_cold = 5
+timing_repeats_warm = 5
+
+[exclude]
+gap_quip = "No further replicas: the completed 6000-move diagnostic is 21-25 times slower than native PACE and does not show a unique structural advantage."
+pdfgui = "Retain as a forward-PDF control only; it is not an atom-by-atom RMC engine."
+
+[comparison]
+matched = [
+  "same hidden coordinates and density-rescaled cross-start",
+  "same neutron and X-ray information content",
+  "same attempted atom-move budget",
+  "program-native target replay before refinement",
+  "common independent coordinate scoring after refinement",
+]
+not_yet_matched = [
+  "accepted move count or achieved final data fit",
+  "native EPSR epoch schedule and convergence",
+  "RMCProfile parallel runtime and exact final-coordinate checkpoint",
+  "seed-to-seed uncertainty",
+]
+
+[claims]
+allowed = "compare stochastic recovery distributions and repeated implementation-level throughput after the outstanding adapter controls are closed"
+forbidden = "treat the existing single-seed adapter smoke or the external GAP timing as a publication-level superiority result"

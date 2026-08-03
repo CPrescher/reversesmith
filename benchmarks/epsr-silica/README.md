@@ -188,6 +188,22 @@ values are:
 | Pedone / native EPSR26 | 0.11170 -> 0.11052 | 0.12596 -> 0.12482 |
 | Pedone / RMCProfile | 0.11170 -> 0.10939 | 0.12596 -> 0.12339 |
 
+This is the current EPSR/RMCProfile comparison, and its scope is deliberately
+narrow. The hidden coordinates, density-rescaled cross-start, neutron/X-ray
+information, attempted-move count, and final independent coordinate scorer are
+matched. EPSR26 and RMCProfile first reproduce program-native targets generated
+from the same hidden coordinates, so differences in their observable
+normalizations do not masquerade as structural differences.
+
+The achieved data fit, accepted-move count, and sampling schedule are not yet
+matched. Native EPSR26 has only been run for this one short epoch, not to its
+normal convergence criterion. The official RMCProfile macOS wrapper fell back
+to its serial executable, and its wall-clock checkpoint captured coordinates
+after 5,315 and 5,490 of the 6,000 generated moves even though the logs confirm
+that both jobs completed. Consequently, the table proves that both adapters
+execute and move the structures in the correct direction; it does not yet rank
+rsmith, EPSR, or RMCProfile scientifically.
+
 The Pedone- and GAP-regularized rsmith trajectories are nearly identical to
 pure RMC in this smoke. The diagnostic calibration explains why: the frozen
 energy weight of `0.001` is roughly three to four orders of magnitude below
@@ -290,6 +306,13 @@ practical native throughput. The matched 6,000-move PACE arms took 12.3--16.6
 s versus 307.7--354.8 s for GAP/QUIP, a 21--25 times speedup. Repeated timing
 and multi-seed structural ensembles remain publication gates.
 
+The next multi-seed campaign therefore excludes GAP/QUIP. Its completed arms
+remain an archived performance and MLIP-path diagnostic, but no additional GAP
+replicas will be run. Compute is focused on pure rsmith RMC, Pedone weight 3,
+native PACE weight 3, rsmith EPSR, native EPSR26, and native RMCProfile. The
+scope and remaining comparability gaps are frozen in
+`expected/next-campaign-scope.toml` before those ensemble outcomes exist.
+
 ### Local timing diagnostic
 
 End-to-end one-thread wall times on an Apple M4 Pro were:
@@ -374,6 +397,8 @@ RMCProfile build, exact saved move counts, and calibrated energy weights.
   observed bracket;
 - `expected/hrmc-production-*.toml`: the retained delayed-acceptance failure,
   superseding joint-acceptance protocol, and observed three-model comparison;
+- `expected/next-campaign-scope.toml`: post-smoke decision to archive GAP/QUIP
+  and focus the multi-seed campaign on RMC, Pedone, PACE, EPSR, and RMCProfile;
 - `reference/README.md`: provenance and redistribution rules for upstream data.
 
 ## Local reproduction

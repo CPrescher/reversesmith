@@ -85,6 +85,15 @@ changes = [
   "restrict the single-seed result to implementation, calibration, and throughput claims",
 ]
 
+[provenance.amendment_2026_08_03_next_campaign_scope]
+reason = "After the matched single-seed diagnostic, external GAP/QUIP was removed from further replicas because of cost; its completed results remain an archived implementation control."
+protocol = "expected/next-campaign-scope.toml"
+changes = [
+  "focus multi-seed refinement on pure RMC, Pedone weight 3, native PACE weight 3, rsmith EPSR, native EPSR26, and native RMCProfile",
+  "retain GAP/QUIP only as the completed single-seed timing and energy-path diagnostic",
+  "separate current adapter-smoke evidence from the future stochastic and matched-fit publication comparison",
+]
+
 [system]
 formula = "SiO2"
 number_density_atoms_per_a3 = 0.06639997054690536
@@ -179,6 +188,11 @@ metrics = [
 ]
 density_policy = "Analyze each endpoint at its native 0-bar model density; report density explicitly and do not rank raw RDF distance across unequal densities without qualification."
 claim_rule = "Agreement with GAP or Pedone alone cannot establish physical superiority; held-out scattering and independently defined defect/topology criteria remain primary."
+
+[comparison.next_multiseed_campaign]
+protocol = "expected/next-campaign-scope.toml"
+methods = ["rsmith_rmc", "rsmith_pair_hrmc", "rsmith_pace_hrmc", "rsmith_epsr", "native_epsr", "native_rmcprofile"]
+gap_quip_policy = "archive completed single-seed diagnostic; do not run additional replicas"
 
 [held_out_protocol]
 runs = [
