@@ -25,9 +25,11 @@ ACE-HRMC, this is an intentionally favorable synthetic recovery/oracle test.
 It can validate algorithmic use of an informative MLIP prior, but cannot by
 itself establish experimental accuracy or universal superiority over EPSR.
 
-The protocol is frozen in `expected/ten-gpa-pilot.toml`. Private source
-structures remain ignored; hashes, repository commit, generation input, and
-the public ACE provenance are committed.
+The protocol is frozen in `expected/ten-gpa-pilot.toml`, and the deterministically
+generated fixture is pinned before refinement in
+`expected/ten-gpa-pilot-inputs.toml`. Private source structures remain ignored;
+hashes, repository commit, generation input, and the public ACE provenance are
+committed.
 
 ## Reproduction
 

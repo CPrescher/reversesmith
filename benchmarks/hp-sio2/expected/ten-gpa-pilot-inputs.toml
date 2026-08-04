@@ -1,0 +1,27 @@
+status = "hp_sio2_10gpa_generated_inputs_pinned_before_refinement"
+date = "2026-08-04"
+protocol_sha256 = "69e4b774d247d30310c238199586e25f1fc2510ac79a1d512f8531a0fbaafa44"
+
+[box]
+ambient_a = [35.434493352777125, 35.434493352777125, 35.434493352777125]
+target_a = [32.56917460314, 32.56917460314, 32.56917460314]
+affine_scale = [0.9191375837912873, 0.9191375837912873, 0.9191375837912873]
+
+[sha256]
+cross_start = "b0bba276022d69c105ed3e5e588aad3ab8aa1f3e1ca2781196f72ab1786374d0"
+hidden_target = "6bcfadf046072a80bbd660b3bb03439fbb874315461876a86587c7f5da8a5e19"
+hidden_partial_sq = "5fa1a20fd0c53f9ca3a567c43c582ebadd0a6cdfa077a08c223924cd06b319a2"
+target_neutron_iq = "34d21943946caa43d5a5a778b8cc2a16a38e68897116695035c04aa7a5e0daed"
+target_xray_iq = "c19e2bcabd4cd662131e4e355b8a911ed3e48e2371c27d0d6a8e90a62068e23b"
+
+[pre_refinement_audit]
+informative_gap = true
+start_mean_partial_rdf_rms = 1.0805267138819337
+start_si_coordination_total_variation = 0.029000000000000012
+start_joint_iq_rms = 0.1819857197746118
+target_self_joint_iq_rms = 1.7608302409598835e-13
+start_minimum_si_o_a = 1.3918777360749455
+target_minimum_si_o_a = 1.519279410535976
+
+[interpretation]
+note = "The 0 GPa coordinates are affinely compressed into the exact 10 GPa box. The large RDF gap therefore measures non-affine structural differences plus the sensitivity of 0.02 A bins; pressure and density are not inferred."
