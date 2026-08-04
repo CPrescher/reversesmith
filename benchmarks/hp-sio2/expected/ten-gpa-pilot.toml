@@ -1,0 +1,63 @@
+status = "hp_sio2_10gpa_recoverability_pilot_frozen_before_outcomes"
+date = "2026-08-04"
+question = "given the exact 10 GPa density and synthetic total scattering, can refinement recover non-affine structural changes from the affinely compressed 0 GPa glass?"
+
+[source]
+repository = "CPrescher/SiO2_glass"
+commit = "7bfa86d5d01d5c358c778c2175e924158a7f7acf"
+compression_input = "inputs/in.sio2_ace_compress_00_to_10GPa"
+compression_input_sha256 = "cc8daa1267f99b2b4265afc5b612f4a3db4faa05c8266860b085cc8fcf15ffe1"
+ambient_structure = "results/production/compressed/ace/loading/00GPa/data/sio2_ace_00GPa_stabilized.data"
+ambient_structure_sha256 = "c8cef9f4ed4abebf1ff26979aeb579bf2881850316bbe87afc877b503e66a67b"
+target_structure = "results/production/compressed/ace/loading/10GPa/data/sio2_ace_10GPa_final.data"
+target_structure_sha256 = "22157a587829e9c32634115fc28531feaf16d2d52e4b55ef6395c4ab10f816a7"
+atoms = 3000
+silicon_atoms = 1000
+oxygen_atoms = 2000
+temperature_k = 300.0
+loading_path_gpa = [0.0, 5.0, 10.0]
+dwell_at_10gpa_ps = 30.0
+
+[ace]
+article_doi = "10.1038/s41467-024-45840-9"
+dataset_doi = "10.5281/zenodo.10419194"
+model_sha256 = "c8f00d8f0cbc131b0298b79260ba8098975624363c9d178223e51e48f025e97a"
+oracle = "benchmarks/epsr-silica/expected/pace2024-oracle.toml"
+target_generated_with_same_model = true
+
+[fixture]
+start_mapping = "sort by atom id, convert the 0 GPa coordinates to fractional coordinates relative to their source box, and map them into the exact 10 GPa target box"
+target_mapping = "sort by atom id and translate the 10 GPa coordinates into an origin-zero representation without changing fractional coordinates"
+density_policy = "fixed to the hidden 10 GPa target box for every method"
+q_min_a_inverse = 0.5
+q_max_a_inverse = 25.0
+q_step_a_inverse = 0.05
+sigma_iq = 0.02
+rdf_cutoff_a = 16.0
+rdf_bin_width_a = 0.02
+si_o_coordination_cutoff_a = 2.2
+
+[pilot]
+seed = 20260804
+checkpoints_moves = [6000, 18000, 30000]
+threads_per_run = 1
+methods = ["rsmith-rmc", "rsmith-pace-w3"]
+pace_weight = 3.0
+independent_deterministic_prefixes = true
+hard_distance_constraints = false
+timing_claims_allowed = false
+
+[outcomes]
+primary = "mean partial-g(r) RMS from the hidden 10 GPa target"
+secondary = ["Si coordination-distribution total variation", "mean Si coordination error", "neutron and X-ray i(Q) RMS", "pair minimum distances", "accepted moves", "ACE energy change"]
+hidden_observables_used_in_refinement = false
+
+[decision]
+informative_gap = "the affinely compressed start differs from the hidden target by at least 0.02 mean partial-g(r) RMS or 0.02 Si-coordination total variation"
+recoverability = "at least one method improves joint scattering fit and reduces mean hidden partial-g(r) RMS by at least 10 percent relative to the common start"
+pace_usable = "PACE retains at least 50 percent of pure-RMC joint-fit progress at one or more checkpoints and does not worsen hidden-RDF error relative to the start"
+next = "add native EPSR26 and a five-seed compact replication only if informative_gap and recoverability pass; otherwise diagnose or move to 30 GPa"
+
+[claims]
+allowed = "single-seed synthetic 0-to-10 GPa recoverability and whether the compact comparison is worth extending"
+forbidden = "experimental accuracy, pressure inference, universal MLIP or rsmith superiority, or a speed claim"

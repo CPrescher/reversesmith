@@ -1,0 +1,4 @@
+reference/local/
+results/
+scripts/__pycache__/
+*.log
