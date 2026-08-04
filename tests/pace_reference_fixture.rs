@@ -97,7 +97,7 @@ fn rank_one_chebpow_matches_lammps_oracle() {
     let model = PaceModel::load(&fixture("probe_chebpow.yace"), &["Cu".to_string()]).unwrap();
     // Frozen from LAMMPS 22 Jul 2025 Update 4 + ML-PACE 2023.11.25.
     for (distance, expected_atomic_energy) in [
-        (0.5, 0.8100000000000001),
+        (0.5, 0.81),
         (1.0, 0.6400000000000001),
         (2.0, 0.36),
         (4.25, 0.022499999999999964),
@@ -125,7 +125,7 @@ fn sbessel_rank_one_matches_python_ace_oracle() {
     // Frozen from official ICAMS python-ace commit
     // b143ac3c5d18c55d8a1f0701fae855b2638536fe.
     for (distance, oracle_total_energy) in [
-        (0.5, 1.3642287395620389),
+        (0.5, 1.364_228_739_562_039),
         (1.0, 1.2030019100150908),
         (2.0, 0.7042495846821467),
         (4.25, 0.013172351831062924),
@@ -148,10 +148,10 @@ fn sbessel_rank_one_matches_python_ace_oracle() {
 #[test]
 fn core_repulsion_and_e0_match_lammps_oracle() {
     for (distance, lammps_total) in [
-        (0.5, 24.167511919302636869),
-        (1.0, 2.9482382731357930084),
-        (1.234, 1.1608335626571031352),
-        (2.0, 0.50219563140451028982),
+        (0.5, 24.167_511_919_302_637),
+        (1.0, 2.948_238_273_135_793),
+        (1.234, 1.160_833_562_657_103_1),
+        (2.0, 0.502_195_631_404_510_3),
     ] {
         let configuration = copper_configuration(distance);
         let model = PaceModel::load(&fixture("probe_core.yace"), &configuration.species).unwrap();
@@ -172,7 +172,7 @@ fn multi_element_channels_and_directed_bonds_match_lammps_oracle() {
     assert_eq!(model.cutoff_for_types(0, 1).unwrap(), 5.0);
     assert_eq!(model.cutoff_for_types(1, 0).unwrap(), 4.5);
     let runtime = PaceNativeModel::new(model, &configuration, 1.0).unwrap();
-    let lammps_energy = 0.56694747584780813554;
+    let lammps_energy = 0.566_947_475_847_808_1;
     let error = (runtime.cached_total_energy() - lammps_energy).abs();
     assert!(
         error < 2.0e-12,
@@ -254,7 +254,7 @@ fn nonlinear_rank_two_copper_model_matches_lammps_oracle() {
     let model = PaceModel::load(&fixture("probe_rank2.yace"), &configuration.species).unwrap();
     let mut runtime = PaceNativeModel::new(model, &configuration, 1.0).unwrap();
     // LAMMPS 22 Jul 2025 Update 4, pair_style pace product, ML-PACE 2023.11.25.
-    let lammps_energy = 6.4669777525679217334;
+    let lammps_energy = 6.466_977_752_567_922;
     let error = (runtime.cached_total_energy() - lammps_energy).abs();
     assert!(
         error < 2.0e-11,
@@ -294,7 +294,7 @@ fn rank_four_chebexpcos_model_matches_lammps_oracle() {
     let model = PaceModel::load(&fixture("probe_rank4.yace"), &configuration.species).unwrap();
     let runtime = PaceNativeModel::new(model, &configuration, 1.0).unwrap();
     // LAMMPS 22 Jul 2025 Update 4, pair_style pace product, ML-PACE 2023.11.25.
-    let lammps_energy = 8.8682599226462954789;
+    let lammps_energy = 8.868_259_922_646_295;
     let error = (runtime.cached_total_energy() - lammps_energy).abs();
     assert!(
         error < 2.0e-10,
@@ -338,5 +338,5 @@ fn live_lammps_product_evaluator_matches_frozen_copper_reference() {
         .unwrap()
         .parse::<f64>()
         .unwrap();
-    assert!((energy - 6.4669777525679217334).abs() < 2.0e-11);
+    assert!((energy - 6.466_977_752_567_922).abs() < 2.0e-11);
 }

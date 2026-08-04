@@ -1961,8 +1961,10 @@ mod tests {
     #[test]
     fn geometry_validation_enforces_minimum_image_cutoff() {
         let config = small_config();
-        let mut params = RmcParams::default();
-        params.rdf_cutoff = 5.0;
+        let mut params = RmcParams {
+            rdf_cutoff: 5.0,
+            ..RmcParams::default()
+        };
         assert!(validate_rmc_geometry(&config, &params).is_ok());
 
         params.rdf_cutoff = 5.0001;
@@ -1991,13 +1993,15 @@ mod tests {
     #[test]
     fn real_space_only_xray_dataset_initializes_without_sq_data() {
         let mut config = small_config();
-        let mut params = RmcParams::default();
-        params.max_moves = 0;
-        params.rdf_cutoff = 4.0;
-        params.rdf_nbins = 128;
-        params.q_grid = vec![0.5, 1.0, 1.5, 2.0];
-        params.lorch = false;
-        params.restore_best = false;
+        let params = RmcParams {
+            max_moves: 0,
+            rdf_cutoff: 4.0,
+            rdf_nbins: 128,
+            q_grid: vec![0.5, 1.0, 1.5, 2.0],
+            lorch: false,
+            restore_best: false,
+            ..RmcParams::default()
+        };
         let pdf = ExperimentalGrData {
             r: vec![0.5, 1.0, 1.5],
             gr: vec![0.0, 0.0, 0.0],

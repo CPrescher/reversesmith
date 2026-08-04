@@ -1,0 +1,53 @@
+status = "hp_sio2_10gpa_epsr_comparison_completed"
+date = "2026-08-04"
+protocol = "ten-gpa-comparison.toml"
+seeds = 5
+endpoint_moves = 30000
+
+[native_forward]
+hidden_replay_neutron_rms = 6.479598361205925e-9
+hidden_replay_xray_rms = 1.943647595996174e-8
+gate_max = 1.0e-6
+passed = true
+
+[decision]
+paired_hidden_rdf_wins = 5
+paired_hidden_rdf_trials = 5
+rsmith_pace_superior_to_epsr_for_frozen_task = false
+reason = "PACE wins every hidden-RDF pair and has the lower median common scattering residual, but 0/5 PACE endpoints pass all three preregistered local-distance floors."
+
+[aggregate.rsmith_pace_w30]
+joint_iq_rms = { median = 0.06758271509878722, q1 = 0.06742004973000769, q3 = 0.06802959713002187 }
+mean_partial_rdf_rms = { median = 0.43715137240529467, q1 = 0.4367843444584032, q3 = 0.4380351050948916 }
+si_coordination_tv = { median = 0.029000000000000012, q1 = 0.029000000000000012, q3 = 0.029000000000000012 }
+wall_s = { median = 95.187518708, q1 = 94.003629042, q3 = 95.743910875 }
+safety_passes = 0
+energy_change_ev_per_atom = [-0.1976829459999996, -0.19395294600000004, -0.19674961266666652, -0.19422961266666608, -0.19539961266666675]
+
+[aggregate.native_epsr26]
+joint_iq_rms = { median = 0.14806953102694229, q1 = 0.14798712022726135, q3 = 0.1483796758236068 }
+mean_partial_rdf_rms = { median = 0.9469832021166068, q1 = 0.9465044362347849, q3 = 0.9506893854358552 }
+si_coordination_tv = { median = 0.029000000000000012, q1 = 0.029000000000000012, q3 = 0.029000000000000012 }
+wall_s = { median = 2.5322155, q1 = 2.529361167, q3 = 2.535196584 }
+safety_passes = 4
+
+[aggregate.rsmith_rmc]
+joint_iq_rms = { median = 0.05618974185399203, q1 = 0.056073066120643056, q3 = 0.05690558018403394 }
+mean_partial_rdf_rms = { median = 0.4105328954795929, q1 = 0.406083444461413, q3 = 0.4133900105154527 }
+si_coordination_tv = { median = 0.045000000000000005, q1 = 0.04300000000000001, q3 = 0.046000000000000006 }
+wall_s = { median = 1.788019292, q1 = 1.781976625, q3 = 1.788234125 }
+safety_passes = 0
+
+[diagnostic]
+pace_hidden_rdf_gap_recovered_fraction = 0.5954275199409267
+epsr_hidden_rdf_gap_recovered_fraction = 0.12359112463360977
+pace_median_hidden_rdf_lower_fraction_vs_epsr = 0.5383747341787948
+pace_median_common_fit_lower_fraction_vs_epsr = 0.5435744637666876
+pace_to_epsr_median_wall_ratio = 37.59060739814601
+timing_claim_allowed = false
+
+[interpretation]
+recovery = "At the matched nominal 30000-move endpoint, weight-30 rsmith PACE recovers substantially more of the hidden 10 GPa structure than stock EPSR26 and wins all five paired seeds."
+safety = "The same endpoints contain rare local distances below the preregistered floors, especially O-O minima of 1.871-1.966 A. The total ACE energy nevertheless decreases by 0.194-0.198 eV/atom, showing that a favorable global energy is not a hard local-safety guarantee."
+speed = "Stock EPSR is about 37.6 times faster in these local end-to-end endpoint timings; move semantics and implementations differ, and the frozen protocol forbids a production speed claim."
+boundary = "This is a favorable same-ACE inverse-oracle test with five seeds. It supports a recovery advantage but not the preregistered overall-superiority claim, experimental validity, or universal EPSR inferiority."

@@ -133,6 +133,34 @@ matched scattering fit and is robust to starting state, but its advantage is
 sensitive to reference-potential strength. This result motivates a focused
 high-pressure discriminator rather than additional ambient sensitivity grids.
 
+### Synthetic 0-to-10 GPa silica recovery
+
+The high-pressure discriminator uses a 3,000-atom Erhard-2024 ACE trajectory
+from the `SiO2_glass` repository. The ambient structure is mapped fractionally
+into the exact 10 GPa box, and synthetic neutron/X-ray totals from the hidden
+10 GPa endpoint drive refinement. Hidden partial RDF and coordination data are
+used only by the common scorer. The same ACE generates the hidden target and
+regularizes HRMC, making this an intentionally favorable inverse-oracle test.
+
+The stock-EPSR hidden-coordinate replay agrees at `6.48e-9` neutron and
+`1.94e-8` X-ray RMS. Across five nominally matched 30,000-move endpoints,
+weight-30 rsmith PACE has lower hidden partial-RDF error in 5/5 paired seeds.
+Its median hidden-RDF error is 0.43715 versus 0.94698 for EPSR, and its common
+neutron/X-ray RMS is 0.06758 versus 0.14807. Thus PACE recovers 59.5% of the
+starting structural gap while EPSR recovers 12.4%.
+
+The preregistered overall-superiority gate nevertheless fails. All five PACE
+endpoints violate at least one local-distance floor, predominantly O-O minima
+of 1.871--1.966 A; EPSR passes four of five endpoints. Pure RMC fits still
+better but is much more pathological. PACE's total ACE energy decreases in all
+five runs, demonstrating that a favorable global MLIP energy is not itself a
+hard local-safety guarantee. Local endpoint timings also favor EPSR by about
+37.6 times over native PACE, but differing move semantics make this diagnostic
+rather than a production speed claim. The defensible conclusion is superior
+hidden-structure recovery on this favorable synthetic task, not general
+superiority over EPSR. The next algorithmic requirement is to prevent rare
+local overlaps without discarding the MLIP-guided recovery advantage.
+
 ### EPSR26 DTBsilicaNX reference potential
 
 The second deterministic gate independently reconstructs the reference

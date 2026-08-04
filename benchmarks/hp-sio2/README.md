@@ -37,6 +37,35 @@ separately preregistered in `expected/ten-gpa-comparison.toml`. Only the 30,000
 move endpoint is replicated over five seeds. The primary seed alone retains
 6,000/18,000/30,000-move checkpoints.
 
+## Result
+
+The EPSR-native hidden-coordinate replay passed at `6.48e-9` neutron and
+`1.94e-8` X-ray RMS. At the nominally matched 30,000-move endpoint, weight-30
+rsmith PACE had lower held-out partial-RDF error than stock EPSR26 in all five
+paired seeds. The ensemble medians are:
+
+| Method | Common i(Q) RMS | Hidden partial-RDF RMS | Safety passes | Local wall time |
+|---|---:|---:|---:|---:|
+| rsmith PACE, weight 30 | 0.06758 | 0.43715 | 0/5 | 95.19 s |
+| stock EPSR26 | 0.14807 | 0.94698 | 4/5 | 2.53 s |
+| rsmith pure RMC | 0.05619 | 0.41053 | 0/5 | 1.79 s |
+
+PACE therefore recovers 59.5% of the starting hidden-RDF gap, compared with
+12.4% for EPSR, and its median error is 53.8% lower. This is a strong recovery
+advantage, but the preregistered overall-superiority claim does **not** pass:
+every PACE endpoint contains at least one distance below the frozen floors,
+principally O-O minima of 1.871--1.966 A. EPSR fails one of five endpoints by a
+small Si-Si violation. Pure RMC is still more pathological.
+
+The ACE energy decreases by 0.194--0.198 eV/atom in all five PACE runs, so a
+favorable global energy does not guarantee safe local minima. Stock EPSR is
+also about 37.6 times faster in these local endpoint timings. The timing is a
+diagnostic, not a publication speed ratio, because the implementations and
+move semantics differ. The result supports superior hidden-structure recovery
+for rsmith on this favorable same-ACE synthetic task, while leaving local
+safety unresolved and forbidding a general claim that rsmith is superior to
+EPSR.
+
 ## Reproduction
 
 ```bash
@@ -49,4 +78,5 @@ python3 scripts/prepare_ten_gpa_comparison.py
 python3 scripts/run_ten_gpa_comparison_rsmith.py
 python3 scripts/run_ten_gpa_comparison_epsr.py
 python3 scripts/score_ten_gpa_pilot.py
+python3 scripts/verify_ten_gpa_comparison.py
 ```
