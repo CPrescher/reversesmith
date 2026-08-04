@@ -94,8 +94,31 @@ def read_xyz(path: Path):
     )
 
 
+def read_epsr_ato(path: Path):
+    lines = path.read_text().splitlines()
+    count, length = int(lines[0].split()[0]), float(lines[0].split()[1])
+    positions, types = [], []
+    for index in range(count):
+        atom = lines[2 + 5 * index].split()
+        species = lines[3 + 5 * index].split()[0]
+        positions.append(
+            [(float(atom[axis]) + 0.5 * length) % length for axis in (1, 2, 3)]
+        )
+        types.append(SYMBOL_TYPE[species])
+    return (
+        np.asarray(positions),
+        np.asarray(types, dtype=np.int8),
+        np.asarray([length] * 3),
+    )
+
+
 def structure_metrics(path: Path):
-    positions, types, box = read_xyz(path) if path.suffix == ".xyz" else read_lammps(path)
+    if path.suffix == ".xyz":
+        positions, types, box = read_xyz(path)
+    elif path.suffix == ".ato":
+        positions, types, box = read_epsr_ato(path)
+    else:
+        positions, types, box = read_lammps(path)
     if len(positions) != protocol["source"]["atoms"]:
         raise ValueError(f"unexpected atom count in {path}: {len(positions)}")
     dr = fixture["rdf_bin_width_a"]
@@ -348,6 +371,109 @@ scores["decision"] = {
     "pace_usable": pace_usable,
     "recoverability": recoverable,
 }
+
+comparison_protocol_path = case_root / "expected/ten-gpa-comparison.toml"
+comparison_root = case_root / "results/ten-gpa-comparison"
+if comparison_protocol_path.is_file() and comparison_root.is_dir():
+    comparison_protocol = tomllib.loads(comparison_protocol_path.read_text())
+    primary_seed = int(comparison_protocol["design"]["primary_seed"])
+    endpoint = int(comparison_protocol["design"]["endpoint_moves"])
+    seeds = [int(seed) for seed in comparison_protocol["design"]["seeds"]]
+    comparison = {"primary_seed": {}, "endpoints": {}, "aggregate": {}}
+    for method in comparison_protocol["design"]["methods"]:
+        comparison["primary_seed"][method] = {}
+        comparison["endpoints"][method] = {}
+        for seed in seeds:
+            checkpoints = (
+                comparison_protocol["design"]["primary_seed_checkpoints_moves"]
+                if seed == primary_seed
+                else [endpoint]
+            )
+            for moves in checkpoints:
+                if method == "rsmith-rmc" and seed == primary_seed:
+                    run = root / "runs" / method / f"moves-{int(moves):06d}"
+                    structure = run / "refined.xyz"
+                else:
+                    run = (
+                        comparison_root
+                        / "runs"
+                        / method
+                        / f"seed-{seed}"
+                        / f"moves-{int(moves):06d}"
+                    )
+                    structure = (
+                        run / "Cross.ato"
+                        if method == "native-epsr26"
+                        else run / "refined.xyz"
+                    )
+                if not structure.is_file():
+                    continue
+                score = score_model(structure_metrics(structure), target)
+                score.update(run_metadata(run))
+                if seed == primary_seed:
+                    comparison["primary_seed"][method][str(moves)] = score
+                if int(moves) == endpoint:
+                    comparison["endpoints"][method][str(seed)] = score
+
+    def distribution(values):
+        array = np.asarray(values, dtype=float)
+        return {
+            "maximum": float(np.max(array)),
+            "median": float(np.median(array)),
+            "minimum": float(np.min(array)),
+            "q1": float(np.quantile(array, 0.25)),
+            "q3": float(np.quantile(array, 0.75)),
+        }
+
+    floors = comparison_protocol["metrics"]["safety_floor_a"]
+    for method, endpoints in comparison["endpoints"].items():
+        if len(endpoints) != len(seeds):
+            continue
+        comparison["aggregate"][method] = {
+            metric: distribution([score[metric] for score in endpoints.values()])
+            for metric in (
+                "joint_iq_rms",
+                "mean_partial_rdf_rms",
+                "si_coordination_total_variation",
+                "wall_seconds",
+            )
+        }
+        comparison["aggregate"][method]["safety_passes"] = sum(
+            all(
+                score["minimum_distance_a"][pair] >= float(minimum)
+                for pair, minimum in floors.items()
+            )
+            for score in endpoints.values()
+        )
+
+    pace = comparison["endpoints"].get("rsmith-pace-w30", {})
+    epsr = comparison["endpoints"].get("native-epsr26", {})
+    if len(pace) == len(seeds) and len(epsr) == len(seeds):
+        wins = sum(
+            pace[str(seed)]["mean_partial_rdf_rms"]
+            < epsr[str(seed)]["mean_partial_rdf_rms"]
+            for seed in seeds
+        )
+        pace_aggregate = comparison["aggregate"]["rsmith-pace-w30"]
+        epsr_aggregate = comparison["aggregate"]["native-epsr26"]
+        superior = (
+            wins >= 4
+            and pace_aggregate["mean_partial_rdf_rms"]["median"]
+            < epsr_aggregate["mean_partial_rdf_rms"]["median"]
+            and pace_aggregate["joint_iq_rms"]["median"]
+            <= epsr_aggregate["joint_iq_rms"]["median"]
+            and pace_aggregate["safety_passes"] == len(seeds)
+        )
+        comparison["decision"] = {
+            "paired_hidden_rdf_wins": wins,
+            "rsmith_pace_superior_to_epsr_for_frozen_task": superior,
+            "safety_passes_required": len(seeds),
+        }
+    forward = comparison_root / "native-forward-summary.json"
+    if forward.is_file():
+        comparison["native_forward"] = json.loads(forward.read_text())
+    scores["comparison"] = comparison
+
 (root / "score-summary.json").write_text(
     json.dumps(scores, indent=2, sort_keys=True) + "\n"
 )

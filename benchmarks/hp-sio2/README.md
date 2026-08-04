@@ -31,6 +31,12 @@ generated fixture is pinned before refinement in
 hashes, repository commit, generation input, and the public ACE provenance are
 committed.
 
+The pilot passed its extension gate. Its observations are recorded in
+`expected/ten-gpa-pilot-observed.toml`; the matched-budget EPSR26 comparison is
+separately preregistered in `expected/ten-gpa-comparison.toml`. Only the 30,000
+move endpoint is replicated over five seeds. The primary seed alone retains
+6,000/18,000/30,000-move checkpoints.
+
 ## Reproduction
 
 ```bash
@@ -38,5 +44,9 @@ cd benchmarks/hp-sio2
 python3 scripts/import_private_sources.py
 python3 scripts/prepare_ten_gpa_pilot.py
 python3 scripts/run_ten_gpa_pilot.py
+python3 scripts/score_ten_gpa_pilot.py
+python3 scripts/prepare_ten_gpa_comparison.py
+python3 scripts/run_ten_gpa_comparison_rsmith.py
+python3 scripts/run_ten_gpa_comparison_epsr.py
 python3 scripts/score_ten_gpa_pilot.py
 ```

@@ -1,0 +1,42 @@
+status = "hp_sio2_10gpa_epsr_comparison_frozen_before_outcomes"
+date = "2026-08-04"
+parent_protocol = "ten-gpa-pilot.toml"
+trigger = "informative_gap, recoverability, and pace_usable passed in ten-gpa-pilot-observed.toml"
+
+[design]
+methods = ["rsmith-rmc", "rsmith-pace-w30", "native-epsr26"]
+seeds = [20260804, 20260805, 20260806, 20260807, 20260808]
+primary_seed = 20260804
+endpoint_moves = 30000
+primary_seed_checkpoints_moves = [6000, 18000, 30000]
+threads_per_run = 1
+sampling = "independent deterministic prefixes; five endpoint seeds, with convergence checkpoints only for the primary seed"
+
+[rsmith]
+pace_weight = 30.0
+pace_weight_basis = "initial rsmith balance suggestion 25.118750 from the frozen weight-3 pilot, rounded to one significant figure before weight-30 outcomes"
+pure_rmc_primary_seed_reused_from_pilot = true
+hard_distance_constraints = false
+
+[native_epsr26]
+version = "EPSR26, 2017-03-10 build"
+tutorial = "DTBsilicaNX"
+feedback = 0.9
+reference_potential_scale = 1.0
+moves_per_refinement = 6000
+checkpoints_refinements = [1, 3, 5]
+target_policy = "generate EPSR-native totals from the hidden coordinates with a zero-move forward pass; score every endpoint with the common independent analyzer"
+hard_distance_constraints = false
+
+[metrics]
+primary = "five-seed median mean partial-g(r) RMS from the hidden 10 GPa target at 30000 attempted moves"
+secondary = ["paired hidden-RDF wins", "joint common i(Q) RMS", "Si coordination TV", "minimum distances", "wall time"]
+safety_floor_a = { "Si-Si" = 2.0, "Si-O" = 1.35, "O-O" = 2.0 }
+
+[decision]
+rsmith_pace_superior_to_epsr = "PACE has lower hidden-RDF error in at least four of five paired seeds, a lower median error, no worse median common joint-i(Q) RMS, and every PACE endpoint passes all safety floors"
+failure = "Report which fit, hidden-structure, or safety condition failed; do not tune another weight on these outcomes"
+
+[claims]
+allowed = "matched-budget five-seed superiority or non-superiority for this synthetic 0-to-10 GPa inverse-oracle recovery task"
+forbidden = "universal EPSR inferiority, experimental pressure recovery, unbiased MLIP validation, production speed, or equilibrium sampling"

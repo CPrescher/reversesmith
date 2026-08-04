@@ -1,0 +1,31 @@
+status = "hp_sio2_10gpa_pilot_completed"
+date = "2026-08-04"
+protocol = "ten-gpa-pilot.toml"
+inputs = "ten-gpa-pilot-inputs.toml"
+
+[decision]
+informative_gap = true
+recoverability = true
+pace_usable_by_preregistered_gate = true
+add_native_epsr_and_five_seed_replication = true
+
+[start]
+joint_iq_rms = 0.1819857197746118
+mean_partial_rdf_rms = 1.0805267138819337
+si_coordination_total_variation = 0.029000000000000012
+minimum_distance_a = { "Si-Si" = 2.059260844308892, "Si-O" = 1.3918777360749455, "O-O" = 2.076520771889972 }
+
+[runs.rsmith_rmc]
+moves_6000 = { fit = 0.13857508128089352, rdf = 0.6537476408575952, si_coordination_tv = 0.029000000000000012, minimum_si_o_a = 1.0047322602013031, accepted = 3629, wall_s = 0.617225625 }
+moves_18000 = { fit = 0.08260870971738037, rdf = 0.48016593280400155, si_coordination_tv = 0.029000000000000005, minimum_si_o_a = 0.6831000344677093, accepted = 8244, wall_s = 1.268266042 }
+moves_30000 = { fit = 0.05618974185399203, rdf = 0.4038640807828899, si_coordination_tv = 0.045000000000000005, minimum_si_o_a = 0.5553388512162921, accepted = 11037, wall_s = 1.895611292 }
+
+[runs.rsmith_pace_w3]
+moves_6000 = { fit = 0.13891029730196444, rdf = 0.658876293743225, si_coordination_tv = 0.029000000000000012, minimum_si_o_a = 1.0940213682468551, accepted = 3380, wall_s = 19.891694125, energy_change_ev_per_atom = 0.3427337206666671 }
+moves_18000 = { fit = 0.08101507540347226, rdf = 0.4902868885816343, si_coordination_tv = 0.02700000000000001, minimum_si_o_a = 1.0834839780979895, accepted = 7557, wall_s = 59.814819458, energy_change_ev_per_atom = 0.31109705400000043 }
+moves_30000 = { fit = 0.05499975566706377, rdf = 0.4137052665807524, si_coordination_tv = 0.02700000000000001, minimum_si_o_a = 1.1687930167981682, accepted = 10253, wall_s = 98.295870667, energy_change_ev_per_atom = 0.10132372066666721 }
+
+[interpretation]
+result = "Both methods recover more than 60 percent of the held-out mean partial-RDF gap by 30000 moves. Weight-3 PACE preserves a larger Si-O minimum and Si-coordination distribution than pure RMC, but remains below the preregistered 1.35 A safety floor and raises ACE energy."
+weight_followup = "The rsmith log suggested a balance weight of 25.118750 before moves. The external comparison freezes weight 30, its one-significant-figure value, rather than selecting from outcome-dependent weight trials."
+boundary = "Single-seed favorable inverse-oracle pilot; not evidence of experimental accuracy or superiority over EPSR. Timing is diagnostic only."
