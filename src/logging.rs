@@ -3,10 +3,48 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 
-static LOG_FILE: OnceLock<Mutex<BufWriter<File>>> = OnceLock::new();
+const LOG_FLUSH_INTERVAL: Duration = Duration::from_secs(1);
+
+static LOG_FILE: OnceLock<Mutex<LogWriter<File>>> = OnceLock::new();
 static QUIET: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug)]
+struct LogWriter<W: Write> {
+    writer: BufWriter<W>,
+    last_flush: Instant,
+}
+
+impl<W: Write> LogWriter<W> {
+    fn new(writer: W, now: Instant) -> Self {
+        Self {
+            writer: BufWriter::new(writer),
+            last_flush: now,
+        }
+    }
+
+    fn write(&mut self, s: &str, newline: bool, now: Instant) {
+        let _ = self.writer.write_all(s.as_bytes());
+        if newline {
+            let _ = self.writer.write_all(b"\n");
+        }
+        self.flush_if_due(now);
+    }
+
+    fn flush_if_due(&mut self, now: Instant) {
+        if now.saturating_duration_since(self.last_flush) >= LOG_FLUSH_INTERVAL {
+            self.flush(now);
+        }
+    }
+
+    fn flush(&mut self, now: Instant) {
+        // Advance the deadline even if flushing fails so a broken destination
+        // cannot turn every subsequent log write into another flush attempt.
+        self.last_flush = now;
+        let _ = self.writer.flush();
+    }
+}
 
 /// Suppress terminal output (log file only).
 pub fn set_quiet(quiet: bool) {
@@ -24,7 +62,7 @@ pub fn init_log_file_in(dir: &Path, name: &str) {
     let path = dir.join(name);
     let file = File::create(&path)
         .unwrap_or_else(|e| panic!("Failed to create {}: {}", path.display(), e));
-    let writer = BufWriter::new(file);
+    let writer = LogWriter::new(file, Instant::now());
     LOG_FILE
         .set(Mutex::new(writer))
         .expect("init_log_file called more than once");
@@ -38,6 +76,7 @@ pub fn init_log_file_in(dir: &Path, name: &str) {
         "# rsmith log — {} UTC\n# cwd: {}\n",
         timestamp, cwd
     ));
+    flush_log_file();
 }
 
 /// Create/overwrite `rsmith.log` in the current working directory.
@@ -46,11 +85,12 @@ pub fn init_log_file() {
     init_log_file_in(Path::new("."), "rsmith.log");
 }
 
-/// Flush the log buffer. Call at the end of main().
+/// Flush the log buffer immediately. Logging also flushes at most once per
+/// second while messages are being written.
 pub fn flush_log_file() {
     if let Some(mtx) = LOG_FILE.get() {
         if let Ok(mut w) = mtx.lock() {
-            let _ = w.flush();
+            w.flush(Instant::now());
         }
     }
 }
@@ -59,7 +99,7 @@ pub fn flush_log_file() {
 pub fn write_to_log(s: &str) {
     if let Some(mtx) = LOG_FILE.get() {
         if let Ok(mut w) = mtx.lock() {
-            let _ = w.write_all(s.as_bytes());
+            w.write(s, false, Instant::now());
         }
     }
 }
@@ -68,8 +108,7 @@ pub fn write_to_log(s: &str) {
 pub fn writeln_to_log(s: &str) {
     if let Some(mtx) = LOG_FILE.get() {
         if let Ok(mut w) = mtx.lock() {
-            let _ = w.write_all(s.as_bytes());
-            let _ = w.write_all(b"\n");
+            w.write(s, true, Instant::now());
         }
     }
 }
@@ -152,4 +191,67 @@ macro_rules! log_print {
             $crate::logging::write_to_log(&msg);
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+    use std::io;
+    use std::rc::Rc;
+
+    #[derive(Default)]
+    struct RecordingState {
+        bytes: Vec<u8>,
+        flushes: usize,
+    }
+
+    struct RecordingWriter(Rc<RefCell<RecordingState>>);
+
+    impl Write for RecordingWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.borrow_mut().bytes.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.0.borrow_mut().flushes += 1;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn periodic_flush_includes_latest_message_and_is_rate_limited() {
+        let state = Rc::new(RefCell::new(RecordingState::default()));
+        let start = Instant::now();
+        let mut log = LogWriter::new(RecordingWriter(Rc::clone(&state)), start);
+
+        log.write("first", true, start + LOG_FLUSH_INTERVAL / 2);
+        assert_eq!(state.borrow().flushes, 0);
+        assert!(state.borrow().bytes.is_empty());
+
+        log.write("second", true, start + LOG_FLUSH_INTERVAL);
+        assert_eq!(state.borrow().flushes, 1);
+        assert_eq!(state.borrow().bytes, b"first\nsecond\n");
+
+        log.write(
+            "third",
+            true,
+            start + LOG_FLUSH_INTERVAL + Duration::from_millis(1),
+        );
+        assert_eq!(state.borrow().flushes, 1);
+    }
+
+    #[test]
+    fn explicit_flush_makes_buffered_messages_visible() {
+        let state = Rc::new(RefCell::new(RecordingState::default()));
+        let start = Instant::now();
+        let mut log = LogWriter::new(RecordingWriter(Rc::clone(&state)), start);
+
+        log.write("ready", true, start);
+        log.flush(start);
+
+        assert_eq!(state.borrow().flushes, 1);
+        assert_eq!(state.borrow().bytes, b"ready\n");
+    }
 }

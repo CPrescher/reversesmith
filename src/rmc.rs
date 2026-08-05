@@ -1543,6 +1543,9 @@ pub fn run_rmc(
                 temp_str,
                 delayed_str
             );
+            // Progress reports are intentionally durable immediately: the
+            // next report may be a long time away for expensive potentials.
+            crate::logging::flush_log_file();
         }
 
         // Adaptive step size
