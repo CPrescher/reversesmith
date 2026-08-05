@@ -152,6 +152,8 @@ generated moves. The held-out mean partial-RDF errors are:
 | 60 GPa | 0.11140 | **0.08360** | 0.08682 | 0.17201 | 0.14273 |
 | 70 GPa | 0.08772 | 0.07826 | **0.07672** | 0.15531 | 0.14108 |
 
+![Pressure dependence of held-out RDF, common scattering, coordination, and lower-tail errors](figures/pressure-series-70.svg)
+
 PACE beats both native programs on hidden partial RDF, common neutron/X-ray
 `i(Q)`, and Si-coordination error in all seven steps. It improves the mapped
 start at every pressure, recovering 59.3%, 65.9%, 55.0%, 42.2%, 29.9%, 22.1%,
@@ -197,6 +199,8 @@ assigns weight 0.5 to each, retaining the same total starting data cost.
 | local g(r) only | 0.09333 | 0.18440 | **0.39885** | **0.24332** | 0.370 |
 | S(Q) + local g(r) | 0.08803 | **0.18218** | 0.40866 | 0.24929 | 0.375 |
 
+![Reciprocal, total-real, and held-out partial curves for the three domain refinements](figures/sq-gr-domain.svg)
+
 The real-space residual changes recovery in the intended local direction:
 `g(r)`-only gives the best held-out local and full partial-RDF scores, while
 `S(Q)`-only gives the best reciprocal score. The joint arm gives the best fitted
@@ -216,6 +220,8 @@ python3 scripts/prepare_sq_gr_domain.py
 python3 scripts/run_sq_gr_domain.py --only-missing
 python3 scripts/score_sq_gr_domain.py
 python3 scripts/verify_sq_gr_domain.py
+MPLCONFIGDIR=/tmp/rsmith-mpl python3 scripts/plot_pressure_series_70.py
+MPLCONFIGDIR=/tmp/rsmith-mpl python3 scripts/plot_sq_gr_domain.py
 ```
 
 ### Incremental result
