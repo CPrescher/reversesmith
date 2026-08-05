@@ -1,0 +1,27 @@
+status = "hp_sio2_sq_gr_domain_inputs_pinned_before_refinement"
+date = "2026-08-05"
+protocol_sha256 = "fe2d45d493fd7425493505464cd12dfe3121a1948f3ca867b37bdc1dd6d2d38e"
+cross_start_sha256 = "baade2d53c3bc4200447d19dbd2ab39c15b262435c9b9c161b9eb28260189906"
+hidden_target_sha256 = "e171c8c302b74d2b4c913a24fad01064c16069c1f8778264c0b58a7c76beed59"
+target_xray_iq_sha256 = "b75a1f82f9cb0971df74b11f68a04d7268fd9edf967af39d4386e0d45ab8a90b"
+target_xray_gr_sha256 = "bfe98742c45839483f3d3d9c74ad1492e755c5f5633767e27daa3064ae48de41"
+ace_model_sha256 = "c8f00d8f0cbc131b0298b79260ba8098975624363c9d178223e51e48f025e97a"
+start_box_a = 30.677482973928985
+target_box_a = 29.350568606147633
+gr_sigma = 0.038588503407035846
+sq_start_chi2 = 16352.459360708272
+gr_start_chi2 = 16352.459360708272
+hidden_gr_replay_rms = 5.938646149174947e-6
+hidden_gr_replay_chi2 = 6.0e-6
+
+[start]
+mean_partial_rdf_rms = 0.481261889571883
+local_partial_rdf_rms = 0.7998957729961642
+xray_iq_rms = 0.140787651665425
+xray_gr_local_rms = 0.31852524166104806
+si_coordination_tv = 0.39899999999999997
+mean_lower_tail_quantile_error_a = 0.05688196510740121
+
+[interpretation]
+normalization = "The mapped start has equal unweighted chi2 in i(Q) and local g_X(r); each joint-domain weight is 0.5, so all three arms begin with the same total data cost."
+replay = "Independent direct-sine generation and rsmith's CZT inverse transform agree for the hidden target to 5.94e-6 g(r) RMS over 1.2-6.0 A."
