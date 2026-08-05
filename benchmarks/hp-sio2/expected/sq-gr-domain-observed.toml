@@ -1,0 +1,69 @@
+status = "hp_sio2_sq_gr_domain_comparison_completed"
+date = "2026-08-05"
+protocol = "sq-gr-domain.toml"
+inputs = "sq-gr-domain-inputs.toml"
+seed = 20260805
+moves = 30000
+
+[start]
+full_partial_rdf_rms = 0.481261889571883
+local_partial_rdf_rms = 0.7998957729961642
+xray_iq_rms = 0.140787651665425
+xray_gr_local_rms = 0.31852524166104806
+si_coordination_tv = 0.39899999999999997
+mean_lower_tail_error_a = 0.05688196510740121
+
+[methods.sq_only]
+full_partial_rdf_rms = 0.25282378228628527
+local_partial_rdf_rms = 0.41483617095894304
+xray_iq_rms = 0.0857313804872916
+xray_gr_local_rms = 0.1854643145592578
+si_coordination_tv = 0.365
+mean_lower_tail_error_a = 0.06562333788390455
+energy_change_ev_per_atom = -0.042017497333334174
+accepted_moves = 6475
+wall_s = 172.120765708
+initial_chi2 = 16352.662092
+final_chi2 = 6063.704560
+
+[methods.gr_only]
+full_partial_rdf_rms = 0.2433208893044141
+local_partial_rdf_rms = 0.39884879681705726
+xray_iq_rms = 0.09332592845949532
+xray_gr_local_rms = 0.18439887355691792
+si_coordination_tv = 0.37
+mean_lower_tail_error_a = 0.05630961801920712
+energy_change_ev_per_atom = -0.046910830666666396
+accepted_moves = 6494
+wall_s = 170.115712917
+initial_chi2 = 16352.792635
+final_chi2 = 5480.500428
+
+[methods.sq_plus_gr]
+full_partial_rdf_rms = 0.24928521479352858
+local_partial_rdf_rms = 0.4086596925298449
+xray_iq_rms = 0.08803497532302834
+xray_gr_local_rms = 0.18217692934538288
+si_coordination_tv = 0.37499999999999994
+mean_lower_tail_error_a = 0.059851564492799235
+energy_change_ev_per_atom = -0.04563749733333316
+accepted_moves = 6543
+wall_s = 173.100169167
+initial_sq_chi2 = 8176.331046
+initial_gr_chi2 = 8176.396317
+initial_chi2 = 16352.727363
+final_chi2 = 5871.585575
+
+[decision]
+equal_start_cost_verified = true
+sq_only_best_xray_iq = true
+gr_only_best_held_out_partial_structure = true
+joint_best_total_xray_gr = true
+joint_is_pareto_compromise = true
+joint_dominates_all_metrics = false
+
+[interpretation]
+result = "The local real-space residual changes the recovered structure in the intended direction. g(r)-only gives the best held-out full and local partial-RDF recovery, S(Q)-only gives the best reciprocal residual, and joint fitting gives the best total-g_X(r) residual while retaining a reciprocal residual between the single-domain arms."
+limit = "Joint fitting does not beat g(r)-only on held-out partial structure in this one seed, so the result supports complementary residual weighting rather than universal synergy."
+information = "S(Q) and g_X(r) derive from the same X-ray scattering signal; the joint arm changes domain weighting and is not an independent-data test."
+boundary = "One 20-to-30 GPa same-ACE PACE seed; no stochastic, experimental, equilibrium, universal-domain, or production-speed claim."

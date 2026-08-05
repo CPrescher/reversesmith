@@ -181,6 +181,43 @@ constructed at `Qmax = 17 inverse Angstrom`. The transform/window, local
 real-space range, uncertainties, and relative domain weights must be frozen
 before outcomes because the two curves derive from the same scattering data.
 
+### Reciprocal/local-real domain result
+
+The follow-up uses the 20 -> 30 GPa step, where the mapped start has the largest
+Si-coordination mismatch in the pressure scan. All three arms use PACE weight
+30, one seed, 30,000 moves, and the same X-ray information truncated at
+`Qmax = 17 inverse Angstrom`. The normalized total `g_X(r)` is Lorch transformed
+and fitted over 1.2--6.0 A. Its constant uncertainty is chosen so the mapped
+start has the same unweighted chi-squared in `i(Q)` and `g_X(r)`; the joint arm
+assigns weight 0.5 to each, retaining the same total starting data cost.
+
+| Arm | X-ray i(Q) RMS | total g_X(r) RMS | Local partial-RDF RMS | Full partial-RDF RMS | Coordination TV |
+|---|---:|---:|---:|---:|---:|
+| S(Q) only | **0.08573** | 0.18546 | 0.41484 | 0.25282 | **0.365** |
+| local g(r) only | 0.09333 | 0.18440 | **0.39885** | **0.24332** | 0.370 |
+| S(Q) + local g(r) | 0.08803 | **0.18218** | 0.40866 | 0.24929 | 0.375 |
+
+The real-space residual changes recovery in the intended local direction:
+`g(r)`-only gives the best held-out local and full partial-RDF scores, while
+`S(Q)`-only gives the best reciprocal score. The joint arm gives the best fitted
+total `g_X(r)` and an `i(Q)` residual between the two single-domain arms, making
+it the clearest Pareto compromise. It does not beat `g(r)`-only on held-out
+partial structure, so this single seed supports complementary residual
+weighting, not universal dual-domain synergy.
+
+All three starts have chi-squared about 16352.7, the joint components are
+8176.33 and 8176.40, and acceptance is 21.6--21.8%. Walls are 170.1--173.1 s,
+showing negligible domain-transform overhead relative to PACE at this grid
+size. The code now also guarantees that `[data.xray_gr]` uses X-ray weights even
+when neutron reciprocal data are present; a regression test covers this case.
+
+```bash
+python3 scripts/prepare_sq_gr_domain.py
+python3 scripts/run_sq_gr_domain.py --only-missing
+python3 scripts/score_sq_gr_domain.py
+python3 scripts/verify_sq_gr_domain.py
+```
+
 ### Incremental result
 
 Both pressure increments are informative and pass their EPSR-native replay

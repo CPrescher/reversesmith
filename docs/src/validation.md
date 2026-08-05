@@ -226,6 +226,37 @@ window, local `r` range, uncertainties, and domain weights must be fixed before
 outcomes because the two residuals are complementary weightings of the same
 scattering information, not independent experiments.
 
+That extension is now complete for the 20-to-30 GPa step, selected because it
+has the largest mapped-start Si-coordination mismatch in the pressure scan.
+Each PACE-weight-30 arm uses 30,000 moves and the same X-ray signal at
+`Qmax = 17 inverse Angstrom`. The local normalized `g_X(r)` spans 1.2--6.0 A
+with a Lorch modification. Its uncertainty equalizes the two domains' starting
+chi-squared, and the joint arm gives each domain half weight so its total start
+cost also remains matched.
+
+| Arm | X-ray i(Q) RMS | total g_X(r) RMS | Local partial RDF | Full partial RDF |
+|---|---:|---:|---:|---:|
+| S(Q) only | **0.08573** | 0.18546 | 0.41484 | 0.25282 |
+| local g(r) only | 0.09333 | 0.18440 | **0.39885** | **0.24332** |
+| S(Q) + local g(r) | 0.08803 | **0.18218** | 0.40866 | 0.24929 |
+
+This verifies the intended complementarity. Real-space-only fitting recovers
+the best held-out local and full partial structure; reciprocal-only fitting
+retains the best reciprocal residual. Joint fitting achieves the best fitted
+total `g_X(r)` while retaining a reciprocal residual between the single-domain
+arms. It is a Pareto compromise, but it does not dominate real-space-only
+fitting on held-out partial structure in this seed. The correct claim is that
+the local real-space residual changes and improves local recovery, not that
+representing the same scattering data twice creates independent information.
+
+The three initial chi-squared values agree near 16352.7, with joint components
+8176.33 and 8176.40; acceptance is 21.6--21.8% and walls span 170.1--173.1 s.
+The nearly identical timings show that the transform overhead is negligible
+relative to PACE for this grid, although this is not a production benchmark.
+The implementation now also guarantees X-ray weights for `[data.xray_gr]` when
+neutron reciprocal data coexist, with a regression test for the mixed-domain
+case.
+
 ### EPSR26 DTBsilicaNX reference potential
 
 The second deterministic gate independently reconstructs the reference
