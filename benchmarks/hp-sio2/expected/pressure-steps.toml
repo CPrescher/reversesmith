@@ -1,0 +1,77 @@
+status = "hp_sio2_incremental_pressure_steps_frozen_before_outcomes"
+date = "2026-08-05"
+source_repository = "CPrescher/SiO2_glass"
+source_commit = "7bfa86d5d01d5c358c778c2175e924158a7f7acf"
+ace_model_sha256 = "c8f00d8f0cbc131b0298b79260ba8098975624363c9d178223e51e48f025e97a"
+compression_0_to_10_input = "inputs/in.sio2_ace_compress_00_to_10GPa"
+compression_0_to_10_sha256 = "cc8daa1267f99b2b4265afc5b612f4a3db4faa05c8266860b085cc8fcf15ffe1"
+compression_10_to_200_input = "inputs/in.sio2_ace_compress_10_to_200GPa"
+compression_10_to_200_sha256 = "ce9f3f26957d7a9b8808c567d10408550c3c6a3e7154b28212998c06d4071d92"
+
+[[structures]]
+pressure_gpa = 0
+path = "results/production/compressed/ace/loading/00GPa/data/sio2_ace_00GPa_stabilized.data"
+sha256 = "c8cef9f4ed4abebf1ff26979aeb579bf2881850316bbe87afc877b503e66a67b"
+
+[[structures]]
+pressure_gpa = 5
+path = "results/production/compressed/ace/loading/05GPa/data/sio2_ace_05GPa_final.data"
+sha256 = "96e5897209ae7464ea4e47e7bca00574b6700e467adbc3b284cbc9887515531c"
+
+[[structures]]
+pressure_gpa = 10
+path = "results/production/compressed/ace/loading/10GPa/data/sio2_ace_10GPa_final.data"
+sha256 = "22157a587829e9c32634115fc28531feaf16d2d52e4b55ef6395c4ab10f816a7"
+
+[[steps]]
+name = "00-to-05"
+start_gpa = 0
+target_gpa = 5
+
+[[steps]]
+name = "05-to-10"
+start_gpa = 5
+target_gpa = 10
+
+[fixture]
+atoms = 3000
+silicon_atoms = 1000
+oxygen_atoms = 2000
+start_mapping = "fractional coordinates from the start box into the exact target box"
+q_min_a_inverse = 0.5
+q_max_a_inverse = 25.0
+q_step_a_inverse = 0.05
+sigma_iq = 0.02
+rdf_cutoff_a = 16.0
+rdf_bin_width_a = 0.02
+si_o_coordination_cutoff_a = 2.2
+short_range_caps_a = { "Si-Si" = 3.5, "Si-O" = 2.2, "O-O" = 3.0 }
+lower_tail_quantiles = [0.001, 0.01]
+
+[design]
+methods = ["rsmith-rmc", "rsmith-pace-w30", "native-epsr26"]
+seed = 20260805
+moves = 30000
+threads_per_run = 1
+pace_weight = 30.0
+native_epsr_feedback = 0.9
+native_epsr_reference_scale = 1.0
+native_epsr_moves_per_refinement = 6000
+native_epsr_refinements = 5
+hard_distance_constraints = false
+replication = "single-seed pressure-mapping pilot; do not replicate until a 20 GPa endpoint is available"
+
+[metrics]
+primary = "mean partial-g(r) RMS from the hidden pressure-step target"
+secondary = ["common joint i(Q) RMS", "Si coordination TV", "pair-distance lower-tail quantile error", "counts below target lower-tail quantiles", "minimum distances", "ACE energy change", "diagnostic wall time"]
+pressure_relative_policy = "compare lower tails with the hidden target at the same pressure; do not apply ambient absolute minimum-distance gates"
+
+[decision]
+informative_step = "start mean partial-g(r) RMS >= 0.02 or Si coordination TV >= 0.02"
+pace_recovery_advantage = "PACE has lower hidden-RDF error than EPSR at both pressure increments"
+lower_tail_guard = "PACE mean absolute lower-tail quantile error is no worse than EPSR at both increments"
+next = "when the 20 GPa endpoint is pushed, freeze and run 10-to-20 before deciding whether pressure-wide seed replication is useful"
+
+[claims]
+allowed = "single-seed incremental pressure mapping and target-relative short-range diagnostics"
+forbidden = "physical minimum-distance truth, universal rsmith or EPSR superiority, experimental pressure inference, production speed, or equilibrium sampling"

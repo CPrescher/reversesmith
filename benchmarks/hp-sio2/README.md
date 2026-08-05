@@ -80,3 +80,29 @@ python3 scripts/run_ten_gpa_comparison_epsr.py
 python3 scripts/score_ten_gpa_pilot.py
 python3 scripts/verify_ten_gpa_comparison.py
 ```
+
+## Incremental pressure ladder
+
+The next frozen pilot separates the available loading path into 0 -> 5 and
+5 -> 10 GPa recovery steps. It uses one seed and one 30,000-move endpoint for
+pure RMC, PACE weight 30, and stock EPSR26. This is pressure mapping, not a new
+ensemble campaign. The protocol is in `expected/pressure-steps.toml`.
+
+Following the 10 GPa diagnostic review, no ambient absolute minimum-distance
+gate is used. Short-range behavior is compared with the hidden target at the
+same pressure through the 0.1% and 1% lower quantiles of the Si-Si, Si-O, and
+O-O neighbor-distance distributions, together with counts below those target
+quantiles. Absolute minima remain descriptive outlier diagnostics only.
+
+```bash
+python3 scripts/import_pressure_steps.py
+python3 scripts/prepare_pressure_steps.py
+python3 scripts/run_pressure_steps_rsmith.py
+python3 scripts/run_pressure_steps_epsr.py
+python3 scripts/score_pressure_steps.py
+```
+
+The upstream 10 -> 200 GPa loading schedule is pinned, but the repository
+currently contains no 20 GPa endpoint. The next planned extension is therefore
+10 -> 20 GPa as soon as that structure is available; seed replication is
+deferred until that additional pressure discriminator has been mapped.
