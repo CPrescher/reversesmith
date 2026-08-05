@@ -108,3 +108,34 @@ The upstream 10 -> 200 GPa loading schedule is pinned, but the repository
 currently contains no 20 GPa endpoint. The next planned extension is therefore
 10 -> 20 GPa as soon as that structure is available; seed replication is
 deferred until that additional pressure discriminator has been mapped.
+
+### Incremental result
+
+Both pressure increments are informative and pass their EPSR-native replay
+gates at approximately `1e-8` RMS. At 30,000 nominal moves:
+
+| Step | Method | Common i(Q) RMS | Hidden RDF RMS | Mean lower-tail error |
+|---|---|---:|---:|---:|
+| 0 -> 5 | PACE weight 30 | 0.03200 | 0.26878 | 0.0712 A |
+| 0 -> 5 | stock EPSR26 | 0.08156 | 0.74536 | **0.0451 A** |
+| 5 -> 10 | PACE weight 30 | 0.02636 | 0.21446 | 0.0584 A |
+| 5 -> 10 | stock EPSR26 | 0.07581 | 0.65301 | **0.0400 A** |
+
+PACE recovers 68.6% and 71.3% of the starting hidden-RDF gaps, whereas EPSR
+recovers 12.8% and 12.6%. PACE's hidden-RDF errors are 63.9% and 67.2% lower
+than EPSR, so the recovery-advantage gate passes in both steps.
+
+The pressure-relative lower-tail guard does not pass. PACE is closer to the
+target for the Si-O lower tail, while EPSR is closer for O-O; the frozen
+equal-pair mean therefore favors EPSR. Importantly, incremental PACE produces
+minima of at least 2.109 A (Si-Si), 1.461 A (Si-O), and 2.117 A (O-O). The
+severe short-contact outliers seen in the direct 0 -> 10 jump disappear. This
+supports sequential pressure refinement as the appropriate workflow, while
+retaining the lower-tail mismatch as a real structural diagnostic rather than
+calling it an absolute safety failure.
+
+Pure RMC obtains slightly lower scattering and hidden-RDF errors than PACE but
+again develops very short local contacts and much larger lower-tail errors.
+PACE energy decreases by 0.052 and 0.049 eV/atom. The result remains a
+single-seed, same-ACE inverse-oracle pressure map; the next computation is
+10 -> 20 GPa when its upstream endpoint becomes available.

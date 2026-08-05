@@ -1,0 +1,97 @@
+status = "hp_sio2_incremental_pressure_steps_completed"
+date = "2026-08-05"
+protocol = "pressure-steps.toml"
+inputs = "pressure-steps-inputs.toml"
+seed = 20260805
+moves = 30000
+
+[decision]
+all_steps_informative = true
+pace_recovery_advantage = true
+lower_tail_guard = false
+wait_for_20gpa_before_replication = true
+reason = "PACE has lower hidden-RDF error than EPSR in both increments, but its mean pressure-relative lower-tail quantile error is larger because O-O lower tails are less target-like."
+
+[steps."00-to-05".start]
+joint_iq_rms = 0.10056226497728352
+mean_partial_rdf_rms = 0.854656073843259
+si_coordination_tv = 0.005000000000000003
+mean_lower_tail_quantile_error_a = 0.0764636114021151
+
+[steps."00-to-05".rsmith_pace_w30]
+joint_iq_rms = 0.03199798703843171
+mean_partial_rdf_rms = 0.2687757064303595
+si_coordination_tv = 0.005000000000000003
+mean_lower_tail_quantile_error_a = 0.07116325316122658
+minimum_distance_a = { "Si-Si" = 2.145300243647588, "Si-O" = 1.4700272332319415, "O-O" = 2.1165607715944947 }
+energy_change_ev_per_atom = -0.05202471500000077
+wall_s = 78.195380292
+hidden_rdf_gap_recovered_fraction = 0.6855159465237101
+hidden_rdf_lower_fraction_vs_epsr = 0.6394020220179777
+fraction_below_target_0p1_percentile = { "Si-Si" = 0.00495, "Si-O" = 0.01997, "O-O" = 0.00947 }
+
+[steps."00-to-05".native_epsr26]
+joint_iq_rms = 0.08156079828198617
+mean_partial_rdf_rms = 0.7453611025066795
+si_coordination_tv = 0.005000000000000003
+mean_lower_tail_quantile_error_a = 0.045131915564683135
+minimum_distance_a = { "Si-Si" = 2.168557109754285, "Si-O" = 1.4300773014837533, "O-O" = 2.2426877135569763 }
+wall_s = 2.467744042
+hidden_rdf_gap_recovered_fraction = 0.12788181665298015
+fraction_below_target_0p1_percentile = { "Si-Si" = 0.00396, "Si-O" = 0.05367, "O-O" = 0.00206 }
+
+[steps."00-to-05".rsmith_rmc]
+joint_iq_rms = 0.025913712188734263
+mean_partial_rdf_rms = 0.2851619209638773
+mean_lower_tail_quantile_error_a = 0.2983665250967054
+minimum_distance_a = { "Si-Si" = 1.6149604442697172, "Si-O" = 1.0419688324050491, "O-O" = 1.6150493654479572 }
+wall_s = 1.823691875
+
+[steps."00-to-05".native_forward]
+neutron_rms = 6.974629347365214e-9
+xray_rms = 2.477541583538987e-8
+
+[steps."05-to-10".start]
+joint_iq_rms = 0.09390726279815888
+mean_partial_rdf_rms = 0.7468182482733784
+si_coordination_tv = 0.029000000000000012
+mean_lower_tail_quantile_error_a = 0.05562245885214501
+
+[steps."05-to-10".rsmith_pace_w30]
+joint_iq_rms = 0.026359291231053624
+mean_partial_rdf_rms = 0.21445851643700667
+si_coordination_tv = 0.028000000000000014
+mean_lower_tail_quantile_error_a = 0.05839260265276158
+minimum_distance_a = { "Si-Si" = 2.108711680398398, "Si-O" = 1.4611707183639058, "O-O" = 2.135896231937753 }
+energy_change_ev_per_atom = -0.049255169333333466
+wall_s = 96.745997417
+hidden_rdf_gap_recovered_fraction = 0.7128370698857073
+hidden_rdf_lower_fraction_vs_epsr = 0.6715843743073846
+fraction_below_target_0p1_percentile = { "Si-Si" = 0.00531, "Si-O" = 0.02966, "O-O" = 0.00445 }
+
+[steps."05-to-10".native_epsr26]
+joint_iq_rms = 0.0758071510952583
+mean_partial_rdf_rms = 0.6530094784154142
+si_coordination_tv = 0.029000000000000012
+mean_lower_tail_quantile_error_a = 0.040021948581665856
+minimum_distance_a = { "Si-Si" = 2.1326185820899624, "Si-O" = 1.4534045993292057, "O-O" = 2.2456853593965254 }
+wall_s = 2.54440025
+hidden_rdf_gap_recovered_fraction = 0.12561124487095388
+fraction_below_target_0p1_percentile = { "Si-Si" = 0.00484, "Si-O" = 0.08876, "O-O" = 0.00013 }
+
+[steps."05-to-10".rsmith_rmc]
+joint_iq_rms = 0.020974435746504996
+mean_partial_rdf_rms = 0.2322489135989272
+mean_lower_tail_quantile_error_a = 0.28930605226488215
+minimum_distance_a = { "Si-Si" = 1.828213921546405, "Si-O" = 1.0659629410546718, "O-O" = 1.5967849980126476 }
+wall_s = 1.83609225
+
+[steps."05-to-10".native_forward]
+neutron_rms = 6.479598361205925e-9
+xray_rms = 1.943647595996174e-8
+
+[interpretation]
+recovery = "PACE recovers 68.6 and 71.3 percent of the hidden-RDF gaps; EPSR recovers 12.8 and 12.6 percent. PACE errors are 63.9 and 67.2 percent lower than EPSR."
+short_range = "Incremental PACE avoids the severe direct 0-to-10 GPa minima, but pressure-relative lower tails are mixed: PACE is closer for Si-O while EPSR is closer for O-O, causing the equal-pair mean guard to fail."
+speed = "Local endpoint timings favor stock EPSR over PACE by roughly 32-38 times, but timing claims remain forbidden because move semantics differ."
+boundary = "Single-seed same-ACE inverse-oracle pressure mapping; no universal superiority, physical cutoff, experimental pressure, or equilibrium claim."

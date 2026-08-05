@@ -161,6 +161,23 @@ hidden-structure recovery on this favorable synthetic task, not general
 superiority over EPSR. The next algorithmic requirement is to prevent rare
 local overlaps without discarding the MLIP-guided recovery advantage.
 
+The follow-up separates the loading path into 0-to-5 and 5-to-10 GPa steps and
+replaces ambient hard cutoffs with pressure-relative 0.1% and 1% lower-tail
+distance quantiles. At 30,000 nominal moves, PACE recovers 68.6% and 71.3% of
+the two hidden-RDF gaps, compared with 12.8% and 12.6% for EPSR. Its hidden-RDF
+errors are 63.9% and 67.2% lower than EPSR, so the preregistered recovery gate
+passes in both increments.
+
+Sequential refinement also removes the severe contacts from the direct
+0-to-10 jump: PACE minima remain at or above 2.109 A for Si-Si, 1.461 A for
+Si-O, and 2.117 A for O-O. The target-relative lower-tail result is mixed,
+however. PACE better reproduces Si-O while EPSR better reproduces O-O, so the
+equal-pair mean lower-tail gate still favors EPSR. This is appropriately
+reported as a distribution-level structural discrepancy, not an absolute
+high-pressure safety failure. The upstream schedule continues to 200 GPa, but
+the next available-data gate is 10-to-20 GPa; no 20 GPa structure is currently
+present in the source repository.
+
 ### EPSR26 DTBsilicaNX reference potential
 
 The second deterministic gate independently reconstructs the reference

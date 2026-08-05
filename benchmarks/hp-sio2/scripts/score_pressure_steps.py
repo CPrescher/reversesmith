@@ -67,7 +67,9 @@ def score_model(model, target, curves):
             )
             counts[label][key] = {
                 "model": int(np.sum(model_values < threshold)),
+                "model_fraction": float(np.mean(model_values < threshold)),
                 "target": int(np.sum(target_values < threshold)),
+                "target_fraction": float(np.mean(target_values < threshold)),
                 "threshold_a": threshold,
             }
     all_errors = [value for pair in quantile_errors.values() for value in pair.values()]
