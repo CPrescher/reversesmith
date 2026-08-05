@@ -1,0 +1,118 @@
+status = "hp_sio2_pressure_series_70_inputs_pinned_before_refinement"
+date = "2026-08-05"
+protocol_sha256 = "49334207856e8b8b98f210a43e5e8c4da99d5bafe92d1f4a5c5b34b411fd25d9"
+
+[steps."00-to-10"]
+start_box_a = 35.434493352777125
+target_box_a = 32.56917460314
+informative = true
+start_mean_partial_rdf_rms = 1.1760734381408082
+start_joint_iq_rms = 0.18201101759500657
+start_si_coordination_tv = 0.029000000000000012
+start_mean_lower_tail_quantile_error_a = 0.12985060908976184
+cross_start_sha256 = "4de91e065cbfa3257bf18222579859606bab5b5cf295113693427533d2f69b6d"
+cross_start_rmc6f_sha256 = "c5e72fe44a39be3e6329716ebef18b5dd937fcdf79ffcb641b508a2d965dc74c"
+hidden_target_sha256 = "5c1b58ecba4820bb1af19fe61c994840e0c3c7eb6fcad6e1f329c52554955828"
+hidden_target_rmc6f_sha256 = "cfdeb67fe0968890c32a69618e4e2aa6e1e2e98e697e424952ed571c836ab5a1"
+hidden_partial_sq_sha256 = "973796a564ea91bbb96c9166db69cb6c9b8c6712226c7095015d408d8157c320"
+target_neutron_iq_sha256 = "bf3d930983a3e0b3b6ad03194b3eda504e209e793089b07d7263cbf9e5b47560"
+target_xray_iq_sha256 = "1baeb5533b26890c67adc9e98b3727b814e8c5525406d21ce9ff4586b4ac8cfc"
+
+[steps."10-to-20"]
+start_box_a = 32.56917460314
+target_box_a = 30.677482973928985
+informative = true
+start_mean_partial_rdf_rms = 0.8146489820517742
+start_joint_iq_rms = 0.12770526577757566
+start_si_coordination_tv = 0.20099999999999998
+start_mean_lower_tail_quantile_error_a = 0.0811825622116672
+cross_start_sha256 = "66de628730ed1a4fae12c3d24b7ffd92baeff22ac8fb2f96f9739b226add2dde"
+cross_start_rmc6f_sha256 = "2c33be54e3b62998bd028e09510ee495e2dbc89da07a19cf15ca8226685b9c73"
+hidden_target_sha256 = "2345c3ea0af5f8965d59d2627ce3abce88e1251681f160a412400da2eab7482d"
+hidden_target_rmc6f_sha256 = "90497f989f7ccd68f9006baef88ab960b50d462459fd66cdc197f0c0c02fae2d"
+hidden_partial_sq_sha256 = "d774fc0739f0b955f0aa4b3afff2ef153d181ce4e251801f6bcc944f6f589ece"
+target_neutron_iq_sha256 = "92bebfc8f85278f424916be6405d0d190ff41bfc90b9c5962f5e29e62c8dc77d"
+target_xray_iq_sha256 = "e4f8a8d15a0dfe6dc4d33f7b5619093f0a404d1422ba0ca52b1b0cf26269fc17"
+
+[steps."20-to-30"]
+start_box_a = 30.677482973928985
+target_box_a = 29.350568606147633
+informative = true
+start_mean_partial_rdf_rms = 0.481261889571883
+start_joint_iq_rms = 0.10385174638787481
+start_si_coordination_tv = 0.39899999999999997
+start_mean_lower_tail_quantile_error_a = 0.05688196510740121
+cross_start_sha256 = "c1812dfedcecd64ebbf7c2d44a5f26a870cdc1f297c8ef21167f9b2e58c77494"
+cross_start_rmc6f_sha256 = "1344accb4344c8d351ed1ef3b0bb84037998837862df77a492bd1c7af95871df"
+hidden_target_sha256 = "e171c8c302b74d2b4c913a24fad01064c16069c1f8778264c0b58a7c76beed59"
+hidden_target_rmc6f_sha256 = "20199549cdadc5d19d796e4181780aa646d75a29dcee816f9d60f6a44fd2fcfa"
+hidden_partial_sq_sha256 = "1bfc7bc99c7cfe0e0d934923aab2dc8d1951056c397fe845969f3b73e185325a"
+target_neutron_iq_sha256 = "d0fa52383c84df29600ca14202e67cb8a0d85998046effedafc4e2b44933d9ab"
+target_xray_iq_sha256 = "8ee72a7c6614283811034722b9f78bad61d06a6afa0fb82cb5cda7748faf5997"
+
+[steps."30-to-40"]
+start_box_a = 29.350568606147633
+target_box_a = 28.53015151790953
+informative = true
+start_mean_partial_rdf_rms = 0.25542442199944615
+start_joint_iq_rms = 0.06312726130603831
+start_si_coordination_tv = 0.191
+start_mean_lower_tail_quantile_error_a = 0.040019347140519024
+cross_start_sha256 = "40748e97bd3472124c0dc4b5995a272be6ac2532b4daf3f7b6b6494db84b3569"
+cross_start_rmc6f_sha256 = "97e2261129ce32724f879211d7eb6f7d1275fa31748fba3578b5a87433c6c50e"
+hidden_target_sha256 = "66b534fcc78457f21b8450054f7a6d194eee51631d854f218f1a93b82ee5cc0f"
+hidden_target_rmc6f_sha256 = "9bf618097b7d27ffa797ad7582a02239f834f4400abd6c27236f50772bccc557"
+hidden_partial_sq_sha256 = "6876e440fbb993238cc30f773ae3db0d4fdd1f23255f1f057266e1654a25b8ab"
+target_neutron_iq_sha256 = "7ec0b3b1995577badeca88d97c0674616176185cb1267a7ab081fba83235d512"
+target_xray_iq_sha256 = "147239515656911ab3a6444282c18bf1f31fddafe55ca1cad73a9bd8f2f75a61"
+
+[steps."40-to-50"]
+start_box_a = 28.53015151790953
+target_box_a = 28.109719437551135
+informative = true
+start_mean_partial_rdf_rms = 0.1292781472800918
+start_joint_iq_rms = 0.03154470728496094
+start_si_coordination_tv = 0.10500000000000001
+start_mean_lower_tail_quantile_error_a = 0.0137111853470215
+cross_start_sha256 = "987174e916bd938e16638dd24d8307a1f035406a61f97bd5dcc004f9665e3ded"
+cross_start_rmc6f_sha256 = "34e25a4a6c8f80ea444062dd3f6a5c0e20f4eed9977b17165b9b25ba96d43c8d"
+hidden_target_sha256 = "9bef803230d728d5b080bc2e64b6b2969cdfb1088d4872f7972da6c33eb33cf9"
+hidden_target_rmc6f_sha256 = "e721a9e4b989faac30c3d1a72b60333b7cfc8d21d664c91069e523fc1e188cd7"
+hidden_partial_sq_sha256 = "3297621c6a9f2b2448e33dcb05d4fa623cfc6e36e2017a5d613823f7f5af999e"
+target_neutron_iq_sha256 = "ddf9b274346167a047aadcc9a8fde2ea17d3b39b48018123e6aeb054f1a0558b"
+target_xray_iq_sha256 = "ef18ad06b1e6012aaa6b5601d589e3dc9af6df0d5b58de9b9c7ac28faafdb574"
+
+[steps."50-to-60"]
+start_box_a = 28.109719437551135
+target_box_a = 27.771178221008668
+informative = true
+start_mean_partial_rdf_rms = 0.1114032447942722
+start_joint_iq_rms = 0.021220638077659934
+start_si_coordination_tv = 0.06899999999999996
+start_mean_lower_tail_quantile_error_a = 0.014966688661371111
+cross_start_sha256 = "27a61f259f0e83f9264161556883c7d6cc3c5666168406091ccde383a80b3546"
+cross_start_rmc6f_sha256 = "24a1976df30bf95633e053574d317aa186b9c5d441bf30ffdc6c3d7574dd4373"
+hidden_target_sha256 = "61055ed9ba1734bbcd5d9c6e2f2b0eaa3f78ae160ced959f4ec4be9cc56c7b4b"
+hidden_target_rmc6f_sha256 = "87edf1d2c1c7603f04323b35f1d7c45739b488a82ba48f34b4379e6dc3c23fea"
+hidden_partial_sq_sha256 = "bafba77bff34ab9fc91000e691f9a4a2def689d7c53d40d93451551959de9b94"
+target_neutron_iq_sha256 = "d20028fc8ee74018a72f75fb5fe9485721169981f6817eacf36ff46822538922"
+target_xray_iq_sha256 = "cdf86fc816018e2edea0de01c766e02ee429908406950c65bd6ba1febae0d766"
+
+[steps."60-to-70"]
+start_box_a = 27.771178221008668
+target_box_a = 27.538118272726052
+informative = true
+start_mean_partial_rdf_rms = 0.08771592235594412
+start_joint_iq_rms = 0.013357449990199008
+start_si_coordination_tv = 0.04000000000000003
+start_mean_lower_tail_quantile_error_a = 0.007147422251363704
+cross_start_sha256 = "8e77dead6c9731004e955ea9dfc8850c4b3e23d3fb1c647ce411ed36aea7caeb"
+cross_start_rmc6f_sha256 = "55eb3f034d0ede42646c3e64fdb4cb62afe0784d479e6b2b845c7b45b68285f6"
+hidden_target_sha256 = "a7f5119795a28aa58c2f80c8e36427100e95bb42d009fbf0b90d919cdd6bdb3a"
+hidden_target_rmc6f_sha256 = "1c244d8e282cfa1027b5970ada83b79d6d0567d3f2f81fe5f4e38ab10fba234d"
+hidden_partial_sq_sha256 = "2686565aebe9f556f9b2c516c2187f328dd26029de44537eeca8b07211d6ce89"
+target_neutron_iq_sha256 = "c0a796bfc107a0d4a13522a9d4e309f97371280053b94850f9f19187ec8e405a"
+target_xray_iq_sha256 = "a9c72c7f19094985d4b69fbaf16ff31a5f787a6cb8d283ecedb5c830c7d06c64"
+
+[interpretation]
+note = "All seven mapped starts pass the frozen informative-step gate. The decreasing start gap at high pressure is a property of the source loading path, not a refinement outcome."
