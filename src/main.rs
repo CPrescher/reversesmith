@@ -950,14 +950,7 @@ fn main() {
         // Save starting total g(r) via inverse FT
         if !gr_datasets.is_empty() {
             // Raw S(Q) in Faber-Ziman convention for FT
-            let has_neutron_ft = experiments
-                .iter()
-                .any(|e| matches!(e.kind, DataKind::Neutron));
-            let sq_for_ft = if has_neutron_ft {
-                neutron::compute_sq(&config, &partial_sq, &params.q_grid)
-            } else {
-                xray::compute_xray_sq(&config, &partial_sq, &params.q_grid)
-            };
+            let sq_for_ft = xray::compute_xray_sq(&config, &partial_sq, &params.q_grid);
             let gd0 = &gr_datasets[0];
             let qmax_gr = gd0.qmax;
             let use_lorch = gd0.lorch;
@@ -1603,15 +1596,7 @@ fn main() {
 
     // Save refined total g(r) via inverse FT of S(Q), using same Lorch+Qmax as RMC
     if !gr_datasets.is_empty() {
-        // Use primary experiment's weighting for the g(r) FT
-        let has_neutron_gr = experiments
-            .iter()
-            .any(|e| matches!(e.kind, DataKind::Neutron));
-        let sq_for_gr = if has_neutron_gr {
-            neutron::compute_sq(&config, &partial_sq, &params.q_grid)
-        } else {
-            xray::compute_xray_sq(&config, &partial_sq, &params.q_grid)
-        };
+        let sq_for_gr = xray::compute_xray_sq(&config, &partial_sq, &params.q_grid);
         let gd0 = &gr_datasets[0];
         let qmax_gr = gd0.qmax;
         let use_lorch = gd0.lorch;

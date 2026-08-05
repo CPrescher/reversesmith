@@ -318,6 +318,28 @@ def reciprocal_curves(model, q_values, dr):
     return partials, np.asarray(neutron), np.asarray(xray)
 
 
+def total_gr_from_iq(q_values, iq_values, r_values, density, qmax, lorch=True):
+    """Transform a total i(Q) to normalized g(r) on an explicit r grid."""
+    dq = float(q_values[1] - q_values[0])
+    selected = q_values <= qmax
+    q = np.asarray(q_values[selected])
+    iq = np.asarray(iq_values[selected])
+    if lorch:
+        argument = math.pi * q / qmax
+        window = np.sin(argument) / argument
+    else:
+        window = np.ones_like(q)
+    weighted = q * window * iq
+    result = np.ones(len(r_values))
+    positive = r_values > 1.0e-10
+    result[positive] += (
+        dq
+        / (2.0 * math.pi**2 * density * r_values[positive])
+        * (np.sin(np.outer(r_values[positive], q)) @ weighted)
+    )
+    return result
+
+
 def write_curve(path: Path, q_values, values, sigma):
     path.write_text(
         "# Q i(Q)=S(Q)-1 sigma\n"

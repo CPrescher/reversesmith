@@ -722,9 +722,13 @@ pub fn run_rmc(
         exp_w.push(w);
     }
 
-    // Real-space X-ray PDF data can be refined without also supplying S(Q).
-    // In that case, create the X-ray weight set needed for the inverse transform.
-    if exp_w.is_empty() && has_gr_data(gr_data) {
+    // A real-space X-ray PDF always needs X-ray weights, independently of the
+    // reciprocal datasets. Reuse the first X-ray set when present; otherwise
+    // append a dedicated set (including the neutron-S(Q)+X-ray-g(r) case).
+    let reciprocal_xray_index = experiments
+        .iter()
+        .position(|experiment| matches!(experiment.kind, DataKind::Xray));
+    if reciprocal_xray_index.is_none() && has_gr_data(gr_data) {
         let mut w = vec![0.0f64; n_pairs * nq];
         for k in 0..nq {
             let f_avg: f64 = (0..n_types).map(|a| conc[a] * form_factors[a][k]).sum();
@@ -744,6 +748,11 @@ pub fn run_rmc(
         }
         exp_w.push(w);
     }
+    let gr_weight_set = if has_gr_data(gr_data) {
+        Some(reciprocal_xray_index.unwrap_or(exp_w.len() - 1))
+    } else {
+        None
+    };
     let n_weight_sets = exp_w.len();
 
     // Precompute experimental interpolation indices
@@ -957,8 +966,8 @@ pub fn run_rmc(
         }
     }
 
-    // Primary total S(Q) for g(r) inverse FT (use experiment 0's weights)
-    let primary_exp = 0;
+    // X-ray total S(Q) for the xray_gr/xray_fr inverse transform.
+    let gr_weight_set = gr_weight_set.unwrap_or(0);
 
     // Compute initial model g(r) from initial total_sq via CZT
     let mut gr_chi2_current = 0.0;
@@ -967,7 +976,7 @@ pub fn run_rmc(
         let nq_eff = gr_nq_eff[di];
         // Prepare CZT input: q_weight[k] * (total_sq[k] - 1.0)
         for k in 0..nq_eff {
-            gr_czt_buf[di][k] = gr_q_weights[di][k] * (exp_total_sq[primary_exp][k] - 1.0);
+            gr_czt_buf[di][k] = gr_q_weights[di][k] * (exp_total_sq[gr_weight_set][k] - 1.0);
         }
         gr_czts[di].transform(&gr_czt_buf[di], &mut gr_cached[di]);
         // Apply per-r prefactor and add baseline (1.0 for g(r), 0.0 for f(r))
@@ -1295,7 +1304,8 @@ pub fn run_rmc(
         let mut new_gr_chi2 = 0.0;
         if has_gr {
             for k in 0..nq {
-                delta_sq_buf[k] = exp_new_total_sq[primary_exp][k] - exp_total_sq[primary_exp][k];
+                delta_sq_buf[k] =
+                    exp_new_total_sq[gr_weight_set][k] - exp_total_sq[gr_weight_set][k];
             }
             for (di, gd) in gr_data.iter().enumerate() {
                 let n_fit = gr_n_fit[di];
@@ -1880,7 +1890,9 @@ mod tests {
     use crate::cells::CellList;
     use crate::constraints::Constraints;
     use crate::energy::EnergyModel;
-    use crate::rdf::compute_histograms;
+    use crate::neutron;
+    use crate::rdf::{compute_histograms, compute_partial_rdfs};
+    use crate::sq::compute_all_partial_sq;
 
     use super::{
         atom_histogram_delta, metropolis_probability, pdf_resolution_envelope, run_rmc,
@@ -2026,6 +2038,79 @@ mod tests {
             None,
         );
         assert!(state.chi2.is_finite());
+    }
+
+    #[test]
+    fn neutron_sq_does_not_change_xray_real_space_weighting() {
+        let params = RmcParams {
+            max_moves: 0,
+            rdf_cutoff: 4.0,
+            rdf_nbins: 128,
+            q_grid: vec![0.5, 1.0, 1.5, 2.0],
+            lorch: false,
+            restore_best: false,
+            ..RmcParams::default()
+        };
+        let make_pdf = || ExperimentalGrData {
+            r: vec![0.5, 1.0, 1.5],
+            gr: vec![0.0, 0.0, 0.0],
+            sigma: vec![1.0, 1.0, 1.0],
+            weight: 1.0,
+            fit_min: 0.5,
+            fit_max: 1.5,
+            qmax: 2.0,
+            lorch: false,
+            qdamp: 0.0,
+            baseline: 0.0,
+        };
+
+        let mut real_space_only = small_config();
+        let expected = run_rmc(
+            &mut real_space_only,
+            &[],
+            &[make_pdf()],
+            &Constraints::new(),
+            &params,
+            None,
+            None,
+            None,
+        )
+        .chi2;
+
+        let mut with_neutron = small_config();
+        let rdf = compute_partial_rdfs(&with_neutron, params.rdf_nbins, params.rdf_cutoff);
+        let partial_sq = compute_all_partial_sq(
+            &rdf.r,
+            &rdf.partials,
+            with_neutron.number_density(),
+            &params.q_grid,
+            params.lorch,
+        );
+        let neutron_sq = neutron::compute_sq(&with_neutron, &partial_sq, &params.q_grid);
+        let neutron = ExperimentalData {
+            q: params.q_grid.clone(),
+            sq: neutron_sq,
+            sigma: vec![1.0; params.q_grid.len()],
+            weight: 1.0,
+            kind: DataKind::Neutron,
+            neutron_scattering_lengths: None,
+            fit_min: 0.5,
+            fit_max: 2.0,
+            convention: SqConvention::Sq,
+        };
+        let observed = run_rmc(
+            &mut with_neutron,
+            &[neutron],
+            &[make_pdf()],
+            &Constraints::new(),
+            &params,
+            None,
+            None,
+            None,
+        )
+        .chi2;
+
+        assert!((observed - expected).abs() < 1.0e-12);
     }
 
     #[test]

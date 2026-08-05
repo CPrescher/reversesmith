@@ -1,0 +1,52 @@
+status = "hp_sio2_sq_gr_domain_comparison_frozen_before_outcomes"
+date = "2026-08-05"
+source_repository = "CPrescher/SiO2_glass"
+source_commit = "5fb7a8821540a82758b4e5c553d00909e719555d"
+start_pressure_gpa = 20
+target_pressure_gpa = 30
+start_path = "results/production/pressure-series/sequential-loading/ace/020GPa/data/sio2_ace_020GPa_final.data"
+start_sha256 = "1fff4c87ebfa1328acac9519e683e6fed09ea3a6d36f871287658777621a4bd8"
+target_path = "results/production/pressure-series/sequential-loading/ace/030GPa/data/sio2_ace_030GPa_final.data"
+target_sha256 = "591cc8037a5eb53640c33193d5e93a5b2a42c10aac9ba22f9aecf9d5e87be000"
+ace_model_sha256 = "c8f00d8f0cbc131b0298b79260ba8098975624363c9d178223e51e48f025e97a"
+
+[fixture]
+atoms = 3000
+density_policy = "map the 20 GPa structure fractionally into the exact 30 GPa target box"
+q_min_a_inverse = 0.5
+q_max_a_inverse = 17.0
+q_step_a_inverse = 0.05
+sq_convention = "iq"
+sq_sigma_iq = 0.02
+rdf_cutoff_a = 13.5
+rdf_bin_width_a = 0.02
+gr_kind = "normalized total X-ray g(r)"
+gr_qmax_a_inverse = 17.0
+gr_lorch = true
+gr_qdamp_a_inverse = 0.0
+gr_fit_min_a = 1.2
+gr_fit_max_a = 6.0
+gr_sigma_policy = "constant sigma chosen so the mapped start has the same unweighted chi2 in g(r) as in i(Q)"
+si_o_coordination_cutoff_a = 2.2
+short_range_caps_a = { "Si-Si" = 3.5, "Si-O" = 2.2, "O-O" = 3.0 }
+lower_tail_quantiles = [0.001, 0.01]
+
+[design]
+methods = ["sq-only", "gr-only", "sq-plus-gr"]
+seed = 20260805
+moves = 30000
+threads_per_run = 1
+pace_weight = 30.0
+hard_distance_constraints = false
+sq_only_weights = { sq = 1.0, gr = 0.0 }
+gr_only_weights = { sq = 0.0, gr = 1.0 }
+joint_weights = { sq = 0.5, gr = 0.5 }
+weight_rationale = "equal domain cost at the mapped start; joint halves each domain so its total starting data cost matches either single-domain arm"
+
+[metrics]
+primary = ["held-out mean partial-g(r) RMS over 0-13.5 A", "held-out local partial-g(r) RMS over 1.2-6.0 A"]
+secondary = ["X-ray i(Q) RMS over 0.5-17 inverse A", "total X-ray g(r) RMS over 1.2-6.0 A", "Si coordination TV", "pressure-relative lower-tail error", "ACE energy change", "diagnostic wall time"]
+
+[claims]
+allowed = "single-seed evidence about how reciprocal-only, local-real-only, and joint residual weighting changes recovery on the frozen 20-to-30 GPa PACE task"
+forbidden = "independent-information gain, universal domain superiority, stochastic uncertainty, experimental accuracy, equilibrium sampling, or production speed"
