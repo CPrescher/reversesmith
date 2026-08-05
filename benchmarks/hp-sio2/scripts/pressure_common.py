@@ -102,11 +102,27 @@ def read_epsr_ato(path: Path):
     )
 
 
+def read_rmc6f(path: Path):
+    lines = path.read_text().splitlines()
+    count = int(
+        next(line for line in lines if line.startswith("Number of atoms:")).split()[-1]
+    )
+    cell = next(line for line in lines if line.startswith("Cell (Ang/deg):"))
+    box = np.asarray([float(value) for value in cell.split(":", 1)[1].split()[:3]])
+    start = lines.index("Atoms:") + 1
+    rows = [line.split() for line in lines[start : start + count]]
+    types = np.asarray([SYMBOL_TYPE[row[1]] for row in rows], dtype=np.int8)
+    fractional = np.asarray([[float(value) for value in row[3:6]] for row in rows])
+    return fractional * box, types, box, np.zeros(3)
+
+
 def read_structure(path: Path):
     if path.suffix == ".xyz":
         return read_xyz(path)
     if path.suffix == ".ato":
         return read_epsr_ato(path)
+    if path.suffix == ".rmc6f":
+        return read_rmc6f(path)
     return read_lammps(path)
 
 
@@ -129,6 +145,49 @@ def write_lammps(path: Path, title: str, positions, types, box):
             for index, (atom_type, position) in enumerate(zip(types, positions))
         )
     )
+
+
+def write_rmc6f(path: Path, title: str, positions, types, box):
+    counts = Counter(map(int, types))
+    volume = float(np.prod(box))
+    with path.open("w") as stream:
+        stream.write("(Version 6f format configuration file)\n")
+        stream.write(f"Metadata title:     {title}\nMetadata material:  SiO2\n")
+        stream.write(
+            "Number of types of atoms:           2\n"
+            "Atom types present:                 Si O\n"
+        )
+        stream.write(f"Number of each atom type:           {counts[1]} {counts[2]}\n")
+        stream.write(
+            "Number of moves generated:          0\n"
+            "Number of moves tried:              0\n"
+            "Number of moves accepted:           0\n"
+            "Number of prior configuration saves: 0\n"
+        )
+        stream.write(f"Number of atoms:                     {len(positions)}\n")
+        stream.write(
+            f"Number density (Ang^-3):             {len(positions) / volume:.15g}\n"
+        )
+        stream.write("Supercell dimensions:                1 1 1\n")
+        stream.write(
+            "Cell (Ang/deg):    "
+            + " ".join(f"{value:.15g}" for value in box)
+            + " 90.0 90.0 90.0\n"
+        )
+        stream.write("Lattice vectors (Ang):\n")
+        stream.write(
+            f" {box[0]:.15g} 0.0 0.0\n"
+            f" 0.0 {box[1]:.15g} 0.0\n"
+            f" 0.0 0.0 {box[2]:.15g}\nAtoms:\n"
+        )
+        for atom_id, (atom_type, position) in enumerate(zip(types, positions), 1):
+            fractional = position / box
+            symbol = "Si" if atom_type == 1 else "O"
+            stream.write(
+                f"{atom_id:6d} {symbol:>2s} [{int(atom_type)}] "
+                + " ".join(f"{value:.15g}" for value in fractional)
+                + "\n"
+            )
 
 
 def structure_metrics(path: Path, fixture):

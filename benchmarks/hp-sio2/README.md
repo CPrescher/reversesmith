@@ -104,10 +104,35 @@ python3 scripts/run_pressure_steps_epsr.py
 python3 scripts/score_pressure_steps.py
 ```
 
-The upstream 10 -> 200 GPa loading schedule is pinned, but the repository
-currently contains no 20 GPa endpoint. The next planned extension is therefore
-10 -> 20 GPa as soon as that structure is available; seed replication is
-deferred until that additional pressure discriminator has been mapped.
+The upstream repository now contains the sequential loading endpoints through
+200 GPa. The next frozen scan uses every 10 GPa increment through 70 GPa and
+adds native RMCProfile to the three existing methods. The four arms are pure
+rsmith RMC, rsmith PACE weight 30, the stock EPSR26 executable, and native
+RMCProfile 6.7.9.5. Thus `native-epsr26` means the original EPSR26 program, not
+rsmith's EPSR-inspired objective.
+
+The 0 -> 10 step is rerun rather than copied from the earlier benchmark so all
+seven steps share the same 13.5 A real-space scoring cutoff. RMCProfile uses
+zero hard minimum distances: ambient-pressure cutoffs are not defensible at
+70 GPa, and pressure-relative lower-tail distributions are instead withheld
+for scoring. Native EPSR26 and RMCProfile both generate and replay their own
+hidden-coordinate targets before refinement. The protocol, including source
+commit and executable hashes, is frozen in
+`expected/pressure-series-70.toml` before any outcomes are generated.
+
+```bash
+python3 scripts/import_pressure_series_70.py
+python3 scripts/prepare_pressure_series_70.py
+python3 scripts/run_pressure_series_70_rmcprofile.py --forward-only
+python3 scripts/run_pressure_series_70_rsmith.py --only-missing
+python3 scripts/run_pressure_series_70_epsr.py --only-missing
+python3 scripts/run_pressure_series_70_rmcprofile.py --only-missing
+python3 scripts/score_pressure_series_70.py
+```
+
+This is deliberately a single-seed pressure-trend scan. It can compare how the
+four methods respond as pressure rises, but cannot establish universal
+superiority, production speed, or stochastic uncertainty.
 
 ### Incremental result
 
@@ -137,5 +162,5 @@ calling it an absolute safety failure.
 Pure RMC obtains slightly lower scattering and hidden-RDF errors than PACE but
 again develops very short local contacts and much larger lower-tail errors.
 PACE energy decreases by 0.052 and 0.049 eV/atom. The result remains a
-single-seed, same-ACE inverse-oracle pressure map; the next computation is
-10 -> 20 GPa when its upstream endpoint becomes available.
+single-seed, same-ACE inverse-oracle pressure map; the frozen 0--70 GPa scan
+above is the next computation.

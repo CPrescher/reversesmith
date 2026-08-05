@@ -1,0 +1,125 @@
+status = "hp_sio2_0_to_70gpa_four_program_series_frozen_before_outcomes"
+date = "2026-08-05"
+source_repository = "CPrescher/SiO2_glass"
+source_commit = "5fb7a8821540a82758b4e5c553d00909e719555d"
+ace_model_sha256 = "c8f00d8f0cbc131b0298b79260ba8098975624363c9d178223e51e48f025e97a"
+loading_input = "inputs/in.sio2_ace_compress_10_to_200GPa"
+loading_input_sha256 = "ce9f3f26957d7a9b8808c567d10408550c3c6a3e7154b28212998c06d4071d92"
+
+[[structures]]
+pressure_gpa = 0
+path = "results/production/compressed/ace/loading/00GPa/data/sio2_ace_00GPa_stabilized.data"
+sha256 = "c8cef9f4ed4abebf1ff26979aeb579bf2881850316bbe87afc877b503e66a67b"
+[[structures]]
+pressure_gpa = 10
+path = "results/production/compressed/ace/loading/10GPa/data/sio2_ace_10GPa_final.data"
+sha256 = "22157a587829e9c32634115fc28531feaf16d2d52e4b55ef6395c4ab10f816a7"
+[[structures]]
+pressure_gpa = 20
+path = "results/production/pressure-series/sequential-loading/ace/020GPa/data/sio2_ace_020GPa_final.data"
+sha256 = "1fff4c87ebfa1328acac9519e683e6fed09ea3a6d36f871287658777621a4bd8"
+[[structures]]
+pressure_gpa = 30
+path = "results/production/pressure-series/sequential-loading/ace/030GPa/data/sio2_ace_030GPa_final.data"
+sha256 = "591cc8037a5eb53640c33193d5e93a5b2a42c10aac9ba22f9aecf9d5e87be000"
+[[structures]]
+pressure_gpa = 40
+path = "results/production/pressure-series/sequential-loading/ace/040GPa/data/sio2_ace_040GPa_final.data"
+sha256 = "33166465c531bfe51e4a3ac6dae2806bf25b0d0c051ea9699e979cb60124dcd0"
+[[structures]]
+pressure_gpa = 50
+path = "results/production/pressure-series/sequential-loading/ace/050GPa/data/sio2_ace_050GPa_final.data"
+sha256 = "4c71af66d455a1175230f5487feefcd47c273796a2021b5a5f4229fd19413d14"
+[[structures]]
+pressure_gpa = 60
+path = "results/production/pressure-series/sequential-loading/ace/060GPa/data/sio2_ace_060GPa_final.data"
+sha256 = "7c9e6880d59f50dfd07223099f895effe734d07b2bda937eb0526816062c3e91"
+[[structures]]
+pressure_gpa = 70
+path = "results/production/pressure-series/sequential-loading/ace/070GPa/data/sio2_ace_070GPa_final.data"
+sha256 = "f8a5d09a43ae4a4e41d182d28e8a081fae7e490507aa519270fcd689ea651819"
+
+[[steps]]
+name = "00-to-10"
+start_gpa = 0
+target_gpa = 10
+reuse_rsmith_epsr = false
+[[steps]]
+name = "10-to-20"
+start_gpa = 10
+target_gpa = 20
+reuse_rsmith_epsr = false
+[[steps]]
+name = "20-to-30"
+start_gpa = 20
+target_gpa = 30
+reuse_rsmith_epsr = false
+[[steps]]
+name = "30-to-40"
+start_gpa = 30
+target_gpa = 40
+reuse_rsmith_epsr = false
+[[steps]]
+name = "40-to-50"
+start_gpa = 40
+target_gpa = 50
+reuse_rsmith_epsr = false
+[[steps]]
+name = "50-to-60"
+start_gpa = 50
+target_gpa = 60
+reuse_rsmith_epsr = false
+[[steps]]
+name = "60-to-70"
+start_gpa = 60
+target_gpa = 70
+reuse_rsmith_epsr = false
+
+[fixture]
+atoms = 3000
+silicon_atoms = 1000
+oxygen_atoms = 2000
+q_min_a_inverse = 0.5
+q_max_a_inverse = 25.0
+q_step_a_inverse = 0.05
+sigma_iq = 0.02
+rdf_cutoff_a = 13.5
+rdf_bin_width_a = 0.02
+si_o_coordination_cutoff_a = 2.2
+short_range_caps_a = { "Si-Si" = 3.5, "Si-O" = 2.2, "O-O" = 3.0 }
+lower_tail_quantiles = [0.001, 0.01]
+density_policy = "map each preceding-pressure structure fractionally into the exact target-pressure box"
+
+[design]
+methods = ["rsmith-rmc", "rsmith-pace-w30", "native-epsr26", "native-rmcprofile"]
+seed = 20260805
+moves = 30000
+threads_per_run = 1
+pace_weight = 30.0
+hard_distance_constraints = false
+sampling = "one pressure-mapping seed per 10 GPa increment; no seed replication in this series scan"
+
+[native_epsr26]
+version = "EPSR26, 2017-03-10 build"
+feedback = 0.9
+reference_scale = 1.0
+moves_per_refinement = 6000
+refinements = 5
+target_policy = "native hidden-coordinate forward and replay, followed by common coordinate scoring"
+
+[native_rmcprofile]
+version = "6.7.9.5 serial"
+executable_sha256 = "5aad32666e0608e85ecca24f0c4e15c616ab6704ce2d02a124dc7fd157ccb10c"
+minimum_distances_a = [0.0, 0.0, 0.0]
+minimum_policy = "zero hard minima to avoid importing ambient-pressure physical assumptions; pressure-relative distributions are score-only"
+target_policy = "native hidden-coordinate neutron S(Q) and X-ray F(Q) forward/replay"
+weight_policy = "neutron sigma 0.02 and scalar X-ray F(Q) sigma 0.02*sqrt(mean(Q^2)), matching the validated stable adapter"
+exact_move_policy = "save-period checkpoint plus deterministic completion tail to exactly 30000 generated moves"
+
+[metrics]
+primary = "pressure dependence of hidden mean partial-g(r) RMS for all four methods"
+secondary = ["common joint i(Q) RMS", "Si coordination TV", "pressure-relative lower-tail quantile error", "minimum distances as descriptive outliers", "ACE energy change", "diagnostic wall time"]
+
+[claims]
+allowed = "single-seed method trends and pressure-dependent differences from 0 to 70 GPa"
+forbidden = "universal program superiority, physical hard-cutoff truth, experimental pressure inference, production speed, stochastic uncertainty, or equilibrium sampling"
