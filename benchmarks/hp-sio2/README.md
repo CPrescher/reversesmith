@@ -87,6 +87,8 @@ The next frozen pilot separates the available loading path into 0 -> 5 and
 5 -> 10 GPa recovery steps. It uses one seed and one 30,000-move endpoint for
 pure RMC, PACE weight 30, and stock EPSR26. This is pressure mapping, not a new
 ensemble campaign. The protocol is in `expected/pressure-steps.toml`.
+The generated inputs and pre-refinement gap audit are pinned in
+`expected/pressure-steps-inputs.toml`.
 
 Following the 10 GPa diagnostic review, no ambient absolute minimum-distance
 gate is used. Short-range behavior is compared with the hidden target at the

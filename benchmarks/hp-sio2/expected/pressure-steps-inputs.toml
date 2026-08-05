@@ -1,0 +1,34 @@
+status = "hp_sio2_incremental_pressure_inputs_pinned_before_refinement"
+date = "2026-08-05"
+protocol_sha256 = "b4a192e83af09204ea7c0dbcb9dce136873144352a01698bdbe8dad08be4777e"
+
+[steps."00-to-05"]
+start_box_a = 35.434493352777125
+target_box_a = 33.90223147531392
+informative = true
+start_mean_partial_rdf_rms = 0.854656073843259
+start_joint_iq_rms = 0.10056226497728352
+start_si_coordination_tv = 0.005000000000000003
+start_mean_lower_tail_quantile_error_a = 0.0764636114021151
+cross_start_sha256 = "cf9fd248c3ae9f257bd223857a1ff46388361ab30ad895c89ce4531d6560dcbc"
+hidden_target_sha256 = "8b6731185fbb7fdc84bade7ef40ec61ba40fba4e9481e0b6cd6c25bf9500f4dd"
+hidden_partial_sq_sha256 = "f6f1fec8304afda2de13ca4348bdfc54620f49c158aac81c62af4365b48040ed"
+target_neutron_iq_sha256 = "2c14645154d6340dd9fd54ead942d107bc12e1de0a71fae265f4c59588a295ef"
+target_xray_iq_sha256 = "953eac5a98b5d9c937993c4023df69c0a5df80a0a35973927f5faf93f3debe90"
+
+[steps."05-to-10"]
+start_box_a = 33.90223147531392
+target_box_a = 32.56917460314
+informative = true
+start_mean_partial_rdf_rms = 0.7468182482733784
+start_joint_iq_rms = 0.09390726279815888
+start_si_coordination_tv = 0.029000000000000012
+start_mean_lower_tail_quantile_error_a = 0.05562245885214501
+cross_start_sha256 = "2a5c3dff2d88585093ee2c41c32f553d92928e844056447c9cdfaac847944784"
+hidden_target_sha256 = "5c1b58ecba4820bb1af19fe61c994840e0c3c7eb6fcad6e1f329c52554955828"
+hidden_partial_sq_sha256 = "c94be71cb02bf778b9b24ff4024fb18b7ef64c005c57ab580591050c705744fc"
+target_neutron_iq_sha256 = "7b8b1f9378c41a0bed1e6959f072bdd6abf0b4017c8d8b38e0937273a7e6ad3e"
+target_xray_iq_sha256 = "99fa7796ff561e612cd625a91c8df3da03bc47283a8cefd37b274f1bbef111f4"
+
+[interpretation]
+note = "Both affinely mapped incremental starts pass the preregistered informative-step gate. Lower-tail errors are target-relative pressure diagnostics, not absolute physical safety limits."
