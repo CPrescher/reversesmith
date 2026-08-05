@@ -174,9 +174,57 @@ Si-O, and 2.117 A for O-O. The target-relative lower-tail result is mixed,
 however. PACE better reproduces Si-O while EPSR better reproduces O-O, so the
 equal-pair mean lower-tail gate still favors EPSR. This is appropriately
 reported as a distribution-level structural discrepancy, not an absolute
-high-pressure safety failure. The upstream schedule continues to 200 GPa, but
-the next available-data gate is 10-to-20 GPa; no 20 GPa structure is currently
-present in the source repository.
+high-pressure safety failure.
+
+The completed extension uses every 10 GPa loading endpoint through 70 GPa and
+adds the installed native RMCProfile 6.7.9.5 executable. All four arms receive
+synthetic neutron and X-ray reciprocal-space totals; partial RDFs and
+coordination distributions remain hidden. EPSR26 and RMCProfile each generate
+and replay their own native hidden-coordinate targets. The maximum EPSR replay
+errors are `1.38e-8` neutron and `4.66e-8` X-ray RMS, and RMCProfile replay is
+exact at stored precision. RMCProfile uses zero hard minimum distances so no
+ambient cutoff is imposed as high-pressure truth.
+
+| Target | Start RDF | rsmith RMC | PACE w30 | EPSR26 | RMCProfile |
+|---:|---:|---:|---:|---:|---:|
+| 10 GPa | 1.17607 | **0.44012** | 0.47914 | 1.03925 | 0.77136 |
+| 20 GPa | 0.81465 | **0.24057** | 0.27772 | 0.69210 | 0.48452 |
+| 30 GPa | 0.48126 | **0.16091** | 0.21673 | 0.45373 | 0.30509 |
+| 40 GPa | 0.25542 | **0.11161** | 0.14761 | 0.27896 | 0.20233 |
+| 50 GPa | 0.12928 | 0.09161 | **0.09061** | 0.18702 | 0.15194 |
+| 60 GPa | 0.11140 | **0.08360** | 0.08682 | 0.17201 | 0.14273 |
+| 70 GPa | 0.08772 | 0.07826 | **0.07672** | 0.15531 | 0.14108 |
+
+PACE has lower hidden partial-RDF, common neutron/X-ray `i(Q)`, and
+Si-coordination errors than both native programs in all seven single-seed
+steps. Its recovered hidden-RDF fraction decreases from 59.3% at 10 GPa to
+12.5% at 70 GPa as the mapped starting gap itself becomes smaller. EPSR26
+worsens the mapped-start hidden RDF from the 30-to-40 GPa step onward;
+RMCProfile does so from 40-to-50 GPa onward. These statements concern the
+common independent coordinate scorer, not each program's differently
+normalized native objective.
+
+Pure RMC has the best hidden-RDF score in five of seven steps but produces
+sub-angstrom Si-O contacts and loses to PACE on the pressure-relative
+lower-tail score in every step. PACE lowers the ACE energy throughout and
+keeps its observed minima within 2.050--2.278 A Si-Si, 1.371--1.472 A Si-O,
+and 1.929--2.003 A O-O. Its lower-tail score is worse than EPSR through 30 GPa
+but better at 40--70 GPa, while it beats RMCProfile at every pressure.
+
+Median local endpoint walls are 1.81 s pure rsmith RMC, 2.84 s EPSR26, 77.45 s
+RMCProfile, and 208.42 s PACE. They are adapter diagnostics rather than a
+production-speed ranking because move semantics and native objectives differ.
+The defensible conclusion is that MLIP-regularized rsmith provides the best
+combination of held-out recovery and local structure in this favorable
+same-ACE synthetic trend scan. It is not yet a universal superiority or
+experimental high-pressure claim.
+
+The next preregistered extension will compare rsmith `S(Q)`-only, local
+`G(r)`-only, and joint `S(Q)+G(r)` refinement. The real-space X-ray total will
+be transformed from the same input at `Qmax = 17 inverse Angstrom`; transform
+window, local `r` range, uncertainties, and domain weights must be fixed before
+outcomes because the two residuals are complementary weightings of the same
+scattering information, not independent experiments.
 
 ### EPSR26 DTBsilicaNX reference potential
 

@@ -128,11 +128,58 @@ python3 scripts/run_pressure_series_70_rsmith.py --only-missing
 python3 scripts/run_pressure_series_70_epsr.py --only-missing
 python3 scripts/run_pressure_series_70_rmcprofile.py --only-missing
 python3 scripts/score_pressure_series_70.py
+python3 scripts/verify_pressure_series_70.py
 ```
 
 This is deliberately a single-seed pressure-trend scan. It can compare how the
 four methods respond as pressure rises, but cannot establish universal
 superiority, production speed, or stochastic uncertainty.
+
+### 0--70 GPa result
+
+Both native forward/replay gates pass at every pressure: EPSR26 remains below
+`1.38e-8` neutron and `4.66e-8` X-ray RMS, while RMCProfile replay is exact at
+the stored precision. Every RMCProfile endpoint is audited to exactly 30,000
+generated moves. The held-out mean partial-RDF errors are:
+
+| Target pressure | Mapped start | rsmith RMC | rsmith PACE | EPSR26 | RMCProfile |
+|---:|---:|---:|---:|---:|---:|
+| 10 GPa | 1.17607 | **0.44012** | 0.47914 | 1.03925 | 0.77136 |
+| 20 GPa | 0.81465 | **0.24057** | 0.27772 | 0.69210 | 0.48452 |
+| 30 GPa | 0.48126 | **0.16091** | 0.21673 | 0.45373 | 0.30509 |
+| 40 GPa | 0.25542 | **0.11161** | 0.14761 | 0.27896 | 0.20233 |
+| 50 GPa | 0.12928 | 0.09161 | **0.09061** | 0.18702 | 0.15194 |
+| 60 GPa | 0.11140 | **0.08360** | 0.08682 | 0.17201 | 0.14273 |
+| 70 GPa | 0.08772 | 0.07826 | **0.07672** | 0.15531 | 0.14108 |
+
+PACE beats both native programs on hidden partial RDF, common neutron/X-ray
+`i(Q)`, and Si-coordination error in all seven steps. It improves the mapped
+start at every pressure, recovering 59.3%, 65.9%, 55.0%, 42.2%, 29.9%, 22.1%,
+and 12.5% of the respective hidden-RDF gaps. EPSR26 starts worsening the common
+hidden-RDF score at 30 -> 40 GPa and RMCProfile at 40 -> 50 GPa. This is not a
+claim that their native objectives fail to decrease; it is the independent
+common-coordinate score.
+
+Pure RMC has the lowest hidden-RDF error in five steps and the lowest common
+scattering residual in all seven, but its pressure-relative lower-tail error is
+worse than PACE in all seven. It creates Si-O minima as low as 0.546 A. PACE
+keeps minima within 2.050--2.278 A Si-Si, 1.371--1.472 A Si-O, and
+1.929--2.003 A O-O while lowering the ACE energy in every step. Relative to
+EPSR, PACE's lower-tail score is worse through 30 GPa but better at 40--70 GPa;
+it beats zero-minimum RMCProfile on this diagnostic throughout.
+
+Median local walls are 1.81 s for pure rsmith RMC, 2.84 s for EPSR26, 77.45 s
+for RMCProfile, and 208.42 s for PACE. These diagnose the installed adapters,
+not equal work or production speed: move semantics and native residuals differ.
+The exact arrays and claim boundary are committed in
+`expected/pressure-series-70-observed.toml` and checked by
+`scripts/verify_pressure_series_70.py`.
+
+The next separate test will exercise rsmith's multi-domain fitting: matched
+`S(Q)`-only, local `G(r)`-only, and joint `S(Q)+G(r)` arms, with the X-ray PDF
+constructed at `Qmax = 17 inverse Angstrom`. The transform/window, local
+real-space range, uncertainties, and relative domain weights must be frozen
+before outcomes because the two curves derive from the same scattering data.
 
 ### Incremental result
 
